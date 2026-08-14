@@ -1,0 +1,47 @@
+{
+  "nav": {
+    "features": "Fonctionnalités",
+    "howItWorks": "Comment ça Marche",
+    "integrations": "Intégrations",
+    "pricing": "Tarification",
+    "demo": "Démo",
+    "login": "Connexion",
+    "signup": "S'inscrire",
+    "startFreeTrial": "Essai Gratuit"
+  },
+  "buttons": {
+    "learnMore": "En Savoir Plus",
+    "getStarted": "Commencer",
+    "tryFree": "Essayer Gratuitement",
+    "watchDemo": "Voir la Démo",
+    "contactSales": "Contacter les Ventes",
+    "readMore": "Lire Plus",
+    "back": "Retour",
+    "next": "Suivant",
+    "submit": "Soumettre",
+    "cancel": "Annuler"
+  },
+  "footer": {
+    "product": "Produit",
+    "company": "Entreprise",
+    "legal": "Juridique",
+    "contact": "Nous Contacter",
+    "copyright": "© {{year}} WorkPilot AI Inc. Tous droits réservés.",
+    "privacyPolicy": "Politique de Confidentialité",
+    "termsOfService": "Conditions d'Utilisation",
+    "status": "Statut"
+  },
+  "currency": {
+    "perMonth": "par mois",
+    "perYear": "par an",
+    "monthly": "Mensuel",
+    "annual": "Annuel"
+  },
+  "time": {
+    "justNow": "À l'instant",
+    "minutesAgo": "il y a {{count}} minutes",
+    "hoursAgo": "il y a {{count}} heures",
+    "daysAgo": "il y a {{count}} jours",
+    "lastUpdated": "Dernière mise à jour"
+  }
+}

@@ -7,18 +7,37 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Dependencies
+node_modules/
+
+# Build
+dist/
+dist-ssr/
+
+# Local files
 *.local
 
-# Editor directories and files
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
+
+# OS
 .DS_Store
+
+# Visual Studio
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Firebase secrets
+backend/confidential data/
+backend/confidential data/*.json
+

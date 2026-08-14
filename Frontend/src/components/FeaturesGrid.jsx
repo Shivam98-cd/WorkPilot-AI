@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import GlassShader from './GlassShader';
 
-export default function FeaturesGrid() {
+const FeaturesGrid = memo(function FeaturesGrid() {
+  const { t } = useTranslation('home');
+  
   const features = [
     {
-      title: 'Smart Email Management',
-      description: 'Automatically draft, summarize, prioritize, and schedule follow-ups across your inbox.',
+      titleKey: 'features.emailManagement.title',
+      descriptionKey: 'features.emailManagement.description',
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
@@ -15,8 +18,8 @@ export default function FeaturesGrid() {
       morphTarget: 'envelope'
     },
     {
-      title: 'AI Meeting Assistant',
-      description: 'Schedules meetings, prepares agendas, records action items, and tracks follow-ups automatically.',
+      titleKey: 'features.meetingAssistant.title',
+      descriptionKey: 'features.meetingAssistant.description',
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -27,8 +30,8 @@ export default function FeaturesGrid() {
       )
     },
     {
-      title: 'Intelligent Task Orchestration',
-      description: 'Converts emails, chats, and meeting notes into actionable tasks across Jira, Trello, Asana, and GitHub.',
+      titleKey: 'features.taskOrchestration.title',
+      descriptionKey: 'features.taskOrchestration.description',
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <line x1="22" y1="12" x2="2" y2="12"></line>
@@ -40,8 +43,8 @@ export default function FeaturesGrid() {
       morphTarget: 'shield'
     },
     {
-      title: 'Multi-Agent Collaboration',
-      description: 'Specialized AI agents collaborate on scheduling, research, documentation, reporting, and project management simultaneously.',
+      titleKey: 'features.multiAgent.title',
+      descriptionKey: 'features.multiAgent.description',
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10"></circle>
@@ -50,8 +53,8 @@ export default function FeaturesGrid() {
       )
     },
     {
-      title: 'Unified Workplace Search',
-      description: 'Instantly search Gmail, Slack, Drive, Notion, Confluence, GitHub, Jira, and more through one conversational interface.',
+      titleKey: 'features.unifiedSearch.title',
+      descriptionKey: 'features.unifiedSearch.description',
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="11" cy="11" r="8"></circle>
@@ -60,8 +63,8 @@ export default function FeaturesGrid() {
       )
     },
     {
-      title: 'Executive Insights',
-      description: 'Receive AI-powered dashboards highlighting project health, deadlines, team productivity, and operational risks.',
+      titleKey: 'features.insights.title',
+      descriptionKey: 'features.insights.description',
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
@@ -98,11 +101,11 @@ export default function FeaturesGrid() {
             fontWeight: 600,
             marginBottom: '0.75rem'
           }}>
-            Exclusive Capabilities
+            {t('features.subtitle')}
           </div>
-          <h2>Everything Your Team Needs to Work Smarter</h2>
+          <h2>{t('features.title')}</h2>
           <p style={{ maxWidth: '800px', margin: '0 auto' }}>
-            From intelligent email management and meeting automation to AI-powered knowledge search and workflow orchestration, WorkPilot AI unifies every workplace tool into one intelligent workspace—helping teams save time, stay aligned, and achieve more.
+            {t('features.description')}
           </p>
         </div>
 
@@ -156,7 +159,7 @@ export default function FeaturesGrid() {
                 position: 'relative',
                 zIndex: 1
               }}>
-                {feat.title}
+                {t(feat.titleKey)}
               </h3>
               
               <p style={{
@@ -166,7 +169,7 @@ export default function FeaturesGrid() {
                 position: 'relative',
                 zIndex: 1
               }}>
-                {feat.description}
+                {t(feat.descriptionKey)}
               </p>
             </div>
           ))}
@@ -183,4 +186,6 @@ export default function FeaturesGrid() {
       `}</style>
     </section>
   );
-}
+});
+
+export default FeaturesGrid;

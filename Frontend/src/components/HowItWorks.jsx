@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
-export default function HowItWorks() {
+const HowItWorks = memo(function HowItWorks() {
+  const { t } = useTranslation('home');
   const [activeStep, setActiveStep] = useState(0);
 
   const steps = [
     {
-      num: '01',
-      title: 'Configure Triggers',
-      description: 'Connect inputs like Gmail, Webhooks, Slack channels, or production CI/CD servers. Set rules defining when WorkPilot should intervene.',
+      num: t('howItWorks.step1.num'),
+      title: t('howItWorks.step1.title'),
+      description: t('howItWorks.step1.description'),
       details: {
         title: 'Step 1: Input Trigger Setup',
         input: 'Webhook: POST /github-webhook/deploy-failure',
@@ -16,9 +18,9 @@ export default function HowItWorks() {
       }
     },
     {
-      num: '02',
-      title: 'Agent Context Parsing (RAG)',
-      description: 'WorkPilot agent spins up, references internal guidelines via semantic vector search, checks logs, and drafts an optimal resolution path.',
+      num: t('howItWorks.step2.num'),
+      title: t('howItWorks.step2.title'),
+      description: t('howItWorks.step2.description'),
       details: {
         title: 'Step 2: RAG Reasoning Context',
         input: 'Query: "How to resolve SIGTERM in memory limit?"',
@@ -27,9 +29,9 @@ export default function HowItWorks() {
       }
     },
     {
-      num: '03',
-      title: 'Audited Action Execution',
-      description: 'The bot executes the command inside a secure sandbox. The human manager is notified and has a 60-minute undo safety window.',
+      num: t('howItWorks.step3.num'),
+      title: t('howItWorks.step3.title'),
+      description: t('howItWorks.step3.description'),
       details: {
         title: 'Step 3: Secure Execution Logs',
         input: 'Command: workpilot deploy production --oom-fix',
@@ -54,10 +56,10 @@ export default function HowItWorks() {
             fontWeight: 600,
             marginBottom: '0.75rem'
           }}>
-            Operational Flow
+            {t('howItWorks.subtitle')}
           </div>
-          <h2>How WorkPilot Orchestrates Tasks</h2>
-          <p>Go from incident or inbound request to automated resolution in three secure steps.</p>
+          <h2>{t('howItWorks.title')}</h2>
+          <p>{t('howItWorks.description')}</p>
         </div>
 
         <div className="how-it-grid" style={{
@@ -269,4 +271,6 @@ export default function HowItWorks() {
       `}</style>
     </section>
   );
-}
+});
+
+export default HowItWorks;

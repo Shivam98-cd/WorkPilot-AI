@@ -20,6 +20,7 @@ class User:
     plan: str
     email_verified: bool
     preferences: Optional[Dict[str, Any]]
+    password_hash: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert user to dictionary"""
@@ -35,6 +36,7 @@ class User:
             'plan': self.plan,
             'emailVerified': self.email_verified,
             'preferences': self.preferences,
+            'passwordHash': self.password_hash,
         }
     
     @classmethod
@@ -52,4 +54,5 @@ class User:
             plan=data.get('plan', 'free'),
             email_verified=data.get('emailVerified', False),
             preferences=data.get('preferences'),
+            password_hash=data.get('passwordHash'),
         )

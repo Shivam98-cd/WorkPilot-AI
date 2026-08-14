@@ -1,0 +1,60 @@
+{
+  "hero": {
+    "title": "WorkPilot AI",
+    "subtitle": "Die Zukunft der Arbeitsplatzautomatisierung.",
+    "description": "KI-gesteuerte Agenten, die E-Mails, Meetings, Aufgaben und Workflows automatisieren. Sparen Sie mehr als 20 Stunden pro Woche und lassen Sie Ihr Team sich auf das Wesentliche konzentrieren.",
+    "cta": "Kostenlos Testen",
+    "watchDemo": "Demo Ansehen"
+  },
+  "features": {
+    "title": "Alles, was Ihr Team Braucht, um Intelligenter zu Arbeiten",
+    "subtitle": "Exklusive Funktionen",
+    "description": "Von intelligentem E-Mail-Management und Meeting-Automatisierung bis hin zu KI-gestützter Wissenssuche und Workflow-Orchestrierung vereint WorkPilot AI jedes Arbeitsplatz-Tool in einem intelligenten Workspace.",
+    "emailManagement": {
+      "title": "Intelligentes E-Mail-Management",
+      "description": "Verfassen, zusammenfassen, priorisieren und planen Sie Follow-ups automatisch in Ihrem Posteingang."
+    },
+    "meetingAssistant": {
+      "title": "KI-Meeting-Assistent",
+      "description": "Plant Meetings, bereitet Agenden vor, erfasst Aktionspunkte und verfolgt Follow-ups automatisch."
+    },
+    "taskOrchestration": {
+      "title": "Intelligente Aufgaben-Orchestrierung",
+      "description": "Konvertiert E-Mails, Chats und Meeting-Notizen in umsetzbare Aufgaben in Jira, Trello, Asana und GitHub."
+    },
+    "multiAgent": {
+      "title": "Multi-Agenten-Zusammenarbeit",
+      "description": "Spezialisierte KI-Agenten arbeiten gleichzeitig an Planung, Recherche, Dokumentation, Berichterstattung und Projektmanagement."
+    },
+    "unifiedSearch": {
+      "title": "Vereinheitlichte Arbeitsplatzsuche",
+      "description": "Durchsuchen Sie Gmail, Slack, Drive, Notion, Confluence, GitHub, Jira und mehr sofort über eine Konversationsschnittstelle."
+    },
+    "insights": {
+      "title": "Executive Insights",
+      "description": "Erhalten Sie KI-gestützte Dashboards, die Projektgesundheit, Fristen, Teamproduktivität und operative Risiken hervorheben."
+    }
+  },
+  "stats": {
+    "agents": "Autonome Agentenmodule",
+    "automated": "Automatisierte Betriebsaufgaben",
+    "cost": "Implementierungsgebühr",
+    "integrations": "Wichtige App-Verbindungen"
+  },
+  "cta": {
+    "title": "Beschleunigen Sie Ihren Workflow Heute",
+    "description": "Schließen Sie sich progressiven Unternehmen an, die Code-Gesundheit automatisieren, komplexe E-Mail-Sequenzen verwalten und Hintergrunddatensynchronisationen sicher mit WorkPilot durchführen.",
+    "button": "Agent Kostenlos Bereitstellen",
+    "secondary": "Demo Planen"
+  },
+  "waitlist": {
+    "title": "Erhalten Sie Frühzugang zu WorkPilot AI",
+    "badge": "{{count}}+ Teams auf Warteliste",
+    "description": "Schließen Sie sich Tausenden von Teams an, die ihre Workflows automatisieren. Seien Sie der Erste, der auf neue Funktionen zugreift, erhalten Sie vorrangiges Onboarding und sichern Sie sich Gründungsmitgliedspreise.",
+    "placeholder": "Geben Sie Ihre Arbeits-E-Mail ein",
+    "button": "Warteliste Beitreten",
+    "success": "Sie sind auf der Liste! Wir werden uns bald melden.",
+    "error": "Bitte geben Sie eine gültige E-Mail-Adresse ein.",
+    "disclaimer": "Keine Kreditkarte erforderlich · Jederzeit kündbar · SOC2-zertifiziert"
+  }
+}

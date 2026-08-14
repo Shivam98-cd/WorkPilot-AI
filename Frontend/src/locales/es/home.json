@@ -1,0 +1,126 @@
+{
+  "hero": {
+    "title": "WorkPilot AI",
+    "subtitle": "El Futuro de la Automatización Laboral.",
+    "description": "Agentes impulsados por IA que automatizan correos, reuniones, tareas y flujos de trabajo. Ahorra más de 20 horas por semana y permite que tu equipo se concentre en lo que importa.",
+    "cta": "Prueba Gratis",
+    "watchDemo": "Ver Demo"
+  },
+  "features": {
+    "title": "Todo lo que Tu Equipo Necesita para Trabajar Mejor",
+    "subtitle": "Capacidades Exclusivas",
+    "description": "Desde gestión inteligente de correos y automatización de reuniones hasta búsqueda de conocimientos impulsada por IA y orquestación de flujos de trabajo, WorkPilot AI unifica cada herramienta laboral en un espacio inteligente.",
+    "emailManagement": {
+      "title": "Gestión Inteligente de Correos",
+      "description": "Redacta, resume, prioriza y programa seguimientos automáticamente en tu bandeja de entrada."
+    },
+    "meetingAssistant": {
+      "title": "Asistente de Reuniones IA",
+      "description": "Programa reuniones, prepara agendas, registra elementos de acción y rastrea seguimientos automáticamente."
+    },
+    "taskOrchestration": {
+      "title": "Orquestación Inteligente de Tareas",
+      "description": "Convierte correos, chats y notas de reuniones en tareas accionables en Jira, Trello, Asana y GitHub."
+    },
+    "multiAgent": {
+      "title": "Colaboración Multi-Agente",
+      "description": "Agentes IA especializados colaboran en programación, investigación, documentación, informes y gestión de proyectos simultáneamente."
+    },
+    "unifiedSearch": {
+      "title": "Búsqueda Unificada en el Lugar de Trabajo",
+      "description": "Busca instantáneamente en Gmail, Slack, Drive, Notion, Confluence, GitHub, Jira y más a través de una interfaz conversacional."
+    },
+    "insights": {
+      "title": "Información Ejecutiva",
+      "description": "Recibe paneles impulsados por IA que destacan la salud del proyecto, plazos, productividad del equipo y riesgos operativos."
+    }
+  },
+  "stats": {
+    "agents": "Módulos de Agentes Autónomos",
+    "automated": "Tareas Operativas Automatizadas",
+    "cost": "Tarifa de Implementación",
+    "integrations": "Conexiones de Aplicaciones Clave"
+  },
+  "cta": {
+    "title": "Potencia tu Flujo de Trabajo Hoy",
+    "description": "Únete a empresas progresivas que automatizan la salud del código, gestionan secuencias complejas de correo y ejecutan sincronizaciones de datos de fondo de forma segura con WorkPilot.",
+    "button": "Implementar Agente Gratis",
+    "secondary": "Programar Demo"
+  },
+  "waitlist": {
+    "title": "Obtén Acceso Anticipado a WorkPilot AI",
+    "badge": "{{count}}+ equipos en lista de espera",
+    "description": "Únete a miles de equipos automatizando sus flujos de trabajo. Sé el primero en acceder a nuevas funciones, obtén incorporación prioritaria y asegura precios de miembro fundador.",
+    "placeholder": "Ingresa tu correo de trabajo",
+    "button": "Unirse a Lista de Espera",
+    "success": "¡Estás en la lista! Nos pondremos en contacto pronto.",
+    "error": "Por favor ingresa una dirección de correo válida.",
+    "disclaimer": "Sin tarjeta de crédito requerida · Cancela en cualquier momento · Certificado SOC2"
+  },
+  "howItWorks": {
+    "subtitle": "Flujo Operacional",
+    "title": "Cómo WorkPilot Orquesta Tareas",
+    "description": "Desde incidente o solicitud entrante hasta resolución automatizada en tres pasos seguros.",
+    "step1": {
+      "num": "01",
+      "title": "Configurar Activadores",
+      "description": "Conecta entradas como Gmail, Webhooks, canales de Slack o servidores CI/CD de producción. Define reglas sobre cuándo WorkPilot debe intervenir."
+    },
+    "step2": {
+      "num": "02",
+      "title": "Análisis de Contexto del Agente (RAG)",
+      "description": "El agente WorkPilot se activa, consulta directrices internas mediante búsqueda vectorial semántica, verifica registros y redacta una ruta de resolución óptima."
+    },
+    "step3": {
+      "num": "03",
+      "title": "Ejecución de Acción Auditada",
+      "description": "El bot ejecuta el comando dentro de un sandbox seguro. El gerente humano es notificado y tiene una ventana de seguridad de deshacer de 60 minutos."
+    }
+  },
+  "uniqueFeatures": {
+    "subtitle": "Capacidades Exclusivas",
+    "title": "Por Qué los Equipos Eligen WorkPilot AI",
+    "description": "Capacidades de IA poderosas diseñadas para automatizar el trabajo, mejorar la colaboración y mantener a su organización productiva y segura.",
+    "feature1": {
+      "title": "🧠 Asistente de IA Personalizado",
+      "subtitle": "Aprende tu Estilo de Comunicación",
+      "description": "WorkPilot AI comprende cómo escribes correos, mensajes y documentos, luego genera respuestas que suenan naturalmente como tú mientras preserva tu tono único y profesionalismo."
+    },
+    "feature2": {
+      "title": "📊 Información de Productividad del Equipo",
+      "subtitle": "Previene el Agotamiento Antes de que Suceda",
+      "description": "Monitorea carga de trabajo, tiempos de respuesta, sobrecarga de reuniones y distribución de tareas para identificar cuellos de botella de productividad y reducir el agotamiento de empleados."
+    },
+    "feature3": {
+      "title": "📚 Validación de Conocimiento Inteligente",
+      "subtitle": "Mantén la Información de la Empresa Consistente",
+      "description": "Detecta automáticamente información desactualizada o conflictiva en documentos, bases de conocimiento y archivos compartidos, asegurando que todos trabajen desde la misma fuente de verdad."
+    },
+    "feature4": {
+      "title": "🔄 Automatización Segura",
+      "subtitle": "Deshaz Acciones de IA en Cualquier Momento",
+      "description": "Cada correo automatizado, evento de calendario, flujo de trabajo o actualización de tarea puede ser revisado, rastreado y revertido cuando sea necesario."
+    },
+    "feature5": {
+      "title": "🔍 Decisiones de IA Transparentes",
+      "subtitle": "Ve Por Qué la IA Tomó una Decisión",
+      "description": "Cada recomendación incluye razonamiento, fuentes de datos y niveles de confianza, dando a los equipos completa visibilidad y confianza en las acciones generadas por IA."
+    },
+    "feature6": {
+      "title": "⚡ Protección de Flujo de Trabajo Inteligente",
+      "subtitle": "Previene Conflictos de Automatización",
+      "description": "WorkPilot AI detecta automatizaciones superpuestas, tareas duplicadas y flujos de trabajo conflictivos antes de que creen problemas, manteniendo las operaciones fluidas y confiables."
+    }
+  },
+  "integrations": {
+    "subtitle": "Conectividad del Ecosistema",
+    "title": "Se Integra con Todo tu Stack",
+    "description": "WorkPilot opera directamente dentro de tus canales de productividad favoritos. Sin scripting personalizado necesario."
+  },
+  "comparison": {
+    "subtitle": "Matriz de Capacidades",
+    "title": "Por Qué WorkPilot Lidera",
+    "description": "Una comparación lado a lado de características, barreras de recuperación y políticas de seguridad empresarial.",
+    "tableHeader": "Parámetros del Sistema"
+  }
+}

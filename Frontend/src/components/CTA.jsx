@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
-export default function CTA({ user, onAuthClick }) {
+const CTA = memo(function CTA({ user, onAuthClick }) {
+  const { t } = useTranslation('home');
+  
   return (
     <section id="cta" className="section-padding reveal-on-scroll" style={{ background: '#000000', overflow: 'hidden' }}>
       <div className="container">
@@ -22,7 +25,7 @@ export default function CTA({ user, onAuthClick }) {
               lineHeight: 1.15,
               marginBottom: '1.25rem',
             }}>
-              Supercharge Your Workflow Today
+              {t('cta.title')}
             </h2>
             
             <p style={{
@@ -31,7 +34,7 @@ export default function CTA({ user, onAuthClick }) {
               marginBottom: '2.5rem',
               lineHeight: 1.6
             }}>
-              Join progressive companies automating code health, managing complex email sequences, and running background data syncs securely with WorkPilot.
+              {t('cta.description')}
             </p>
 
             <div style={{
@@ -46,11 +49,11 @@ export default function CTA({ user, onAuthClick }) {
                 </a>
               ) : (
                 <button onClick={onAuthClick} className="btn btn-primary" style={{ padding: '0.85rem 2rem', fontSize: '1rem', cursor: 'pointer', border: 'none' }}>
-                  Deploy Agent Free
+                  {t('cta.button')}
                 </button>
               )}
               <a href="#features" className="btn btn-secondary" style={{ padding: '0.85rem 2rem', fontSize: '1rem' }}>
-                Schedule Demo call
+                {t('cta.secondary')}
               </a>
             </div>
           </div>
@@ -58,4 +61,6 @@ export default function CTA({ user, onAuthClick }) {
       </div>
     </section>
   );
-}
+});
+
+export default CTA;

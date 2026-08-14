@@ -1,0 +1,44 @@
+{
+  "title": "Einfache, Transparente Preisgestaltung",
+  "subtitle": "Wählen Sie den Plan, der zu Ihrem Team passt",
+  "free": {
+    "name": "Starter",
+    "price": "0",
+    "period": "Für immer kostenlos",
+    "description": "Perfekt für Einzelpersonen, die Automatisierung testen",
+    "features": [
+      "5 KI-Agentenaktionen/Tag",
+      "E-Mail- und Kalendersynchronisierung",
+      "Grundlegende Aufgabenautomatisierung",
+      "Community-Support"
+    ]
+  },
+  "pro": {
+    "name": "Professional",
+    "price": "29",
+    "period": "pro Benutzer/Monat",
+    "description": "Für kleine Teams, die skalieren möchten",
+    "features": [
+      "Unbegrenzte KI-Aktionen",
+      "Alle Integrationen",
+      "Erweiterte Workflows",
+      "Prioritäts-Support",
+      "Benutzerdefinierte Automatisierung"
+    ]
+  },
+  "enterprise": {
+    "name": "Enterprise",
+    "price": "Individuell",
+    "period": "Vertrieb kontaktieren",
+    "description": "Für Organisationen im großen Maßstab",
+    "features": [
+      "Alles in Pro",
+      "Dedizierter Success Manager",
+      "SSO und erweiterte Sicherheit",
+      "Individuelle SLA",
+      "On-Premise-Bereitstellung"
+    ]
+  },
+  "cta": "Loslegen",
+  "contactSales": "Vertrieb Kontaktieren"
+}

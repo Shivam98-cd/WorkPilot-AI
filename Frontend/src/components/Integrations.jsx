@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SiGmail, SiGooglecalendar, SiGoogledrive, SiGoogle, SiGithub, SiZoom, SiNotion, SiJira, SiTrello, SiGooglemeet } from 'react-icons/si';
 
 const SlackIcon = () => (
@@ -34,16 +35,18 @@ const INTEGRATIONS = [
   { name: 'Trello',        icon: <SiTrello size={24} color="#0079BF" /> },
 ];
 
-export default function Integrations() {
+const Integrations = memo(function Integrations() {
+  const { t } = useTranslation('home');
+  
   return (
     <section id="integrations" className="section-padding reveal-on-scroll" style={{ background: '#000000', overflow: 'hidden' }}>
       <div className="container">
         <div className="section-header">
           <div style={{ color: 'var(--blue)', textTransform: 'uppercase', letterSpacing: '0.15em', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.75rem' }}>
-            Ecosystem Connectivity
+            {t('integrations.subtitle')}
           </div>
-          <h2>Integrates with Your Entire Stack</h2>
-          <p>WorkPilot operates directly inside your favorite productivity channels. No custom scripting needed.</p>
+          <h2>{t('integrations.title')}</h2>
+          <p>{t('integrations.description')}</p>
         </div>
       </div>
 
@@ -67,4 +70,6 @@ export default function Integrations() {
       </div>
     </section>
   );
-}
+});
+
+export default Integrations;

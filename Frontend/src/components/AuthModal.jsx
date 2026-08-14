@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Logo from './Logo';
-import { SiGoogle } from 'react-icons/si';
+import { SiGoogle, SiGithub } from 'react-icons/si';
+import { backendFirebaseAuth, backendRegister } from '../api';
 import {
   auth,
   googleProvider,
+  githubProvider,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signOut,
   updateProfile,
   sendPasswordResetEmail,
   sendEmailVerification,
@@ -193,9 +196,22 @@ export default function AuthModal({ isOpen, onClose }) {
         const cred = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(cred.user, { displayName: name });
         await sendEmailVerification(cred.user);
+        try {
+          const backendRes = await backendRegister(name, email, password);
+          if (backendRes.success && backendRes.data?.tokens) {
+            localStorage.setItem('wp_tokens', JSON.stringify(backendRes.data.tokens));
+          }
+        } catch (e) { console.warn('Backend sync skipped:', e.message); }
         setMode('verify-email');
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        const userCred = await signInWithEmailAndPassword(auth, email, password);
+        try {
+          const idToken = await userCred.user.getIdToken();
+          const backendRes = await backendFirebaseAuth(idToken);
+          if (backendRes.success && backendRes.data?.tokens) {
+            localStorage.setItem('wp_tokens', JSON.stringify(backendRes.data.tokens));
+          }
+        } catch (e) { console.warn('Backend sync skipped:', e.message); }
         setMode('success');
         setTimeout(() => { onClose(); }, 1800);
       }
@@ -210,15 +226,46 @@ export default function AuthModal({ isOpen, onClose }) {
     }
   };
 
-  /* ─── Google ─── */
+  /* ─── OAuth (Google / GitHub via Firebase) ─── */
+  const syncOAuthWithBackend = async (user) => {
+    const idToken = await user.getIdToken();
+    const backendRes = await backendFirebaseAuth(idToken);
+    if (backendRes.success && backendRes.data?.tokens) {
+      localStorage.setItem('wp_tokens', JSON.stringify(backendRes.data.tokens));
+    }
+  };
+
   const handleGoogle = async () => {
     setError(''); setLoading(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      try {
+        await syncOAuthWithBackend(result.user);
+      } catch (e) { console.warn('Backend sync skipped:', e.message); }
       setMode('success');
       setTimeout(() => { onClose(); }, 1800);
     } catch (err) {
-      setError(err.message);
+      if (err.code === 'auth/popup-closed-by-user') setError('Sign-in cancelled');
+      else setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGithub = async () => {
+    setError(''); setLoading(true);
+    try {
+      const result = await signInWithPopup(auth, githubProvider);
+      try {
+        await syncOAuthWithBackend(result.user);
+      } catch (e) { console.warn('Backend sync skipped:', e.message); }
+      setMode('success');
+      setTimeout(() => { onClose(); }, 1800);
+    } catch (err) {
+      if (err.code === 'auth/popup-closed-by-user') setError('Sign-in cancelled');
+      else if (err.code === 'auth/account-exists-with-different-credential') {
+        setError('An account already exists with this email. Try signing in with your original method.');
+      } else setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -559,11 +606,17 @@ export default function AuthModal({ isOpen, onClose }) {
                 <div style={{ flex:1, borderTop:'1px dashed rgba(255,255,255,0.1)' }} />
               </div>
 
-              {/* Google */}
-              <button type="button" onClick={handleGoogle} disabled={loading} style={googleBtnStyle} className="glow-btn">
-                <SiGoogle size={18} color="#4285F4" />
-                Sign {isSignUp ? 'up' : 'in'} with Google
-              </button>
+              {/* OAuth providers */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                <button type="button" onClick={handleGoogle} disabled={loading} style={oauthBtnStyle} className="glow-btn">
+                  <SiGoogle size={18} color="#4285F4" />
+                  Sign {isSignUp ? 'up' : 'in'} with Google
+                </button>
+                <button type="button" onClick={handleGithub} disabled={loading} style={oauthBtnStyle} className="glow-btn">
+                  <SiGithub size={18} color="#ffffff" />
+                  Sign {isSignUp ? 'up' : 'in'} with GitHub
+                </button>
+              </div>
 
               {/* Toggle */}
               <p style={{ textAlign:'center', fontSize:'0.84rem', color:'rgba(255,255,255,0.4)', margin:0 }}>
@@ -629,7 +682,7 @@ const primaryBtnStyle = (loading) => ({
   display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem',
   transition:'all 0.25s',
 });
-const googleBtnStyle = {
+const oauthBtnStyle = {
   width:'100%', padding:'0.9rem', borderRadius:'999px', border:'1px solid transparent',
   color:'#ffffff', fontWeight:600, fontSize:'0.9rem', cursor:'pointer',
   background:'linear-gradient(rgba(8,8,12,0.8),rgba(8,8,12,0.8)) padding-box, linear-gradient(135deg,#00d2ff,#8b5cf6,#ec4899) border-box',

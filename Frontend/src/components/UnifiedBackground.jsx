@@ -1,12 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, memo } from 'react';
 
-export default function UnifiedBackground() {
+const UnifiedBackground = memo(function UnifiedBackground() {
   const canvasRef = useRef(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: true });
     let animationFrameId;
 
     let width = (canvas.width = window.innerWidth);
@@ -15,11 +15,10 @@ export default function UnifiedBackground() {
     const pulses = [];
     let lastPulseTime = 0;
 
-    // Track mouse movement to spawn periodic ripple pulses
+    // Throttled mouse movement handler
     const handleMouseMove = (e) => {
       const now = performance.now();
-      // Throttle pulse creation to 1 pulse per 450ms for performance and clean visuals
-      if (now - lastPulseTime > 450) {
+      if (now - lastPulseTime > 500) { // Increased throttle for better performance
         pulses.push({
           x: e.clientX,
           y: e.clientY,
@@ -32,13 +31,12 @@ export default function UnifiedBackground() {
       }
     };
 
-    // Spawn a pulse on click anywhere on the page
     const handleGlobalClick = (e) => {
       pulses.push({
         x: e.clientX,
         y: e.clientY,
         radius: 0,
-        maxRadius: 350, // larger pulse on click
+        maxRadius: 350,
         speed: 5.5,
         alpha: 1.0
       });
@@ -60,18 +58,22 @@ export default function UnifiedBackground() {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    const gridSpacing = 28; // spacing between grid dots
+    const gridSpacing = 32; // Increased spacing for fewer dots (performance boost)
 
     // Render loop
     const render = () => {
-      if (!isTabVisible) {
+      if (!isTabVisible || pulses.length === 0) {
+        // Skip rendering when tab is hidden or no active pulses
+        if (pulses.length > 0) {
+          ctx.clearRect(0, 0, width, height);
+        }
         animationFrameId = requestAnimationFrame(render);
         return;
       }
 
       ctx.clearRect(0, 0, width, height);
 
-      // 1. Update active pulses
+      // Update pulses
       for (let i = pulses.length - 1; i >= 0; i--) {
         const pulse = pulses[i];
         pulse.radius += pulse.speed;
@@ -82,46 +84,42 @@ export default function UnifiedBackground() {
         }
       }
 
-      // 2. Render Dot Grid
-      ctx.fillStyle = '#ffffff';
+      // Only render dots when pulses are active
+      if (pulses.length > 0) {
+        const cols = Math.ceil(width / gridSpacing);
+        const rows = Math.ceil(height / gridSpacing);
 
-      const cols = Math.ceil(width / gridSpacing);
-      const rows = Math.ceil(height / gridSpacing);
+        for (let c = 0; c < cols; c++) {
+          const x = c * gridSpacing;
+          for (let r = 0; r < rows; r++) {
+            const y = r * gridSpacing;
+            
+            let alpha = 0;
+            let radius = 1.0;
 
-      for (let c = 0; c < cols; c++) {
-        const x = c * gridSpacing;
-        for (let r = 0; r < rows; r++) {
-          const y = r * gridSpacing;
-          
-          let alpha = 0.05; // base dim opacity
-          let radius = 1.0;
+            // Calculate pulse ripple highlights
+            for (const pulse of pulses) {
+              const dx = x - pulse.x;
+              const dy = y - pulse.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              const diff = Math.abs(dist - pulse.radius);
+              const waveWidth = 45;
 
-          // Calculate pulse ripple highlights
-          pulses.forEach((pulse) => {
-            const dx = x - pulse.x;
-            const dy = y - pulse.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            const diff = Math.abs(dist - pulse.radius);
-            const waveWidth = 45; // width of the pulse ring
-
-            if (diff < waveWidth) {
-              const intensity = (1 - diff / waveWidth) * 0.18 * pulse.alpha;
-              alpha += intensity;
-              radius += intensity * 1.5; // dot grows slightly in pulse ring
+              if (diff < waveWidth) {
+                const intensity = (1 - diff / waveWidth) * 0.18 * pulse.alpha;
+                alpha += intensity;
+                radius += intensity * 1.5;
+              }
             }
-          });
 
-          // Render dot
-          if (alpha > 0.05) {
-            ctx.fillStyle = `rgba(139, 92, 246, ${alpha})`; // purple glow pulse
-          } else {
-            ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`; // neutral dim grey
+            // Only render visible dots
+            if (alpha > 0.03) {
+              ctx.fillStyle = `rgba(139, 92, 246, ${alpha})`;
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, Math.PI * 2);
+              ctx.fill();
+            }
           }
-
-          ctx.beginPath();
-          ctx.arc(x, y, radius, 0, Math.PI * 2);
-          ctx.fill();
         }
       }
 
@@ -148,10 +146,14 @@ export default function UnifiedBackground() {
         left: 0,
         width: '100vw',
         height: '100vh',
-        zIndex: -1, // behind all contents
+        zIndex: -1,
         pointerEvents: 'none',
-        display: 'block'
+        display: 'block',
+        willChange: 'transform',
+        transform: 'translate3d(0, 0, 0)' // GPU acceleration
       }}
     />
   );
-}
+});
+
+export default UnifiedBackground;

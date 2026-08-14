@@ -1,34 +1,30 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { auth, signOut } from '../firebase';
+import { backendLogout, getDashboardSummary } from '../api';
 import Logo from './Logo';
 import { EmailPage, CalendarPage, TeamPage, DeploymentsPage, DocumentsPage, AnalyticsPage, IntegrationsPage, SettingsPage } from './Pages';
 import { SiGmail, SiGooglecalendar, SiGithub, SiZoom } from 'react-icons/si';
+import DataFetchAgent from '../agents/DataFetchAgent';
+import UIUpdateAgent from '../agents/UIUpdateAgent';
+import StateManagerAgent from '../agents/StateManagerAgent';
+import IntegrationAgent from '../agents/IntegrationAgent';
+import SummarizerAgent from '../agents/SummarizerAgent';
 
-// Inline icons for brands not in this react-icons version
 const SiSlack = ({ size, color }) => <svg width={size} height={size} viewBox="0 0 24 24"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523 2.528 2.528 0 0 1-2.522-2.523 2.528 2.528 0 0 1 2.522-2.52h2.52v2.52zm1.261 0a2.528 2.528 0 0 1 2.52-2.52h5.043a2.528 2.528 0 0 1 2.522 2.52v5.04a2.528 2.528 0 0 1-2.522 2.52H8.823a2.528 2.528 0 0 1-2.52-2.52v-5.04z" fill="#36C5F0"/><path d="M8.823 5.043a2.528 2.528 0 0 1-2.52-2.52A2.528 2.528 0 0 1 8.823 0a2.528 2.528 0 0 1 2.522 2.522v2.52H8.823zm0 1.262a2.528 2.528 0 0 1 2.522 2.52v5.043a2.528 2.528 0 0 1-2.522 2.52H3.78a2.528 2.528 0 0 1-2.522-2.52V8.825a2.528 2.528 0 0 1 2.522-2.52h5.043z" fill="#2EB67D"/><path d="M18.958 8.825a2.528 2.528 0 0 1 2.52-2.52 2.528 2.528 0 0 1 2.522 2.52 2.528 2.528 0 0 1-2.522 2.52h-2.52v-2.52zm-1.261 0a2.528 2.528 0 0 1-2.52 2.52h-5.043a2.528 2.528 0 0 1-2.522-2.52v-5.04a2.528 2.528 0 0 1 2.522-2.52h5.043a2.528 2.528 0 0 1 2.52 2.52v5.04z" fill="#ECB22E"/><path d="M15.177 18.957a2.528 2.528 0 0 1 2.52 2.522 2.528 2.528 0 0 1-2.52 2.52 2.528 2.528 0 0 1-2.522-2.52v-2.522h2.522zm0-1.261a2.528 2.528 0 0 1-2.522-2.52v-5.043a2.528 2.528 0 0 1 2.522-2.52h5.043a2.528 2.528 0 0 1 2.522 2.52v5.043a2.528 2.528 0 0 1-2.522 2.52h-5.043z" fill="#E01E5A"/></svg>;
 const SiMicrosoft = ({ size }) => <svg width={size} height={size} viewBox="0 0 24 24"><rect x="1" y="1" width="10" height="10" fill="#F25022"/><rect x="13" y="1" width="10" height="10" fill="#7FBA00"/><rect x="1" y="13" width="10" height="10" fill="#00A4EF"/><rect x="13" y="13" width="10" height="10" fill="#FFB900"/></svg>;
 
-/* ══════════════════════════════════════
-   THEMES
-══════════════════════════════════════ */
 const THEMES = {
   blue:   { primary: '#3b82f6', secondary: '#6366f1', accent: '#06b6d4', glow: 'rgba(59,130,246,0.35)' },
   purple: { primary: '#8b5cf6', secondary: '#ec4899', accent: '#a78bfa', glow: 'rgba(139,92,246,0.35)' },
   green:  { primary: '#10b981', secondary: '#06b6d4', accent: '#34d399', glow: 'rgba(16,185,129,0.35)' },
 };
 
-/* ══════════════════════════════════════
-   DESIGN TOKENS
-══════════════════════════════════════ */
 const BASE = {
   bg: '#000', surface: '#0c0c0f', border: 'rgba(255,255,255,0.07)',
   red: '#ef4444', amber: '#f59e0b', green: '#10b981',
   textPrimary: '#fff', textSub: 'rgba(255,255,255,0.55)', textMuted: 'rgba(255,255,255,0.28)',
 };
 
-/* ══════════════════════════════════════
-   SVG ICONS
-══════════════════════════════════════ */
 const I = {
   grid:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>,
   chat:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
@@ -53,11 +49,10 @@ const I = {
   mic:     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>,
   palette: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>,
   drag:    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="6" r="1" fill="currentColor"/><circle cx="15" cy="6" r="1" fill="currentColor"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><circle cx="9" cy="18" r="1" fill="currentColor"/><circle cx="15" cy="18" r="1" fill="currentColor"/></svg>,
+  menu:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
+  sun:     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="4.22" x2="19.78" y2="5.64"/></svg>
 };
 
-/* ══════════════════════════════════════
-   SIMULATED DATA
-══════════════════════════════════════ */
 const NAV_SECTIONS = [
   { id: 'main', label: 'MAIN', items: [
     { id: 'dashboard', icon: 'grid', label: 'Dashboard', shortcut: 'G D' },
@@ -77,28 +72,7 @@ const NAV_SECTIONS = [
   ]},
 ];
 
-const EMAILS_DATA = [
-  { id: 1, sender: 'Robert Chen', role: 'CFO', subject: 'Q3 Budget Approval — Action Required', time: '8m', priority: 'urgent' },
-  { id: 2, sender: 'Acme Corp', role: 'Client', subject: 'Service complaint — ticket #4821', time: '32m', priority: 'urgent' },
-  { id: 3, sender: 'HR Team', role: 'Internal', subject: 'Team offsite planning for August', time: '1h', priority: 'normal' },
-];
-const MEETINGS_DATA = [
-  { id: 1, time: '10:00', label: 'AM', title: 'Daily Standup', dur: '15m', people: 5, status: 'ready', color: '#10b981' },
-  { id: 2, time: '14:00', label: 'PM', title: 'Client Call — Acme', dur: '60m', people: 3, status: 'ready', color: '#3b82f6' },
-  { id: 3, time: '16:00', label: 'PM', title: 'Deep Work Block 🔒', dur: '2h', people: 1, status: 'protected', color: '#8b5cf6' },
-];
-const TEAM_DATA = [
-  { id: 1, name: 'Sarah Chen', task: 'UI mockups', progress: 100, status: 'done' },
-  { id: 2, name: 'John Smith', task: 'API integration', progress: 65, status: 'track' },
-  { id: 3, name: 'Mike Chen', task: 'Backend testing', progress: 30, status: 'late' },
-  { id: 4, name: 'Priya Sharma', task: 'No update', progress: 0, status: 'missing' },
-];
-const AI_ACTIONS_DATA = [
-  { id: 1, time: '9:14', text: 'Sent 3 follow-up emails to Acme Corp', reversible: true },
-  { id: 2, time: '9:02', text: 'Scheduled team meeting Wednesday 3pm', reversible: false },
-  { id: 3, time: '8:45', text: 'Archived 12 newsletters', reversible: false },
-  { id: 4, time: '8:30', text: 'Generated morning briefing', reversible: false },
-];
+const SPARKLINE_DATA = [4, 7, 5, 9, 6, 11, 8, 14, 10, 13];
 const TICKER_ITEMS = [
   '⚡ Sent follow-up to Acme Corp',
   '📅 Meeting scheduled — Wednesday 3pm',
@@ -109,23 +83,12 @@ const TICKER_ITEMS = [
   '📄 Budget_2026.xlsx analyzed',
   '🔔 CFO email due by 5pm today',
 ];
-const SPARKLINE_DATA = [4, 7, 5, 9, 6, 11, 8, 14, 10, 13];
-const NOTIFS_DATA = [
-  { id: 1, text: 'CFO email needs reply', sub: '2 min ago', color: '#ef4444' },
-  { id: 2, text: 'Mike Chen task overdue', sub: '45 min ago', color: '#f59e0b' },
-  { id: 3, text: 'Deployment v2.4.2 started', sub: '1h ago', color: '#3b82f6' },
-];
 const CHAT_INIT = [
   { id: 1, r: 'ai', text: "Good morning! I've reviewed your schedule. 3 urgent items need attention today. Start with the CFO budget email?" },
   { id: 2, r: 'user', text: 'Yes, draft a reply for the CFO.' },
   { id: 3, r: 'ai', text: 'Draft: "Hi Robert, Thanks for the Q3 budget proposal. Can we schedule a 30-min call Thursday 2pm to discuss?" — Send?' },
 ];
 
-/* ══════════════════════════════════════
-   MICRO COMPONENTS
-══════════════════════════════════════ */
-
-// Animated number counter
 function Counter({ target, suffix = '', duration = 1200 }) {
   const [val, setVal] = useState(0);
   useEffect(() => {
@@ -141,7 +104,6 @@ function Counter({ target, suffix = '', duration = 1200 }) {
   return <>{val}{suffix}</>;
 }
 
-// Sparkline SVG
 function Sparkline({ data, color, width = 80, height = 28 }) {
   const max = Math.max(...data), min = Math.min(...data);
   const pts = data.map((v, i) => {
@@ -164,7 +126,6 @@ function Sparkline({ data, color, width = 80, height = 28 }) {
   );
 }
 
-// Radial progress ring
 function Ring({ pct, color, size = 64, stroke = 5, label }) {
   const r = (size - stroke * 2) / 2;
   const circ = 2 * Math.PI * r;
@@ -184,7 +145,6 @@ function Ring({ pct, color, size = 64, stroke = 5, label }) {
   );
 }
 
-// Avatar
 function Av({ name, size = 30 }) {
   const letters = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   const hue = (name.charCodeAt(0) * 47) % 360;
@@ -195,42 +155,19 @@ function Av({ name, size = 30 }) {
   );
 }
 
-// Bento card — supports colspan/rowspan via style
-function Bento({ children, style = {}, accent, draggable, onDragStart, onDragOver, onDrop, id }) {
-  const [hov, setHov] = useState(false);
+function Bento({ children, style = {}, className = "", draggable, onDragStart, onDragOver, onDrop, id }) {
   return (
     <div
+      className={`card ${className}`}
       draggable={draggable}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        background: '#0c0c0f', borderRadius: 18,
-        border: `1px solid ${hov ? 'rgba(255,255,255,0.13)' : 'rgba(255,255,255,0.07)'}`,
-        padding: '20px 22px', position: 'relative', overflow: 'hidden',
-        transition: 'all 0.22s', transform: hov ? 'translateY(-2px)' : 'translateY(0)',
-        boxShadow: hov ? '0 12px 40px rgba(0,0,0,0.5)' : '0 2px 10px rgba(0,0,0,0.3)',
-        ...style,
-      }}>
-      {accent && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, ${accent}55, transparent)` }} />}
-      {draggable && hov && (
-        <div style={{ position: 'absolute', top: 10, right: 10, color: 'rgba(255,255,255,0.2)', cursor: 'grab' }}>{I.drag}</div>
+      style={{ ...style, position: 'relative' }}>
+      {draggable && (
+        <div className="drag-handle" style={{ position: 'absolute', top: 10, right: 10, color: 'rgba(255,255,255,0.2)', cursor: 'grab', opacity: 0, transition: 'opacity 0.2s' }}>{I.drag}</div>
       )}
       {children}
-    </div>
-  );
-}
-
-function WH({ icon, title, right, T }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-        <span style={{ color: T.primary, display: 'flex' }}>{I[icon] || icon}</span>
-        <span style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 13, color: '#fff' }}>{title}</span>
-      </div>
-      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: 6 }}>{right}</span>
     </div>
   );
 }
@@ -239,22 +176,19 @@ function Pill({ label, color, bg }) {
   return <span style={{ padding: '3px 9px', borderRadius: 99, background: bg || `${color}15`, border: `1px solid ${color}28`, color, fontSize: 11, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace", whiteSpace: 'nowrap' }}>{label}</span>;
 }
 
-function PBtn({ children, onClick, T, style = {} }) {
-  return <button onClick={onClick} style={{ padding: '9px 16px', borderRadius: 10, background: `linear-gradient(135deg,${T.primary},${T.secondary})`, border: 'none', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontFamily: "'Inter',sans-serif", boxShadow: `0 4px 18px ${T.glow}`, transition: 'all 0.2s', ...style }} className="pbtn-h">{children}</button>;
+function PBtn({ children, onClick, T, style = {}, className = "" }) {
+  return <button onClick={onClick} style={{ padding: '9px 16px', borderRadius: 10, background: `linear-gradient(135deg,${T.primary},${T.secondary})`, border: 'none', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontFamily: "'Inter',sans-serif", boxShadow: `0 4px 18px ${T.glow}`, transition: 'all 0.2s', ...style }} className={`btn-primary ${className}`}>{children}</button>;
 }
 
-function GBtn({ children, onClick, color, style = {} }) {
-  return <button onClick={onClick} style={{ padding: '5px 11px', borderRadius: 8, background: `${color}12`, border: `1px solid ${color}28`, color, fontSize: 11, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'Inter',sans-serif", transition: 'all 0.18s', whiteSpace: 'nowrap', ...style }} className="gbtn-h">{children}</button>;
+function GBtn({ children, onClick, color, style = {}, className = "" }) {
+  return <button onClick={onClick} style={{ padding: '5px 11px', borderRadius: 8, background: `${color}12`, border: `1px solid ${color}28`, color, fontSize: 11, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'Inter',sans-serif", transition: 'all 0.18s', whiteSpace: 'nowrap', ...style }} className={`btn-ghost ${className}`}>{children}</button>;
 }
 
-/* ══════════════════════════════════════
-   LIVE TICKER
-══════════════════════════════════════ */
 function Ticker({ T }) {
   return (
-    <div style={{ background: '#09090c', borderBottom: '1px solid rgba(255,255,255,0.05)', height: 32, overflow: 'hidden', display: 'flex', alignItems: 'center', position: 'relative' }}>
-      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 80, background: 'linear-gradient(90deg,#09090c,transparent)', zIndex: 2 }} />
-      <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 80, background: 'linear-gradient(270deg,#09090c,transparent)', zIndex: 2 }} />
+    <div style={{ background: 'transparent', height: 28, overflow: 'hidden', display: 'flex', alignItems: 'center', position: 'relative', width: '100%' }}>
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 80, background: 'linear-gradient(90deg,#0a0a0d,transparent)', zIndex: 2 }} />
+      <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 80, background: 'linear-gradient(270deg,#0a0a0d,transparent)', zIndex: 2 }} />
       <div className="ticker-inner" style={{ display: 'flex', gap: '60px', whiteSpace: 'nowrap', animation: 'tickerMove 28s linear infinite' }}>
         {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
           <span key={i} style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: "'Inter',sans-serif" }}>
@@ -266,32 +200,35 @@ function Ticker({ T }) {
   );
 }
 
-/* ══════════════════════════════════════
-   THEME SWITCHER
-══════════════════════════════════════ */
-function ThemeSwitcher({ theme, setTheme }) {
+function ThemeSwitcher({ theme, setTheme, onThemeChange }) {
   return (
     <div style={{ display: 'flex', gap: 5, alignItems: 'center', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 99, padding: '4px 6px' }}>
       {Object.entries(THEMES).map(([key, val]) => (
-        <button key={key} title={key} onClick={() => setTheme(key)} style={{ width: 18, height: 18, borderRadius: '50%', background: val.primary, border: theme === key ? `2px solid #fff` : '2px solid transparent', cursor: 'pointer', transition: 'all 0.2s', padding: 0 }} />
+        <button key={key} title={key} onClick={() => { setTheme(key); onThemeChange && onThemeChange(key); }} style={{ width: 18, height: 18, borderRadius: '50%', background: val.primary, border: theme === key ? `2px solid #fff` : '2px solid transparent', cursor: 'pointer', transition: 'all 0.2s', padding: 0 }} />
       ))}
     </div>
   );
 }
 
-/* ══════════════════════════════════════
-   MAIN DASHBOARD
-══════════════════════════════════════ */
-export default function Dashboard({ user, onOpenCockpit }) {
+export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange, initialNav, onNavConsumed }) {
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Alex';
   const firstName = displayName.split(' ')[0];
 
-  const [theme, setTheme] = useState(() => localStorage.getItem('wp_theme') || 'blue');
+  const [theme, setTheme] = useState(() => themeKey || localStorage.getItem('wp_theme') || 'blue');
   const T = THEMES[theme];
+  useEffect(() => { if (themeKey && themeKey !== theme) setTheme(themeKey); }, [themeKey]);
 
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('wp_sb') === '1');
+  const [collapsed, setCollapsed] = useState(true);
   const [activeNav, setActiveNav] = useState('dashboard');
   const [role, setRole] = useState(() => localStorage.getItem('wp_role') || 'Manager');
+
+  // Navigate to section requested by ConnectionSheet
+  useEffect(() => {
+    if (initialNav) {
+      setActiveNav(initialNav);
+      onNavConsumed?.();
+    }
+  }, [initialNav]);
   const [showNotif, setShowNotif] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -300,22 +237,67 @@ export default function Dashboard({ user, onOpenCockpit }) {
   const [msgs, setMsgs] = useState(CHAT_INIT);
   const [typing, setTyping] = useState(false);
   const [dismissedAlerts, setDismissedAlerts] = useState([]);
-  const [deployPct, setDeployPct] = useState(67);
   const [showKbHelp, setShowKbHelp] = useState(false);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState(null);
 
-  // Drag-and-drop widget order
   const [widgetOrder, setWidgetOrder] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('wp_order')) || ['email', 'schedule', 'attention', 'stats', 'team', 'deploy', 'aiActions', 'briefing', 'docs']; }
-    catch { return ['email', 'schedule', 'attention', 'stats', 'team', 'deploy', 'aiActions', 'briefing', 'docs']; }
+    try { return JSON.parse(localStorage.getItem('wp_order')) || ['email', 'schedule', 'team', 'stats', 'deploy', 'briefing', 'aiActions', 'docs']; }
+    catch { return ['email', 'schedule', 'team', 'stats', 'deploy', 'briefing', 'aiActions', 'docs']; }
   });
   const dragRef = useRef(null);
+
+  const [state, setState] = useState({});
+  const [data, setData] = useState({});
+  const [uiState, setUiState] = useState({});
+  const agentRefs = useRef({});
+
+  const stateAgent = StateManagerAgent({ setState, getState: () => state });
+  const dataAgent = DataFetchAgent({ setData, getData: () => data });
+  const uiAgent = UIUpdateAgent({ setUiState, getUiState: () => uiState, refs: agentRefs });
+  const integrationAgent = IntegrationAgent({
+    setData,
+    setState,
+    setUiState,
+    getData: () => data,
+    getState: () => state,
+    getUiState: () => uiState
+  });
+  const summarizerAgent = SummarizerAgent({ setState, getState: () => state });
+
+  useEffect(() => {
+    stateAgent.init();
+    dataAgent.init();
+    uiAgent.init();
+    integrationAgent.init();
+    const cleanupSummary = summarizerAgent.init();
+    return () => cleanupSummary?.();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDashboardSummary()
+      .then(res => {
+        if (!cancelled) {
+          setDashboardData(res?.data || null);
+          setDashboardLoading(false);
+        }
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setDashboardError(err.message || 'Failed to load dashboard data');
+          setDashboardLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const notifRef = useRef(null);
   const userRef = useRef(null);
   const chatEndRef = useRef(null);
 
-  useEffect(() => { localStorage.setItem('wp_theme', theme); }, [theme]);
-  useEffect(() => { localStorage.setItem('wp_sb', collapsed ? '1' : '0'); }, [collapsed]);
+  useEffect(() => { localStorage.setItem('wp_theme', theme); onThemeChange && onThemeChange(theme); }, [theme]);
   useEffect(() => { localStorage.setItem('wp_role', role); }, [role]);
   useEffect(() => { localStorage.setItem('wp_order', JSON.stringify(widgetOrder)); }, [widgetOrder]);
   useEffect(() => {
@@ -332,7 +314,6 @@ export default function Dashboard({ user, onOpenCockpit }) {
     return () => document.removeEventListener('mousedown', fn);
   }, []);
 
-  // ── Keyboard shortcuts ──
   const gPressed = useRef(false);
   useEffect(() => {
     const down = e => {
@@ -366,17 +347,10 @@ export default function Dashboard({ user, onOpenCockpit }) {
 
   const sendCmd = useCallback(() => {
     if (!cmdVal.trim()) return;
-    setChatOpen(true);
-    setMsgs(p => [...p, { id: Date.now(), r: 'user', text: cmdVal }]);
+    onOpenCockpit && onOpenCockpit();
     setCmdVal('');
-    setTyping(true);
-    setTimeout(() => {
-      setTyping(false);
-      setMsgs(p => [...p, { id: Date.now() + 1, r: 'ai', text: `Got it! Working on: "${cmdVal.slice(0, 45)}" — I'll report back.` }]);
-    }, 1500);
-  }, [cmdVal]);
+  }, [cmdVal, onOpenCockpit]);
 
-  // Drag-and-drop
   const handleDragStart = (e, id) => { dragRef.current = id; e.dataTransfer.effectAllowed = 'move'; };
   const handleDrop = (e, targetId) => {
     e.preventDefault();
@@ -393,376 +367,435 @@ export default function Dashboard({ user, onOpenCockpit }) {
   };
 
   const now = new Date();
-  const hr = now.getHours();
-  const greeting = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
-  const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-  const sbW = collapsed ? 58 : 218;
-
+  const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  
   const ALERTS = [
-    { id: 1, text: 'CFO email due today', c: BASE.red },
-    { id: 2, text: 'Mike overdue — 2 days', c: BASE.amber },
-    { id: 3, text: 'Deployment in 2h', c: T.primary },
-    { id: 4, text: 'Acme complaint — urgent', c: BASE.red },
+    { id: 1, text: '🔴 CFO email due', c: BASE.red },
+    { id: 2, text: '🟡 Mike overdue', c: BASE.amber },
+    { id: 3, text: '🔵 Deploy in 2h', c: T.primary },
   ].filter(a => !dismissedAlerts.includes(a.id));
 
-  // ── Widget renderers ──
+  const SPANS = {
+    email: { col: 7, row: 1 },
+    schedule: { col: 5, row: 2 },
+    stats: { col: 5, row: 2 },
+    team: { col: 7, row: 1 },
+    deploy: { col: 12, row: 1 },
+    briefing: { col: 4, row: 1 },
+    aiActions: { col: 4, row: 1 },
+    docs: { col: 4, row: 1 },
+  };
+
+  const getDurHeight = (dur) => {
+    if (dur.includes('h')) return parseInt(dur) * 60;
+    return parseInt(dur);
+  };
+
   const WIDGETS = {
-    email: () => (
-      <Bento accent={T.primary} draggable onDragStart={e => handleDragStart(e, 'email')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'email')} style={{ gridColumn: 'span 2' }}>
-        <WH icon="mail" title="Email" T={T} right={<><Pill label="3 Urgent" color={BASE.red} /><Pill label="7 Awaiting" color={BASE.amber} /></>} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {EMAILS_DATA.map(em => (
-            <div key={em.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: em.priority === 'urgent' ? BASE.red : 'rgba(255,255,255,0.2)', flexShrink: 0, boxShadow: em.priority === 'urgent' ? `0 0 6px ${BASE.red}` : 'none' }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', display: 'flex', gap: 6, alignItems: 'center' }}>
-                  {em.sender}
-                  <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 99, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace" }}>{em.role}</span>
-                </div>
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{em.subject}</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', fontFamily: "'JetBrains Mono',monospace" }}>{em.time}</span>
-                <GBtn color={T.primary}>Draft reply</GBtn>
-              </div>
+    email: () => {
+      const emails = dashboardData?.email || [];
+      const urgentCount = dashboardData?.counts?.urgentEmails || 0;
+      if (dashboardLoading) return <Bento draggable onDragStart={e => handleDragStart(e, 'email')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'email')} style={{ gridColumn: `span ${SPANS.email.col}`, gridRow: `span ${SPANS.email.row}` }}><div style={{padding:20,color:'rgba(255,255,255,0.4)',fontSize:12}}>Loading emails...</div></Bento>;
+      if (dashboardError) return <Bento draggable onDragStart={e => handleDragStart(e, 'email')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'email')} style={{ gridColumn: `span ${SPANS.email.col}`, gridRow: `span ${SPANS.email.row}` }}><div style={{padding:20,color:'#ef4444',fontSize:12}}>Failed to load emails</div></Bento>;
+      return (
+        <Bento draggable onDragStart={e => handleDragStart(e, 'email')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'email')} style={{ gridColumn: `span ${SPANS.email.col}`, gridRow: `span ${SPANS.email.row}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>Email</span>
+              <Pill label={`${urgentCount} Urgent`} color={BASE.red} bg="rgba(239,68,68,0.15)" />
             </div>
-          ))}
-        </div>
-        <PBtn T={T} style={{ width: '100%', marginTop: 14, justifyContent: 'center' }}>Handle all with AI {I.bolt}</PBtn>
-      </Bento>
-    ),
-
-    schedule: () => (
-      <Bento accent={T.accent} draggable onDragStart={e => handleDragStart(e, 'schedule')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'schedule')}>
-        <WH icon="cal" title="Today" T={T} right={now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {MEETINGS_DATA.map(m => (
-            <div key={m.id} style={{ display: 'flex', gap: 10, padding: '10px 12px', background: 'rgba(255,255,255,0.025)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.05)', transition: 'all 0.2s' }}>
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                <div style={{ width: 3, height: '100%', minHeight: 36, borderRadius: 99, background: m.color }} />
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace", paddingTop: 2 }}>{m.time}</div>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', marginBottom: 4 }}>{m.title}</div>
-                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                  <Pill label={m.dur} color="rgba(255,255,255,0.3)" bg="rgba(255,255,255,0.05)" />
-                  {m.status === 'ready' && <Pill label="✓ Ready" color={BASE.green} />}
-                  {m.status === 'protected' && <Pill label="🔒 Protected" color="#8b5cf6" />}
-                </div>
-              </div>
-              {m.status === 'ready' && <GBtn color={T.accent} style={{ alignSelf: 'center', fontSize: 10 }}>Brief</GBtn>}
-            </div>
-          ))}
-        </div>
-      </Bento>
-    ),
-
-    attention: () => (
-      <Bento accent={BASE.red} draggable onDragStart={e => handleDragStart(e, 'attention')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'attention')}>
-        <WH icon="bell" title="Needs Attention" T={T} right={<Pill label="4" color={BASE.red} />} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {[
-            { text: 'CFO email — due 5pm', label: 'Reply', c: BASE.red },
-            { text: 'Mike Chen — 2d overdue', label: 'Follow up', c: BASE.amber },
-            { text: 'Deployment v2.4.2', label: 'Monitor', c: T.primary },
-            { text: 'Acme complaint', label: 'Handle', c: BASE.amber },
-          ].map((item, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', background: `${item.c}06`, border: `1px solid ${item.c}18`, borderRadius: 9, transition: 'all 0.18s' }}>
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: item.c, flexShrink: 0, boxShadow: `0 0 6px ${item.c}` }} />
-              <span style={{ flex: 1, fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>{item.text}</span>
-              <GBtn color={item.c} style={{ fontSize: 10, padding: '3px 8px' }}>{item.label}</GBtn>
-            </div>
-          ))}
-        </div>
-        <PBtn T={T} onClick={() => onOpenCockpit && onOpenCockpit()} style={{ width: '100%', marginTop: 14, justifyContent: 'center' }}>Handle all with AI {I.bolt}</PBtn>
-      </Bento>
-    ),
-
-    stats: () => (
-      <Bento accent={T.secondary} draggable onDragStart={e => handleDragStart(e, 'stats')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'stats')} style={{ gridColumn: 'span 2' }}>
-        <WH icon="bar" title="This Week" T={T} right="Productivity" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-          {[
-            { label: 'Focus Time', value: 65, suffix: 'h', target: 65, color: T.primary },
-            { label: 'Emails Saved', value: 89, suffix: '', target: 89, color: BASE.green },
-            { label: 'Tasks Done', value: 86, suffix: '%', target: 86, color: T.secondary },
-            { label: 'Meetings', value: 100, suffix: '%', target: 100, color: T.accent },
-          ].map(s => (
-            <div key={s.label} style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 14, padding: '16px 14px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-              <Ring pct={s.value} color={s.color} size={60} stroke={4} />
-              <div>
-                <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 18, color: '#fff', textAlign: 'center' }}>
-                  <Counter target={s.value === 65 ? 65 : s.value} />
-                  {s.suffix}
-                </div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', textAlign: 'center', marginTop: 2 }}>{s.label}</div>
-              </div>
-              <Sparkline data={SPARKLINE_DATA} color={s.color} />
-            </div>
-          ))}
-        </div>
-        <div style={{ marginTop: 14, padding: '12px 14px', background: `${BASE.green}08`, border: `1px solid ${BASE.green}20`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>Burnout Risk</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 120, height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 99, overflow: 'hidden' }}>
-              <div style={{ width: '22%', height: '100%', background: BASE.green, borderRadius: 99 }} />
-            </div>
-            <Pill label="LOW ●" color={BASE.green} />
+            <GBtn color={T.primary}>Draft All</GBtn>
           </div>
-        </div>
-      </Bento>
-    ),
-
-    team: () => (
-      <Bento accent={T.primary} draggable onDragStart={e => handleDragStart(e, 'team')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'team')}>
-        <WH icon="team" title="Team Today" T={T} right="4 members" />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {TEAM_DATA.map(m => {
-            const statusMap = { done: BASE.green, track: T.primary, late: BASE.amber, missing: BASE.red };
-            const c = statusMap[m.status];
-            return (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Av name={m.name} size={32} />
+          <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 12 }}>
+            {emails.length === 0 ? (
+              <div style={{padding:'20px 10px',textAlign:'center',color:'rgba(255,255,255,0.3)',fontSize:12}}>No emails yet. Connect Gmail in Integrations.</div>
+            ) : emails.map(em => (
+              <div key={em.id} className="email-row" style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '9px 10px', borderRadius: 10, cursor: 'pointer',
+                borderLeft: em.priority === 'urgent' ? '3px solid #ef4444' : '3px solid transparent',
+                background: em.priority === 'urgent' ? 'rgba(239,68,68,0.04)' : 'transparent',
+                transition: 'all 0.15s', marginBottom: 2,
+              }}>
+                <Av name={em.from || em.sender || '?'} size={30} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{m.name}</span>
-                    <Ring pct={m.progress} color={c} size={32} stroke={3} />
+                  <div style={{ fontSize: 13, fontWeight: em.read ? 500 : 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {em.from || em.sender} <Pill label={em.role || 'Inbox'} color="rgba(255,255,255,0.5)" bg="rgba(255,255,255,0.08)" />
                   </div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 4 }}>{m.task}</div>
+                  <div className="truncate-text" style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 1 }}>{em.subject}</div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ display: 'flex', gap: 7, marginTop: 14 }}>
-          <button style={{ flex: 1, padding: '8px', borderRadius: 9, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)', fontSize: 11, cursor: 'pointer', fontFamily: "'Inter',sans-serif" }}>View all</button>
-          <GBtn color={T.primary} style={{ flex: 1, justifyContent: 'center' }} onClick={() => onOpenCockpit && onOpenCockpit()}>Standup {I.bolt}</GBtn>
-        </div>
-      </Bento>
-    ),
-
-    deploy: () => (
-      <Bento accent={BASE.green} draggable onDragStart={e => handleDragStart(e, 'deploy')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'deploy')}>
-        <WH icon="deploy" title="Deployments" T={T} right={<Pill label="Prod" color={BASE.green} />} />
-        <div style={{ padding: '12px', background: `${BASE.green}08`, border: `1px solid ${BASE.green}20`, borderRadius: 12, marginBottom: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: '#fff' }}>v2.4.1 — Production</span>
-            <Pill label="● Live" color={BASE.green} />
-          </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            {[['142ms', 'Latency'], ['99.9%', 'Uptime'], ['2h ago', 'Deployed']].map(([v, k]) => (
-              <div key={k}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{v}</div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>{k}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', fontFamily: "'JetBrains Mono',monospace" }}>{em.time}</span>
+                  <GBtn color={T.primary}>Reply</GBtn>
+                </div>
               </div>
             ))}
           </div>
-        </div>
-        <div style={{ padding: '12px', background: `${BASE.amber}06`, border: `1px solid ${BASE.amber}20`, borderRadius: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: '#fff' }}>v2.4.2 — Staging</span>
-            <Pill label={`${Math.round(deployPct)}%`} color={T.primary} />
-          </div>
-          <div style={{ width: '100%', height: 5, background: 'rgba(255,255,255,0.07)', borderRadius: 99, overflow: 'hidden', marginBottom: 8 }}>
-            <div style={{ height: '100%', width: `${deployPct}%`, background: `linear-gradient(90deg,${T.primary},${T.secondary})`, borderRadius: 99, transition: 'width 0.6s ease', filter: `drop-shadow(0 0 4px ${T.primary}80)` }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>ETA ~8 min</span>
-            <Pill label="MEDIUM RISK" color={BASE.amber} />
-          </div>
-        </div>
-      </Bento>
-    ),
+          <PBtn T={T} style={{ width: '100%', justifyContent: 'center' }}>Handle all with AI {I.bolt}</PBtn>
+        </Bento>
+      );
+    },
 
-    aiActions: () => (
-      <Bento accent={T.secondary} draggable onDragStart={e => handleDragStart(e, 'aiActions')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'aiActions')}>
-        <WH icon="bolt" title="AI Did Today" T={T} right="View all →" />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {AI_ACTIONS_DATA.map(a => (
-            <div key={a.id} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', alignItems: 'flex-start' }}>
-              <div style={{ width: 24, height: 24, borderRadius: 7, background: `${T.primary}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: T.primary }}>{I.bolt}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: "'JetBrains Mono',monospace", marginBottom: 2 }}>{a.time} AM</div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>{a.text}</div>
+    schedule: () => {
+      const events = dashboardData?.calendar || [];
+      if (dashboardLoading) return <Bento draggable onDragStart={e => handleDragStart(e, 'schedule')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'schedule')} style={{ gridColumn: `span ${SPANS.schedule.col}`, gridRow: `span ${SPANS.schedule.row}` }}><div style={{padding:20,color:'rgba(255,255,255,0.4)',fontSize:12}}>Loading schedule...</div></Bento>;
+      if (dashboardError) return <Bento draggable onDragStart={e => handleDragStart(e, 'schedule')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'schedule')} style={{ gridColumn: `span ${SPANS.schedule.col}`, gridRow: `span ${SPANS.schedule.row}` }}><div style={{padding:20,color:'#ef4444',fontSize:12}}>Failed to load schedule</div></Bento>;
+      const fmtTime = (iso) => {
+        if (!iso) return '--:--';
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return '--:--';
+        return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+      };
+      const fmtDur = (minutes) => {
+        if (!minutes) return '--';
+        if (minutes < 60) return `${minutes}m`;
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        return m ? `${h}h ${m}m` : `${h}h`;
+      };
+      const mapped = events.map(ev => ({
+        id: ev.id,
+        time: fmtTime(ev.time || ev.start),
+        title: ev.title || 'Untitled',
+        dur: fmtDur(ev.duration || (ev.end && ev.start ? Math.round((new Date(ev.end) - new Date(ev.start)) / 60000) : undefined)),
+        color: ev.color || T.primary,
+        status: 'ready',
+      }));
+      return (
+        <Bento draggable onDragStart={e => handleDragStart(e, 'schedule')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'schedule')} style={{ gridColumn: `span ${SPANS.schedule.col}`, gridRow: `span ${SPANS.schedule.row}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <span style={{ fontSize: 14, fontWeight: 700 }}>Today</span>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{dateStr}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+            {mapped.length === 0 ? (
+              <div style={{padding:'20px 10px',textAlign:'center',color:'rgba(255,255,255,0.3)',fontSize:12}}>No events scheduled today.</div>
+            ) : mapped.map(m => (
+              <div key={m.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ width: 45, fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: "'JetBrains Mono',monospace", paddingTop: 4 }}>{m.time}</div>
+                <div style={{ flex: 1, height: Math.max(getDurHeight(m.dur) * 1.5, 40), background: `${m.color}15`, borderLeft: `3px solid ${m.color}`, borderRadius: '0 8px 8px 0', padding: '8px 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{m.title}</span>
+                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{m.dur}</span>
+                </div>
               </div>
-              {a.reversible && <GBtn color={T.secondary} style={{ fontSize: 10, padding: '3px 7px' }}>{I.undo} Undo</GBtn>}
+            ))}
+          </div>
+          <GBtn color={T.primary} style={{ width: '100%', justifyContent: 'center', marginTop: 16 }}>+ Schedule with AI</GBtn>
+        </Bento>
+      );
+    },
+
+    stats: () => {
+      const analytics = dashboardData?.analytics || {};
+      if (dashboardLoading) return <Bento draggable onDragStart={e => handleDragStart(e, 'stats')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'stats')} style={{ gridColumn: `span ${SPANS.stats.col}`, gridRow: `span ${SPANS.stats.row}`, display: 'flex', flexDirection: 'column' }}><div style={{padding:20,color:'rgba(255,255,255,0.4)',fontSize:12}}>Loading analytics...</div></Bento>;
+      if (dashboardError) return <Bento draggable onDragStart={e => handleDragStart(e, 'stats')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'stats')} style={{ gridColumn: `span ${SPANS.stats.col}`, gridRow: `span ${SPANS.stats.row}`, display: 'flex', flexDirection: 'column' }}><div style={{padding:20,color:'#ef4444',fontSize:12}}>Failed to load analytics</div></Bento>;
+      const metrics = [
+        { label: 'Tasks Done', value: String(analytics.tasks_completed ?? 0), delta: '+0%', color: BASE.green },
+        { label: 'Emails Handled', value: String(analytics.emails_handled ?? 0), delta: '+0%', color: T.primary },
+        { label: 'Focus Hours', value: String(analytics.focus_hours ?? 0), delta: '-0%', color: BASE.red },
+        { label: 'AI Saves', value: `${analytics.ai_time_saved ?? 0}h`, delta: '+0%', color: T.secondary }
+      ];
+      return (
+        <Bento draggable onDragStart={e => handleDragStart(e, 'stats')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'stats')} style={{ gridColumn: `span ${SPANS.stats.col}`, gridRow: `span ${SPANS.stats.row}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, flex: 1 }}>
+            {metrics.map(s => (
+              <div key={s.label} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <span style={{ fontFamily: 'Sora', fontWeight: 800, fontSize: 28 }}>{s.value}</span>
+                    <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: s.delta.startsWith('+') ? `${BASE.green}20` : `${BASE.red}20`, color: s.delta.startsWith('+') ? BASE.green : BASE.red }}>{s.delta}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{s.label}</div>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <Sparkline data={(analytics.weekly_data || SPARKLINE_DATA).map(v => typeof v === 'number' ? v : 5)} color={s.color} width={100} height={30} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Bento>
+      );
+    },
+
+    team: () => {
+      const members = dashboardData?.team || [];
+      if (dashboardLoading) return <Bento draggable onDragStart={e => handleDragStart(e, 'team')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'team')} style={{ gridColumn: `span ${SPANS.team.col}`, gridRow: `span ${SPANS.team.row}` }}><div style={{padding:20,color:'rgba(255,255,255,0.4)',fontSize:12}}>Loading team...</div></Bento>;
+      if (dashboardError) return <Bento draggable onDragStart={e => handleDragStart(e, 'team')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'team')} style={{ gridColumn: `span ${SPANS.team.col}`, gridRow: `span ${SPANS.team.row}` }}><div style={{padding:20,color:'#ef4444',fontSize:12}}>Failed to load team</div></Bento>;
+      return (
+        <Bento draggable onDragStart={e => handleDragStart(e, 'team')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'team')} style={{ gridColumn: `span ${SPANS.team.col}`, gridRow: `span ${SPANS.team.row}` }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Team Status</div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <tbody>
+              {members.length === 0 ? (
+                <tr><td style={{padding:'20px',textAlign:'center',color:'rgba(255,255,255,0.3)',fontSize:12}} colSpan={6}>No team members yet.</td></tr>
+              ) : members.map(m => {
+                const sMap = { done: BASE.green, 'on-track': T.primary, delayed: BASE.amber, missing: BASE.red, on_track: T.primary };
+                const rawStatus = (m.status || '').toLowerCase();
+                const c = sMap[rawStatus] || T.primary;
+                const displayStatus = rawStatus.replace('_', '-');
+                return (
+                  <tr key={m.id || m.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <td style={{ padding: '8px 0' }}><Av name={m.name} size={28} /></td>
+                    <td style={{ padding: '8px', fontSize: 13, fontWeight: 500 }}>{m.name}</td>
+                    <td style={{ padding: '8px', fontSize: 12, color: 'rgba(255,255,255,0.5)' }} className="truncate-text">{m.task || m.role || ''}</td>
+                    <td style={{ padding: '8px', width: 80 }}>
+                      <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
+                        <div style={{ width: `${m.progress ?? 0}%`, height: '100%', background: c, borderRadius: 2 }} />
+                      </div>
+                    </td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: c, margin: '0 auto', boxShadow: `0 0 6px ${c}` }} />
+                    </td>
+                    <td style={{ padding: '8px 0', textAlign: 'right' }}>
+                      {(displayStatus === 'delayed' || displayStatus === 'missing') ? <GBtn color={BASE.amber} style={{ display: 'inline-flex' }}>{displayStatus === 'missing' ? 'Remind' : 'Follow up'}</GBtn> : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Bento>
+      );
+    },
+
+    deploy: () => {
+      const pipelines = dashboardData?.deployments || [];
+      if (dashboardLoading) return <Bento draggable onDragStart={e => handleDragStart(e, 'deploy')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'deploy')} style={{ gridColumn: `span ${SPANS.deploy.col}`, gridRow: `span ${SPANS.deploy.row}` }}><div style={{padding:20,color:'rgba(255,255,255,0.4)',fontSize:12}}>Loading deployments...</div></Bento>;
+      if (dashboardError) return <Bento draggable onDragStart={e => handleDragStart(e, 'deploy')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'deploy')} style={{ gridColumn: `span ${SPANS.deploy.col}`, gridRow: `span ${SPANS.deploy.row}` }}><div style={{padding:20,color:'#ef4444',fontSize:12}}>Failed to load deployments</div></Bento>;
+      const current = pipelines[0] || { name: 'Staging', version: 'v2.4.2', status: 'running', progress: 67, risk: 'medium', uptime: '—', deployed: 'Running' };
+      return (
+        <Bento draggable onDragStart={e => handleDragStart(e, 'deploy')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'deploy')} style={{ gridColumn: `span ${SPANS.deploy.col}`, gridRow: `span ${SPANS.deploy.row}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, marginRight: 16 }}>Deployment Pipeline</span>
+              {[
+                { label: 'Build', status: 'done' },
+                { label: 'Test', status: 'done' },
+                { label: `Staging ${Math.round(current.progress || 0)}%`, status: current.status === 'live' ? 'done' : 'active' },
+                { label: 'Production locked', status: current.status === 'live' ? 'done' : 'wait' }
+              ].map((step, i, arr) => (
+                <React.Fragment key={step.label}>
+                  <div style={{ padding: '6px 12px', borderRadius: 99, background: step.status === 'done' ? `${BASE.green}15` : step.status === 'active' ? `${T.primary}15` : 'rgba(255,255,255,0.05)', border: `1px solid ${step.status === 'done' ? BASE.green : step.status === 'active' ? T.primary : 'rgba(255,255,255,0.1)'}`, color: step.status === 'wait' ? 'rgba(255,255,255,0.5)' : '#fff', fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {step.status === 'done' && <span style={{ color: BASE.green }}>✓</span>}
+                    {step.status === 'active' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.primary, animation: 'pulse 2s infinite' }} />}
+                    {step.label}
+                  </div>
+                  {i < arr.length - 1 && <span style={{ color: 'rgba(255,255,255,0.2)' }}>→</span>}
+                </React.Fragment>
+              ))}
             </div>
-          ))}
-        </div>
-      </Bento>
-    ),
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+               <div style={{ textAlign: 'right' }}>
+                 <div style={{ fontSize: 13, fontWeight: 600 }}>{current.version || 'v2.4.2'}</div>
+                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{current.uptime || '99.9% Uptime'}</div>
+               </div>
+               <GBtn color={BASE.red}>Rollback</GBtn>
+            </div>
+          </div>
+        </Bento>
+      );
+    },
 
-    briefing: () => (
-      <Bento accent={T.accent} draggable onDragStart={e => handleDragStart(e, 'briefing')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'briefing')} style={{ gridColumn: 'span 2' }}>
-        <WH icon="bolt" title="Morning Briefing" T={T} right={now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} />
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg,${T.primary},${T.secondary})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0, boxShadow: `0 4px 16px ${T.glow}` }}>{I.bolt}</div>
-          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.7, margin: 0 }}>
-            Good morning {firstName}! You have <span style={{ color: BASE.red, fontWeight: 700 }}>3 urgent emails</span> — CFO budget request is most critical (due 5pm). Mike's backend task is <span style={{ color: BASE.amber, fontWeight: 700 }}>2 days overdue</span>. Deployment at 3pm. <span style={{ color: T.primary, fontWeight: 700 }}>Start with the CFO email.</span>
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-          <PBtn T={T} onClick={() => setChatOpen(true)} style={{ flex: 1, justifyContent: 'center' }}>Read full briefing</PBtn>
-          <button style={{ padding: '9px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer', fontFamily: "'Inter',sans-serif" }}>Dismiss</button>
-        </div>
-      </Bento>
-    ),
+    briefing: () => {
+      const alerts = dashboardData?.alerts || [];
+      if (dashboardLoading) return <Bento draggable onDragStart={e => handleDragStart(e, 'briefing')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'briefing')} style={{ gridColumn: `span ${SPANS.briefing.col}`, gridRow: `span ${SPANS.briefing.row}`, background: `linear-gradient(145deg, #101014, ${T.primary}10)` }}><div style={{padding:20,color:'rgba(255,255,255,0.4)',fontSize:12}}>Loading briefing...</div></Bento>;
+      if (dashboardError) return <Bento draggable onDragStart={e => handleDragStart(e, 'briefing')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'briefing')} style={{ gridColumn: `span ${SPANS.briefing.col}`, gridRow: `span ${SPANS.briefing.row}`, background: `linear-gradient(145deg, #101014, ${T.primary}10)` }}><div style={{padding:20,color:'#ef4444',fontSize:12}}>Failed to load briefing</div></Bento>;
+      return (
+        <Bento draggable onDragStart={e => handleDragStart(e, 'briefing')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'briefing')} style={{ gridColumn: `span ${SPANS.briefing.col}`, gridRow: `span ${SPANS.briefing.row}`, background: `linear-gradient(145deg, #101014, ${T.primary}10)` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>🌅</span>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>Morning Briefing</span>
+            </div>
+            <button style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>{I.x}</button>
+          </div>
+          <ul style={{ margin: 0, padding: '0 0 0 16px', color: 'rgba(255,255,255,0.8)', fontSize: 13, lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {alerts.length === 0 ? (
+              <li style={{color:'rgba(255,255,255,0.4)'}}>All clear — no urgent items right now.</li>
+            ) : alerts.map((a, i) => (
+              <li key={i}>{a.message}</li>
+            ))}
+          </ul>
+          <PBtn T={T} style={{ width: '100%', justifyContent: 'center', marginTop: 24 }} onClick={onOpenCockpit}>Tell AI to handle all</PBtn>
+        </Bento>
+      );
+    },
 
-    docs: () => (
-      <Bento accent={BASE.amber} draggable onDragStart={e => handleDragStart(e, 'docs')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'docs')}>
-        <WH icon="docs" title="Documents" T={T} right={<GBtn color={T.primary}>Upload +</GBtn>} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {[
-            { name: 'Q3_Contract.pdf', info: '3 questions', time: '2h ago', warn: false },
-            { name: 'Team_Policy_v2.docx', info: '2 conflicts found', time: '1d ago', warn: true },
-            { name: 'Budget_2026.xlsx', info: 'Just uploaded', time: 'Now', warn: false },
-          ].map(d => (
-            <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: d.warn ? `${BASE.amber}06` : 'rgba(255,255,255,0.025)', border: `1px solid ${d.warn ? BASE.amber + '25' : 'rgba(255,255,255,0.05)'}`, borderRadius: 10 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 8, background: `${T.primary}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.primary, flexShrink: 0 }}>{I.docs}</div>
+    aiActions: () => {
+      const actions = dashboardData?.aiActions || [];
+      if (dashboardLoading) return <Bento draggable onDragStart={e => handleDragStart(e, 'aiActions')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'aiActions')} style={{ gridColumn: `span ${SPANS.aiActions.col}`, gridRow: `span ${SPANS.aiActions.row}` }}><div style={{padding:20,color:'rgba(255,255,255,0.4)',fontSize:12}}>Loading AI actions...</div></Bento>;
+      if (dashboardError) return <Bento draggable onDragStart={e => handleDragStart(e, 'aiActions')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'aiActions')} style={{ gridColumn: `span ${SPANS.aiActions.col}`, gridRow: `span ${SPANS.aiActions.row}` }}><div style={{padding:20,color:'#ef4444',fontSize:12}}>Failed to load AI actions</div></Bento>;
+      return (
+        <Bento draggable onDragStart={e => handleDragStart(e, 'aiActions')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'aiActions')} style={{ gridColumn: `span ${SPANS.aiActions.col}`, gridRow: `span ${SPANS.aiActions.row}` }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Recent AI Actions</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {actions.length === 0 ? (
+              <div style={{padding:'10px 0',textAlign:'center',color:'rgba(255,255,255,0.3)',fontSize:12}}>No AI actions yet. Start using WorkPilot AI.</div>
+            ) : actions.map(a => (
+              <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="truncate-text" style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>{a.text || a.action || 'AI action'}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>{a.time || a.createdAt || ''}</div>
+                </div>
+                {a.reversible && <GBtn color={T.secondary}>{I.undo} Undo</GBtn>}
+              </div>
+            ))}
+          </div>
+        </Bento>
+      );
+    },
+
+    docs: () => {
+      const docs = dashboardData?.documents || [];
+      const docStatusColor = { analyzed: BASE.green, pending: BASE.amber, ready: T.primary, issues: BASE.red };
+      if (dashboardLoading) return <Bento draggable onDragStart={e => handleDragStart(e, 'docs')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'docs')} style={{ gridColumn: `span ${SPANS.docs.col}`, gridRow: `span ${SPANS.docs.row}`, display: 'flex', flexDirection: 'column' }}><div style={{padding:20,color:'rgba(255,255,255,0.4)',fontSize:12}}>Loading documents...</div></Bento>;
+      if (dashboardError) return <Bento draggable onDragStart={e => handleDragStart(e, 'docs')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'docs')} style={{ gridColumn: `span ${SPANS.docs.col}`, gridRow: `span ${SPANS.docs.row}`, display: 'flex', flexDirection: 'column' }}><div style={{padding:20,color:'#ef4444',fontSize:12}}>Failed to load documents</div></Bento>;
+      return (
+      <Bento draggable onDragStart={e => handleDragStart(e, 'docs')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'docs')} style={{ gridColumn: `span ${SPANS.docs.col}`, gridRow: `span ${SPANS.docs.row}`, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <span style={{ fontSize: 14, fontWeight: 700 }}>Documents</span>
+          <Pill label={`${docs.length} files`} color="rgba(255,255,255,0.4)" bg="rgba(255,255,255,0.06)" />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+          {docs.length === 0 ? (
+            <div style={{padding:'20px 10px',textAlign:'center',color:'rgba(255,255,255,0.3)',fontSize:12}}>No documents yet. Upload your first file.</div>
+          ) : docs.map(d => {
+            const status = (d.status || 'ready').toLowerCase();
+            const sc = docStatusColor[status] || BASE.green;
+            const ext = (d.name || d.fileName || 'file').split('.').pop()?.toUpperCase() || 'FILE';
+            return (
+            <div key={d.id || d.name} className="email-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px', borderRadius: 8, transition: 'all 0.15s', cursor: 'pointer' }}>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: `${sc}15`, border: `1px solid ${sc}25`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: sc, flexShrink: 0, fontSize: 13 }}>{I.docs}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: '#fff', fontFamily: "'JetBrains Mono',monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</div>
-                <div style={{ fontSize: 10, color: d.warn ? BASE.amber : 'rgba(255,255,255,0.35)', marginTop: 2 }}>{d.info} · {d.time}</div>
+                <div className="truncate-text" style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{d.name || d.fileName || 'Untitled'}</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2, fontFamily: "'JetBrains Mono',monospace" }}>{ext}</div>
               </div>
-              <GBtn color={T.primary} style={{ fontSize: 10, padding: '3px 8px' }}>Ask AI {I.arr}</GBtn>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: `${sc}15`, border: `1px solid ${sc}30`, color: sc, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace" }}>{status}</span>
+                <GBtn color={T.primary}>Ask AI</GBtn>
+              </div>
             </div>
-          ))}
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 12, border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 10, padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
+          📤 Drop files here
         </div>
       </Bento>
-    ),
+      );
+    },
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: BASE.bg, color: '#fff', overflow: 'hidden', fontFamily: "'Inter',sans-serif" }}>
-
+    <div style={{ display: 'flex', height: '100vh', background: '#0a0a0d', color: '#fff', overflow: 'hidden', fontFamily: "'Inter',sans-serif" }}>
+      
       {/* ══ SIDEBAR ══ */}
-      <aside style={{ width: sbW, minWidth: sbW, height: '100vh', background: '#08080b', borderRight: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)', overflow: 'hidden', flexShrink: 0, zIndex: 60 }}>
-        <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between', padding: collapsed ? '0 14px' : '0 14px 0 18px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
-          {!collapsed ? <Logo height={24} showText /> : <div style={{ color: T.primary, display: 'flex' }}>{I.bolt}</div>}
-          <button onClick={() => setCollapsed(v => !v)} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', borderRadius: 7, padding: '5px', display: 'flex', transition: 'all 0.15s', flexShrink: 0 }} className="icon-h">
-            {collapsed ? I.chevR : I.chevL}
-          </button>
+      <aside className="sidebar" style={{ width: collapsed ? 64 : 220, background: '#0a0a0d', borderRight: '1px solid rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)', flexShrink: 0, zIndex: 60, position: 'relative' }}>
+        <div style={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+           {collapsed ? (
+             <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${T.primary}, ${T.secondary})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{I.bolt}</div>
+           ) : (
+             <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8 }}>
+               <div style={{ width: 32, height: 32, borderRadius: 8, background: `linear-gradient(135deg, ${T.primary}, ${T.secondary})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{I.bolt}</div>
+               <span style={{ fontFamily: 'Sora', fontWeight: 700, fontSize: 16 }}>WorkPilot</span>
+             </div>
+           )}
         </div>
 
-        <nav style={{ flex: 1, padding: '8px 6px', overflowY: 'auto', overflowX: 'hidden' }}>
-          {NAV_SECTIONS.map(sec => (
-            <div key={sec.id} style={{ marginBottom: 4 }}>
-              {!collapsed && <div style={{ padding: '8px 10px 3px', fontSize: 9.5, fontWeight: 700, color: 'rgba(255,255,255,0.22)', letterSpacing: '0.12em', fontFamily: "'JetBrains Mono',monospace" }}>{sec.label}</div>}
-              {sec.items.map(item => {
-                const active = activeNav === item.id;
-                return (
-                  <button key={item.id} title={collapsed ? `${item.label}${item.shortcut ? '  ' + item.shortcut : ''}` : ''} onClick={() => { if (item.id === 'chat') { onOpenCockpit && onOpenCockpit(); } else setActiveNav(item.id); }}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 9, justifyContent: collapsed ? 'center' : 'flex-start',
-                      padding: collapsed ? '10px 0' : '9px 11px', borderRadius: 9, border: 'none', cursor: 'pointer',
-                      background: active ? `linear-gradient(135deg,${T.primary}1a,${T.secondary}12)` : 'transparent',
-                      color: active ? '#fff' : 'rgba(255,255,255,0.45)', fontSize: 13, fontWeight: active ? 600 : 400,
-                      transition: 'all 0.15s', marginBottom: 1, boxShadow: active ? `inset 0 0 0 1px ${T.primary}28` : 'none',
-                      textAlign: 'left', whiteSpace: 'nowrap', fontFamily: "'Inter',sans-serif",
-                    }} className={active ? '' : 'nav-h'}>
-                    <span style={{ color: active ? T.primary : 'rgba(255,255,255,0.3)', display: 'flex', flexShrink: 0, transition: 'color 0.15s' }}>{I[item.icon]}</span>
-                    {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
-                    {!collapsed && item.shortcut && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)', fontFamily: "'JetBrains Mono',monospace" }}>{item.shortcut}</span>}
-                    {!collapsed && active && <div style={{ width: 5, height: 5, borderRadius: '50%', background: T.primary, boxShadow: `0 0 8px ${T.primary}` }} />}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+        <nav style={{ flex: 1, padding: '16px 8px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {NAV_SECTIONS.flatMap(sec => sec.items).map(item => {
+            const active = activeNav === item.id;
+            return (
+              <button key={item.id} className={`nav-item ${active ? 'nav-active' : ''}`} onClick={() => { if (item.id === 'chat') { onOpenCockpit && onOpenCockpit(); } else setActiveNav(item.id); }} title={collapsed ? item.label : ''} style={{
+                display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start',
+                padding: collapsed ? '12px 0' : '10px 12px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                background: 'transparent', color: active ? '#fff' : 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: active ? 600 : 400,
+                transition: 'all 0.15s', gap: 12
+              }}>
+                <span style={{ color: active ? T.primary : 'inherit' }}>{I[item.icon]}</span>
+                {!collapsed && <span>{item.label}</span>}
+              </button>
+            );
+          })}
         </nav>
-
-        <div style={{ padding: collapsed ? '10px 8px' : '12px 14px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          {!collapsed && <div style={{ marginBottom: 10 }}><ThemeSwitcher theme={theme} setTheme={setTheme} /></div>}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              <Av name={displayName} size={32} />
-              <div style={{ position: 'absolute', bottom: 0, right: 0, width: 8, height: 8, borderRadius: '50%', background: BASE.green, border: '2px solid #08080b' }} />
-            </div>
-            {!collapsed && (
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 1 }}>{role}</div>
-              </div>
-            )}
-          </div>
+        
+        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+          {!collapsed && <ThemeSwitcher theme={theme} setTheme={setTheme} onThemeChange={onThemeChange} />}
+          {collapsed && <div style={{ width: 8, height: 8, borderRadius: '50%', background: T.primary }} />}
+          {!collapsed && (
+             <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+               <Av name={displayName} size={32} />
+               <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                  <div className="truncate-text" style={{ fontSize: 13, fontWeight: 600 }}>{displayName}</div>
+               </div>
+             </div>
+          )}
         </div>
+
+        <button onClick={() => setCollapsed(!collapsed)} style={{ position: 'absolute', bottom: 16, right: -12, width: 24, height: 24, background: '#101014', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '50%', color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 70 }} className="sidebar-toggle">
+          {collapsed ? I.chevR : I.chevL}
+        </button>
       </aside>
 
-      {/* ══ MAIN ══ */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+      {/* ══ MAIN CONTENT ══ */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        
+        {/* TOPBAR */}
+        <header style={{ height: 52, background: '#0a0a0d', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', flexShrink: 0 }}>
+           <div className="mobile-menu-btn" style={{ display: 'none' }}>
+             <button onClick={() => setCollapsed(!collapsed)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>{I.menu || I.grid}</button>
+           </div>
+           
+           <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+             <div style={{ position: 'relative', width: 240 }}>
+                <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', display: 'flex' }}>{I.search}</div>
+                <input id="cmd-input" placeholder="Search... (⌘K)" style={{ width: '100%', padding: '6px 16px 6px 36px', borderRadius: 99, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: '#fff', outline: 'none', fontSize: 13, fontFamily: "'Inter',sans-serif" }} />
+             </div>
+           </div>
 
-        {/* TOP BAR */}
-        <header style={{ height: 56, background: '#08080b', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', padding: '0 20px', gap: 10, flexShrink: 0 }}>
-          <div style={{ flex: 1, maxWidth: 420, position: 'relative' }}>
-            <div style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.25)', display: 'flex' }}>{I.search}</div>
-            <input id="cmd-input" placeholder="Search... (⌘K)" style={{ width: '100%', padding: '8px 40px 8px 34px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 9, color: '#fff', fontSize: 13, outline: 'none', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box' }} className="sinput" />
-          </div>
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <ThemeSwitcher theme={theme} setTheme={setTheme} />
-            <button onClick={() => setShowKbHelp(true)} title="Keyboard shortcuts (?)" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.35)', cursor: 'pointer', borderRadius: 7, padding: '6px 9px', fontSize: 12, fontFamily: "'JetBrains Mono',monospace", transition: 'all 0.15s' }} className="icon-h">?</button>
-            <button onClick={() => setChatOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', background: `linear-gradient(135deg,${T.primary}20,${T.secondary}14)`, border: `1px solid ${T.primary}30`, borderRadius: 9, color: T.primary, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Inter',sans-serif", transition: 'all 0.2s' }} className="cmd-h">
-              <span style={{ display: 'flex' }}>{I.bolt}</span>Command
-            </button>
-
-            {/* Notifications */}
-            <div ref={notifRef} style={{ position: 'relative' }}>
-              <button onClick={() => { setShowNotif(v => !v); setShowUserMenu(false); }} style={{ position: 'relative', background: showNotif ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', borderRadius: 9, padding: '7px 9px', display: 'flex', transition: 'all 0.15s' }} className="icon-h">
-                {I.bell}
-                <span style={{ position: 'absolute', top: 5, right: 5, width: 7, height: 7, background: BASE.red, borderRadius: '50%', border: '2px solid #08080b', animation: 'pulse 2s infinite' }} />
-              </button>
-              {showNotif && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 300, background: '#0f0f13', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, boxShadow: '0 24px 60px rgba(0,0,0,0.8)', zIndex: 500, overflow: 'hidden', animation: 'ddrop .18s ease' }}>
-                  <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: 700, fontSize: 13, fontFamily: "'Sora',sans-serif" }}>Notifications</span>
-                    <button style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', fontSize: 11, cursor: 'pointer' }}>Mark all read</button>
-                  </div>
-                  {NOTIFS_DATA.map(n => (
-                    <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', gap: 10 }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: n.color, marginTop: 5, boxShadow: `0 0 6px ${n.color}`, flexShrink: 0 }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 12, color: '#fff', fontWeight: 500 }}>{n.text}</div>
-                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{n.sub}</div>
-                      </div>
+           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+             <div ref={notifRef} style={{ position: 'relative' }}>
+                <button onClick={() => setShowNotif(!showNotif)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', position: 'relative', display: 'flex' }}>
+                   {I.bell}
+                   <span style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, background: BASE.red, borderRadius: '50%', border: '2px solid #0a0a0d' }} />
+                </button>
+             </div>
+             
+             <div ref={userRef} style={{ position: 'relative' }}>
+                <button onClick={() => setShowUserMenu(!showUserMenu)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                  <Av name={displayName} size={32} />
+                </button>
+                {showUserMenu && (
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, width: 220, background: '#101014', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 8, zIndex: 100 }}>
+                    <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: 4 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{displayName}</div>
+                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{user?.email}</div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* User */}
-            <div ref={userRef} style={{ position: 'relative' }}>
-              <button onClick={() => { setShowUserMenu(v => !v); setShowNotif(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
-                <Av name={displayName} size={32} />
-              </button>
-              {showUserMenu && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 205, background: '#0f0f13', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, boxShadow: '0 24px 60px rgba(0,0,0,0.8)', zIndex: 500, overflow: 'hidden', animation: 'ddrop .18s ease' }}>
-                  <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Sora',sans-serif" }}>{displayName}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{user?.email}</div>
+                    <div style={{ padding: '4px 12px' }}>
+                       <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 6, letterSpacing: '0.05em' }}>ROLE</div>
+                       {['Employee', 'Manager', 'Executive'].map(r => (
+                          <div key={r} onClick={() => setRole(r)} style={{ padding: '6px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: role === r ? 'rgba(255,255,255,0.05)' : 'transparent', color: role === r ? T.primary : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                             <div style={{ width: 8, height: 8, borderRadius: '50%', background: role === r ? T.primary : 'transparent', border: role === r ? 'none' : '1px solid rgba(255,255,255,0.2)' }} />
+                             {r}
+                          </div>
+                       ))}
+                    </div>
+                    <div style={{ padding: '8px 12px 4px' }}>
+                      <GBtn color={BASE.red} style={{ width: '100%', justifyContent: 'center' }} onClick={async () => { try { await backendLogout(); } catch {} localStorage.removeItem('wp_tokens'); signOut(auth); }}>Sign out</GBtn>
+                    </div>
                   </div>
-                  <div style={{ padding: '8px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.25)', marginBottom: 5, padding: '0 6px', letterSpacing: '0.1em', fontFamily: "'JetBrains Mono',monospace" }}>ROLE</div>
-                    {['Employee', 'Manager', 'Executive'].map(r => (
-                      <button key={r} onClick={() => setRole(r)} style={{ width: '100%', background: role === r ? `${T.primary}15` : 'none', border: 'none', color: role === r ? T.primary : 'rgba(255,255,255,0.45)', padding: '7px 10px', textAlign: 'left', cursor: 'pointer', fontSize: 12, borderRadius: 7, fontWeight: role === r ? 600 : 400, fontFamily: "'Inter',sans-serif", transition: 'all 0.15s' }}>
-                        {role === r ? '● ' : '○ '}{r}
-                      </button>
-                    ))}
-                  </div>
-                  <div style={{ padding: '10px 16px' }}>
-                    <button onClick={() => signOut(auth)} style={{ width: '100%', background: `${BASE.red}0e`, border: `1px solid ${BASE.red}20`, color: BASE.red, padding: '8px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: "'Inter',sans-serif" }}>Sign out</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+                )}
+             </div>
+           </div>
         </header>
 
-        {/* LIVE TICKER */}
-        <Ticker T={T} />
+        {activeNav === 'dashboard' && (
+           <div style={{ background: '#0a0a0d', display: 'flex', alignItems: 'center' }}>
+             <Ticker T={T} />
+           </div>
+        )}
 
-        {/* SCROLL AREA */}
-        <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', background: BASE.bg }}>
-
-          {/* ── Page Router ── */}
+        <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
           {activeNav === 'email'        && <EmailPage T={T} />}
           {activeNav === 'calendar'     && <CalendarPage T={T} />}
           {activeNav === 'team'         && <TeamPage T={T} />}
@@ -770,201 +803,185 @@ export default function Dashboard({ user, onOpenCockpit }) {
           {activeNav === 'documents'    && <DocumentsPage T={T} />}
           {activeNav === 'analytics'    && <AnalyticsPage T={T} />}
           {activeNav === 'integrations' && <IntegrationsPage T={T} />}
-          {activeNav === 'settings'     && <SettingsPage T={T} user={user} onSignOut={() => signOut(auth)} />}
+          {activeNav === 'settings'     && <SettingsPage T={T} user={user} onSignOut={async () => { try { await backendLogout(); } catch(e) {} localStorage.removeItem('wp_tokens'); signOut(auth); }} />}
 
-          {/* ── Dashboard (default) ── */}
           {activeNav === 'dashboard' && (
-            <div style={{ padding: '0 20px 80px' }}>
-
-          {/* HERO HEADER */}
-          <div style={{ margin: '0 -20px 24px', padding: '28px 24px 26px', background: 'linear-gradient(160deg,#06060f 0%,#080b18 50%,#060510 100%)', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: '-50%', left: '5%', width: 350, height: 300, background: `radial-gradient(ellipse,${T.primary}1a 0%,transparent 70%)`, pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', top: '-30%', right: '10%', width: 280, height: 250, background: `radial-gradient(ellipse,${T.secondary}14 0%,transparent 70%)`, pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg,transparent,${T.primary}30,${T.secondary}25,transparent)` }} />
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: 10, background: `linear-gradient(135deg,${T.primary},${T.secondary})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: `0 4px 16px ${T.glow}` }}>{I.bolt}</div>
-                    <Pill label={`● ${role}`} color={BASE.green} />
-                    <Pill label="Live" color={T.primary} />
-                  </div>
-                  <h1 style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 'clamp(20px,2.5vw,28px)', margin: 0, background: 'linear-gradient(135deg,#fff 30%,rgba(255,255,255,0.55))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.02em' }}>
-                    {greeting}, {firstName} 👋
-                  </h1>
-                  <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 5 }}>{dateStr}</p>
+             <div>
+                {/* GREETING BAND */}
+                <div style={{ height: 68, background: `linear-gradient(90deg, ${T.primary}15, transparent)`, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', padding: '0 24px', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+                      <span style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 20 }}>Good morning, {firstName}</span>
+                      <span style={{ fontFamily: "'Inter',sans-serif", fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{dateStr}</span>
+                   </div>
+                   <div className="alerts-container" style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
+                      {ALERTS.map(a => (
+                         <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: `${a.c}15`, border: `1px solid ${a.c}30`, borderRadius: 99, whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: 12, fontWeight: 500, color: '#fff' }}>{a.text}</span>
+                            <button onClick={() => setDismissedAlerts(p => [...p, a.id])} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: 0, display: 'flex' }}>{I.x}</button>
+                         </div>
+                      ))}
+                   </div>
+                   <PBtn T={T} onClick={onOpenCockpit}>Handle all with AI →</PBtn>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button style={{ padding: '8px 14px', borderRadius: 9, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontFamily: "'Inter',sans-serif" }}>
-                    {I.drag} Rearrange
-                  </button>
-                </div>
-              </div>
 
-              {/* AI COMMAND BAR */}
-              <div style={{ marginTop: 20, background: 'rgba(255,255,255,0.025)', border: `1px solid ${T.primary}20`, borderRadius: 14, padding: '13px 16px', backdropFilter: 'blur(8px)', transition: 'all 0.25s' }} className="cbar-focus">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ color: T.primary, display: 'flex', flexShrink: 0 }}>{I.bolt}</span>
-                  <input value={cmdVal} onChange={e => setCmdVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendCmd()} placeholder="Ask WorkPilot or give a command..." style={{ flex: 1, background: 'none', border: 'none', color: '#fff', fontSize: 14, outline: 'none', fontFamily: "'Inter',sans-serif" }} />
-                  <span style={{ color: 'rgba(255,255,255,0.2)', display: 'flex' }}>{I.mic}</span>
-                  <button onClick={sendCmd} style={{ padding: '7px 11px', background: cmdVal ? `linear-gradient(135deg,${T.primary},${T.secondary})` : 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 8, color: '#fff', cursor: 'pointer', display: 'flex', transition: 'all 0.2s', boxShadow: cmdVal ? `0 2px 12px ${T.glow}` : 'none' }}>{I.send}</button>
-                </div>
-                <div style={{ display: 'flex', gap: 7, marginTop: 11, flexWrap: 'wrap' }}>
-                  {[['Check emails', 'mail'], ['Schedule meeting', 'cal'], ['Team status', 'team'], ['Deployments', 'deploy']].map(([label, icon]) => (
-                    <button key={label} onClick={() => setCmdVal(label)} style={{ padding: '4px 11px', borderRadius: 99, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontFamily: "'Inter',sans-serif", transition: 'all 0.18s', whiteSpace: 'nowrap' }} className="chip-h">
-                      <span style={{ color: T.primary, display: 'flex' }}>{I[icon]}</span>{label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
+                <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
+                   
+                   {/* COMMAND BAR */}
+                   <div style={{ marginBottom: 24, padding: '16px 20px', background: 'rgba(255,255,255,0.025)', border: `1px solid ${T.primary}20`, borderRadius: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                         <span style={{ color: T.primary, display: 'flex' }}>{I.bolt}</span>
+                         <input value={cmdVal} onChange={e => setCmdVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendCmd()} placeholder="Ask WorkPilot or give a command..." style={{ flex: 1, background: 'none', border: 'none', color: '#fff', fontSize: 15, outline: 'none', fontFamily: "'Inter',sans-serif" }} />
+                         <button onClick={sendCmd} style={{ background: 'none', border: 'none', color: cmdVal ? T.primary : 'rgba(255,255,255,0.3)', cursor: 'pointer', display: 'flex' }}>{I.send}</button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 12, overflowX: 'auto' }}>
+                         {['Check emails', 'Schedule meeting', 'Team status', 'Deploy status'].map(chip => (
+                            <button key={chip} onClick={() => { setCmdVal(chip); setTimeout(sendCmd, 100); }} style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 99, color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }} className="chip-h">{chip}</button>
+                         ))}
+                      </div>
+                   </div>
 
-          {/* ALERTS */}
-          {ALERTS.length > 0 && (
-            <div style={{ display: 'flex', gap: 7, overflowX: 'auto', marginBottom: 20, paddingBottom: 2 }}>
-              {ALERTS.map(a => (
-                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px 6px 10px', background: `${a.c}08`, border: `1px solid ${a.c}22`, borderLeft: `3px solid ${a.c}`, borderRadius: 8, whiteSpace: 'nowrap', flexShrink: 0, cursor: 'pointer', transition: 'all 0.18s' }}>
-                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: a.c, boxShadow: `0 0 5px ${a.c}` }} />
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>{a.text}</span>
-                  <button onClick={e => { e.stopPropagation(); setDismissedAlerts(p => [...p, a.id]); }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.25)', cursor: 'pointer', display: 'flex', padding: 0, marginLeft: 4 }}>{I.x}</button>
+                   {/* WIDGET GRID */}
+                   <div className="widget-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 16 }}>
+                      {widgetOrder.map(id => WIDGETS[id] && React.cloneElement(WIDGETS[id](), { key: id }))}
+                   </div>
+
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* BENTO GRID */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: 14 }}>
-            {widgetOrder.map(id => {
-              const render = WIDGETS[id];
-              return render ? <React.Fragment key={id}>{render()}</React.Fragment> : null;
-            })}
-          </div>
-
-          {/* INTEGRATIONS */}
-          <div style={{ marginTop: 20, padding: '13px 16px', background: '#0c0c0f', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: "'JetBrains Mono',monospace", whiteSpace: 'nowrap' }}>CONNECTED</span>
-            <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.08)' }} />
-            {[
-              { n: 'Gmail',    icon: <SiGmail size={11} color="#EA4335" />,    c: true  },
-              { n: 'Calendar', icon: <SiGooglecalendar size={11} color="#4285F4" />, c: true  },
-              { n: 'GitHub',   icon: <SiGithub size={11} color="#ffffff" />,   c: true  },
-              { n: 'Slack',    icon: <SiSlack size={11} color="#E01E5A" />,    c: false },
-              { n: 'Zoom',     icon: <SiZoom size={11} color="#2D8CFF" />,     c: false },
-              { n: 'Teams',    icon: <SiMicrosoft size={11} color="#7FBA00" />, c: false },
-            ].map(ig => (
-              <div key={ig.n} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 99, background: ig.c ? `${BASE.green}08` : 'rgba(255,255,255,0.03)', border: `1px solid ${ig.c ? BASE.green + '22' : 'rgba(255,255,255,0.06)'}`, cursor: 'pointer', transition: 'all 0.18s' }}>
-                {ig.icon}
-                <span style={{ fontSize: 11, color: ig.c ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)', fontWeight: ig.c ? 500 : 400 }}>{ig.n}</span>
-              </div>
-            ))}
-            <GBtn color={T.primary} style={{ marginLeft: 2 }}>+ Connect more</GBtn>
-          </div>
-            </div>
+             </div>
           )}
         </main>
       </div>
 
-      {/* ══ CHAT BUBBLE ══ */}
-      <div style={{ position: 'fixed', bottom: 22, right: 22, zIndex: 200 }}>
-        {chatOpen ? (
-          <div style={{ width: 375, height: 510, background: '#0c0c0f', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 20, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 30px 80px rgba(0,0,0,0.85)', animation: 'chatUp .28s cubic-bezier(0.16,1,0.3,1)' }}>
-            <div style={{ padding: '13px 15px', background: `linear-gradient(135deg,${T.primary}18,${T.secondary}12)`, borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 26, height: 26, borderRadius: 8, background: `linear-gradient(135deg,${T.primary},${T.secondary})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: `0 2px 10px ${T.glow}` }}>{I.bolt}</div>
-                <span style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 13 }}>WorkPilot AI</span>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: BASE.green, animation: 'pulse 2s infinite' }} />
-              </div>
-              <div style={{ display: 'flex', gap: 4 }}>
-                <button onClick={() => setChatOpen(false)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', borderRadius: 6, padding: '4px 8px', fontSize: 12 }}>—</button>
-                <button onClick={() => setChatOpen(false)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', borderRadius: 6, padding: '4px 7px', display: 'flex', alignItems: 'center' }}>{I.x}</button>
-              </div>
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '14px 13px', display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {msgs.map(m => (
-                <div key={m.id} style={{ display: 'flex', justifyContent: m.r === 'user' ? 'flex-end' : 'flex-start' }}>
-                  <div style={{ maxWidth: '82%', padding: '9px 13px', fontSize: 12, lineHeight: 1.55, borderRadius: m.r === 'user' ? '13px 13px 3px 13px' : '13px 13px 13px 3px', background: m.r === 'user' ? `linear-gradient(135deg,${T.primary},${T.secondary})` : 'rgba(255,255,255,0.05)', border: m.r === 'ai' ? '1px solid rgba(255,255,255,0.07)' : 'none', color: '#fff' }}>{m.text}</div>
-                </div>
-              ))}
-              {typing && <div style={{ display: 'flex', gap: 5, padding: '9px 13px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '13px 13px 13px 3px', width: 'fit-content', alignItems: 'center' }}>{[0, 1, 2].map(i => <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: T.primary, animation: `tdot 1.2s ${i * 0.2}s ease infinite` }} />)}</div>}
-              <div ref={chatEndRef} />
-            </div>
-            <div style={{ padding: '7px 12px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: 5, overflowX: 'auto' }}>
-              {['Draft email', 'Check schedule', 'Team update'].map(c => (
-                <button key={c} onClick={() => setChatVal(c)} style={{ padding: '3px 9px', borderRadius: 99, background: `${T.primary}12`, border: `1px solid ${T.primary}25`, color: T.primary, fontSize: 10, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter',sans-serif" }}>{c}</button>
-              ))}
-            </div>
-            <div style={{ padding: '9px 12px 13px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: 7 }}>
-              <input value={chatVal} onChange={e => setChatVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendChat()} placeholder="Type a command..." style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 9, padding: '8px 11px', color: '#fff', fontSize: 12, outline: 'none', fontFamily: "'Inter',sans-serif" }} />
-              <button onClick={sendChat} style={{ padding: '8px 12px', background: chatVal ? `linear-gradient(135deg,${T.primary},${T.secondary})` : 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 9, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.2s', boxShadow: chatVal ? `0 2px 12px ${T.glow}` : 'none' }}>{I.send}</button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setChatOpen(true)} title="Ask WorkPilot" style={{ width: 52, height: 52, borderRadius: '50%', background: `linear-gradient(135deg,${T.primary},${T.secondary})`, border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 8px 28px ${T.glow}`, transition: 'all 0.2s' }} className="fab-h">{I.bolt}</button>
-            <div style={{ position: 'absolute', top: 0, right: 0, width: 11, height: 11, borderRadius: '50%', background: BASE.green, border: '2.5px solid #000', animation: 'pulse 2s infinite' }} />
-          </div>
-        )}
-      </div>
-
-      {/* ══ KEYBOARD SHORTCUTS MODAL ══ */}
-      {showKbHelp && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowKbHelp(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#0f0f14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '28px 32px', width: 420, boxShadow: '0 30px 80px rgba(0,0,0,0.8)', animation: 'ddrop .2s ease' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <span style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 16 }}>Keyboard Shortcuts</span>
-              <button onClick={() => setShowKbHelp(false)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '5px 8px', display: 'flex' }}>{I.x}</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[
-                ['G then D', 'Go to Dashboard'],
-                ['G then E', 'Go to Email'],
-                ['G then C', 'Go to Chat with AI'],
-                ['G then A', 'Go to Calendar'],
-                ['G then T', 'Go to Team'],
-                ['G then V', 'Go to Deployments'],
-                ['G then O', 'Go to Documents'],
-                ['⌘K / Ctrl+K', 'Focus search bar'],
-                ['?', 'Toggle this shortcuts panel'],
-                ['Esc', 'Close modals / chat'],
-              ].map(([key, desc]) => (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{desc}</span>
-                  <kbd style={{ padding: '3px 9px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, fontSize: 11, color: '#fff', fontFamily: "'JetBrains Mono',monospace" }}>{key}</kbd>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+      {/* ══ FLOATING CHAT BUBBLE ══ */}
+      {(!chatOpen && activeNav === 'dashboard') && (
+         <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 100 }}>
+            <button onClick={() => setChatOpen(true)} style={{ width: 52, height: 52, borderRadius: '50%', background: `linear-gradient(135deg, ${T.primary}, ${T.secondary})`, border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 8px 32px ${T.glow}`, transition: 'transform 0.2s' }} className="fab-h">
+               {I.bolt}
+            </button>
+            <div style={{ position: 'absolute', inset: -4, borderRadius: '50%', border: `1px solid ${T.primary}`, opacity: 0.5, animation: 'pulseRing 2s infinite' }} />
+         </div>
       )}
 
-      {/* ══ GLOBAL STYLES ══ */}
+      {/* ══ CHAT WINDOW ══ */}
+      {chatOpen && (
+         <div style={{ position: 'fixed', bottom: 24, right: 24, width: 380, height: 600, background: '#101014', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 24, zIndex: 200, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.8)' }}>
+            <div style={{ padding: '16px', background: `linear-gradient(135deg, ${T.primary}20, transparent)`, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg, ${T.primary}, ${T.secondary})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{I.bolt}</div>
+                  <span style={{ fontFamily: 'Sora', fontWeight: 700, fontSize: 14 }}>WorkPilot AI</span>
+               </div>
+               <button onClick={() => setChatOpen(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}>{I.x}</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+               {msgs.map(m => (
+                  <div key={m.id} style={{ alignSelf: m.r === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%', padding: '10px 14px', borderRadius: 16, background: m.r === 'user' ? `linear-gradient(135deg, ${T.primary}, ${T.secondary})` : 'rgba(255,255,255,0.05)', color: '#fff', fontSize: 13, lineHeight: 1.5 }}>
+                     {m.text}
+                  </div>
+               ))}
+               {typing && <div style={{ alignSelf: 'flex-start', padding: '10px 14px', borderRadius: 16, background: 'rgba(255,255,255,0.05)' }}><span style={{ color: T.primary }}>● ● ●</span></div>}
+               <div ref={chatEndRef} />
+            </div>
+            <div style={{ padding: 16, borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: 8 }}>
+               <input value={chatVal} onChange={e => setChatVal(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendChat()} placeholder="Ask something..." style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 12, padding: '10px 16px', color: '#fff', outline: 'none', fontSize: 13 }} />
+               <PBtn T={T} onClick={sendChat} style={{ padding: '10px' }}>{I.send}</PBtn>
+            </div>
+         </div>
+      )}
+
+      {/* GLOBAL STYLES */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+        
+        :root {
+          --theme-primary: ${T.primary};
+          --theme-primary-15: ${T.primary}26;
+        }
+
+        .card {
+          background: #101014;
+          border-radius: 20px;
+          border: 1px solid rgba(255,255,255,0.07);
+          padding: 24px;
+          transition: all 0.22s ease;
+        }
+        .card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+        }
+        .card:hover .drag-handle {
+          opacity: 1 !important;
+        }
+
+        .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+        .btn-ghost:hover { background: rgba(255,255,255,0.1) !important; color: #fff !important; }
+        .email-row:hover { background: rgba(255,255,255,0.04) !important; }
+        
+        .nav-item:hover { background: rgba(255,255,255,0.04) !important; color: #fff !important; }
+        .nav-active {
+          background: var(--theme-primary-15) !important;
+          border-right: 2px solid var(--theme-primary) !important;
+          color: #fff !important;
+        }
+        .nav-active span:first-child { color: var(--theme-primary) !important; }
+
+        .chip-h:hover { background: var(--theme-primary-15) !important; border-color: var(--theme-primary) !important; color: var(--theme-primary) !important; }
+        .fab-h:hover { transform: scale(1.08); }
+
+        .truncate-text {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
         @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.2)} }
-        @keyframes ddrop { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes chatUp { from{opacity:0;transform:translateY(18px) scale(.97)} to{opacity:1;transform:translateY(0) scale(1)} }
-        @keyframes tdot { 0%,60%,100%{transform:translateY(0);opacity:.3} 30%{transform:translateY(-4px);opacity:1} }
+        @keyframes pulseRing { 0%{transform:scale(1);opacity:0.5} 100%{transform:scale(1.3);opacity:0} }
         @keyframes tickerMove { from{transform:translateX(0)} to{transform:translateX(-50%)} }
-        @keyframes pageIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-        .nav-h:hover { background:rgba(255,255,255,0.04)!important; color:rgba(255,255,255,0.75)!important; }
-        .icon-h:hover { background:rgba(255,255,255,0.08)!important; color:#fff!important; }
-        .cmd-h:hover { filter:brightness(1.15); }
-        .pbtn-h:hover { filter:brightness(1.1); transform:translateY(-1px); }
-        .gbtn-h:hover { filter:brightness(1.2); transform:translateY(-1px); }
-        .fab-h:hover { transform:scale(1.08)!important; }
-        .chip-h:hover { background:rgba(59,130,246,0.12)!important; border-color:rgba(59,130,246,0.3)!important; color:#3b82f6!important; }
-        .sinput:focus { border-color:rgba(59,130,246,0.35)!important; background:rgba(255,255,255,0.06)!important; outline:none; }
-        .cbar-focus:focus-within { border-color:rgba(59,130,246,0.35)!important; box-shadow:0 0 0 3px rgba(59,130,246,0.07)!important; }
-        .pg-row:hover { background:rgba(255,255,255,0.03)!important; }
-        .pg-btn:hover { opacity:0.85; transform:translateY(-1px); }
-        @media (max-width:1100px) { .bento-grid { grid-template-columns:repeat(2,minmax(0,1fr))!important; } }
-        @media (max-width:700px) { .bento-grid { grid-template-columns:1fr!important; } }
+
+        @media (max-width: 1024px) {
+           .widget-grid { grid-template-columns: repeat(6, 1fr) !important; }
+           .card { grid-column: span 6 !important; grid-row: span 1 !important; }
+        }
+
+        @media (max-width: 768px) {
+           .sidebar {
+              position: fixed;
+              bottom: 0;
+              left: 0;
+              right: 0;
+              width: 100% !important;
+              height: 64px;
+              flex-direction: row;
+              z-index: 1000;
+              border-right: none;
+              border-top: 1px solid rgba(255,255,255,0.07);
+           }
+           .sidebar > div:first-child, .sidebar > div:nth-child(3), .sidebar-toggle {
+              display: none !important;
+           }
+           .sidebar nav {
+              flex-direction: row;
+              justify-content: space-around;
+              padding: 0;
+           }
+           .sidebar nav button {
+              flex-direction: column;
+              padding: 8px 0;
+              gap: 4px;
+           }
+           .sidebar nav button span:nth-child(2) {
+              display: none;
+           }
+           .mobile-menu-btn {
+              display: block !important;
+           }
+           .widget-grid { grid-template-columns: 1fr !important; }
+           .card { grid-column: span 1 !important; }
+           .alerts-container { display: none !important; }
+        }
       `}</style>
     </div>
   );

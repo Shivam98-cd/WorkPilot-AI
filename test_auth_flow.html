@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WorkPilot Auth Test</title>
+</head>
+<body>
+    <h1>WorkPilot Authentication Test</h1>
+    <div id="status"></div>
+    <button id="testBtn">Test Full Auth Flow</button>
+    <pre id="output"></pre>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDp7tAxjnR84u9fpxELsUR4dod9LXWnkWg",
+            authDomain: "workpilot-ai-d05dd.firebaseapp.com",
+            projectId: "workpilot-ai-d05dd",
+            storageBucket: "workpilot-ai-d05dd.firebasestorage.app",
+            messagingSenderId: "393301768060",
+            appId: "1:393301768060:web:a9909e877089aeb1ec96f9"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        const status = document.getElementById('status');
+        const output = document.getElementById('output');
+        const testBtn = document.getElementById('testBtn');
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                status.innerHTML = `✅ Logged in as: ${user.email}`;
+            } else {
+                status.innerHTML = `❌ Not logged in. Please sign in at <a href="http://localhost:5173">localhost:5173</a>`;
+            }
+        });
+
+        testBtn.addEventListener('click', async () => {
+            output.textContent = 'Testing...\n';
+            
+            if (!auth.currentUser) {
+                output.textContent += '❌ Not logged in\n';
+                return;
+            }
+
+            try {
+                // Get Firebase ID token
+                output.textContent += '1. Getting Firebase ID token...\n';
+                const idToken = await auth.currentUser.getIdToken();
+                output.textContent += `✅ Got token: ${idToken.substring(0, 50)}...\n\n`;
+
+                // Exchange with backend
+                output.textContent += '2. Exchanging with backend...\n';
+                const response = await fetch('http://localhost:8000/api/v1/auth/google', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idToken })
+                });
+
+                output.textContent += `Response status: ${response.status}\n`;
+                const data = await response.json();
+                output.textContent += `Response: ${JSON.stringify(data, null, 2)}\n\n`;
+
+                if (response.ok && data.data?.tokens) {
+                    output.textContent += '✅ SUCCESS! Backend JWT tokens received\n';
+                    output.textContent += `Access Token: ${data.data.tokens.accessToken.substring(0, 50)}...\n`;
+                    localStorage.setItem('wp_tokens', JSON.stringify(data.data.tokens));
+                } else {
+                    output.textContent += '❌ FAILED: No tokens in response\n';
+                }
+            } catch (err) {
+                output.textContent += `❌ ERROR: ${err.message}\n`;
+                console.error(err);
+            }
+        });
+    </script>
+</body>
+</html>

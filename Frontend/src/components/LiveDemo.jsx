@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 
-export default function LiveDemo() {
+const LiveDemo = memo(function LiveDemo() {
   const [messages, setMessages] = useState([
     {
       sender: 'ai',
@@ -242,4 +242,6 @@ export default function LiveDemo() {
       `}</style>
     </section>
   );
-}
+});
+
+export default LiveDemo;

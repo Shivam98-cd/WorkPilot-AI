@@ -13,10 +13,10 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.get("/profile", response_model=ApiResponse)
 async def get_profile(current_user: dict = Depends(get_current_user)):
-    """Get current user profile"""
+    """Get current user profile — auto-creates record for new OAuth users."""
     uid = current_user.get('uid')
-    user = await user_service.get_user_profile(uid)
-    
+    user = await user_service.get_or_create_user_profile(uid, current_user)
+
     return {
         "success": True,
         "data": user,

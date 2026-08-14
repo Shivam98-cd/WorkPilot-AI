@@ -1,0 +1,44 @@
+{
+  "title": "Simple, Transparent Pricing",
+  "subtitle": "Choose the plan that fits your team",
+  "free": {
+    "name": "Starter",
+    "price": "0",
+    "period": "Free forever",
+    "description": "Perfect for individuals testing automation",
+    "features": [
+      "5 AI agent actions/day",
+      "Email & calendar sync",
+      "Basic task automation",
+      "Community support"
+    ]
+  },
+  "pro": {
+    "name": "Professional",
+    "price": "29",
+    "period": "per user/month",
+    "description": "For small teams ready to scale",
+    "features": [
+      "Unlimited AI actions",
+      "All integrations",
+      "Advanced workflows",
+      "Priority support",
+      "Custom automation"
+    ]
+  },
+  "enterprise": {
+    "name": "Enterprise",
+    "price": "Custom",
+    "period": "Contact sales",
+    "description": "For organizations at scale",
+    "features": [
+      "Everything in Pro",
+      "Dedicated success manager",
+      "SSO & advanced security",
+      "Custom SLA",
+      "On-premise deployment"
+    ]
+  },
+  "cta": "Get Started",
+  "contactSales": "Contact Sales"
+}

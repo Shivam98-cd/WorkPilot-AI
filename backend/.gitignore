@@ -1,22 +1,39 @@
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+# Python
+__pycache__/
+*.py[cod]
 .Python
+
+# Virtual environments
 env/
 venv/
 ENV/
-.venv
+.venv/
+
+# Environment files
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
+
+# Logs
 *.log
-.pytest_cache
+
+# Test/cache
+.pytest_cache/
 .coverage
 htmlcov/
+
+# Build
 dist/
 build/
-*.egg-info
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
 .DS_Store
-.vscode
-.idea
+
+# Firebase service account (DO NOT COMMIT)
+backend/confidential data/
+firebase-service-account.json

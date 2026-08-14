@@ -10,6 +10,40 @@ from core.exceptions import NotFoundException
 class UserService:
     """User business logic service"""
     
+    async def get_or_create_user_profile(self, uid: str, token_claims: dict = None) -> dict:
+        """Get user profile, auto-creating record for new OAuth users."""
+        from datetime import datetime
+        from models.user import User
+
+        user = await user_repository.get_by_uid(uid)
+        if user:
+            return user.to_dict()
+
+        # Auto-create for new OAuth users (Google, GitHub etc.)
+        if not token_claims:
+            raise NotFoundException(f"User not found: {uid}")
+
+        email = token_claims.get('email', '')
+        name = token_claims.get('name', '') or email.split('@')[0] if email else 'User'
+        photo = token_claims.get('picture') or token_claims.get('photo')
+        provider = token_claims.get('provider', 'google')
+
+        new_user = User(
+            uid=uid,
+            email=email,
+            name=name,
+            photo=photo,
+            created_at=datetime.utcnow(),
+            last_login=datetime.utcnow(),
+            provider=provider,
+            role="user",
+            plan="free",
+            email_verified=True,
+            preferences={'theme': 'dark', 'notifications': True, 'language': 'en'},
+        )
+        created = await user_repository.create(new_user)
+        return created.to_dict()
+
     async def get_user_profile(self, uid: str) -> Dict[str, Any]:
         """Get user profile"""
         user = await user_repository.get_by_uid(uid)

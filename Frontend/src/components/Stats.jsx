@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const CountUp = ({ endVal, duration = 2000, suffix = '', prefix = '' }) => {
   const [count, setCount] = useState(0);
@@ -55,22 +56,24 @@ const CountUp = ({ endVal, duration = 2000, suffix = '', prefix = '' }) => {
   );
 };
 
-export default function Stats() {
+const Stats = memo(function Stats() {
+  const { t } = useTranslation('home');
+  
   const stats = [
     {
-      label: 'Autonomous Agent Modules',
+      labelKey: 'stats.agents',
       element: <CountUp endVal={176} suffix="" />
     },
     {
-      label: 'Operational Tasks Automated',
+      labelKey: 'stats.automated',
       element: <CountUp endVal={70} suffix="%" />
     },
     {
-      label: 'Implementation Fee',
+      labelKey: 'stats.cost',
       element: <CountUp endVal={0} prefix="$" />
     },
     {
-      label: 'Key App Connections',
+      labelKey: 'stats.integrations',
       element: <CountUp endVal={10} suffix="+" />
     }
   ];
@@ -110,7 +113,7 @@ export default function Stats() {
                 fontSize: '0.95rem',
                 fontWeight: 400
               }}>
-                {stat.label}
+                {t(stat.labelKey)}
               </div>
             </div>
           ))}
@@ -118,4 +121,6 @@ export default function Stats() {
       </div>
     </section>
   );
-}
+});
+
+export default Stats;

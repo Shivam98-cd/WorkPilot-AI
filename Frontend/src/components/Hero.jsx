@@ -1,17 +1,29 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import SaaSDashboard from './SaaSDashboard';
 
 export default function Hero({ user, onAuthClick }) {
+  const { t } = useTranslation('home');
   const canvasRef = useRef(null);
   const [typedTitle, setTypedTitle] = useState('');
   const [typedTagline, setTypedTagline] = useState('');
   const [typedCommand, setTypedCommand] = useState('');
-  const [currentCommandIdx, setCurrentCommandIdx] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [brainShape, setBrainShape] = useState('sphere'); // 'sphere', 'envelope', 'shield'
+  const [brainShape, setBrainShape] = useState('sphere');
+  const taglineIdxRef = useRef(0);
+  const taglineCharRef = useRef(0);
 
-  const fullTitle = 'WorkPilot AI';
-  const fullTagline = 'The Future of Workplace Automation.';
+  const fullTitle = t('hero.title');
+
+  const taglines = [
+    'The Future of Workplace Automation.',
+    'Your AI Co-pilot for Everything Work.',
+    'One AI. Every Tool. Zero Friction.',
+    'Work Smarter. Automate Everything.',
+    'Built for the Way Modern Teams Work.',
+    'Automate Tasks. Amplify Results.',
+    'The AI Brain Behind Your Workflow.',
+  ];
 
   const commands = [
     'Schedule a meeting with the design team next Tuesday.',
@@ -22,60 +34,93 @@ export default function Hero({ user, onAuthClick }) {
     'Prepare tomorrow\'s meeting agenda.'
   ];
 
-  // 1. Title Typewriter effect
+  // ── Title typewriter (runs once) ─────────────────────────────────────────────
   useEffect(() => {
     let i = 0;
-    const interval = setInterval(() => {
-      if (i < fullTitle.length) {
-        setTypedTitle(fullTitle.substring(0, i + 1));
-        i++;
+    const id = setInterval(() => {
+      i++;
+      setTypedTitle(fullTitle.substring(0, i));
+      if (i >= fullTitle.length) clearInterval(id);
+    }, 18);
+    return () => clearInterval(id);
+  }, [fullTitle]);
+
+  // ── Tagline cycler (independent loop, refs only) ──────────────────────────────
+  useEffect(() => {
+    const TYPE_SPEED   = 12;
+    const DELETE_SPEED = 6;
+    const PAUSE_MS     = 2000;
+
+    let timer;
+
+    const type = () => {
+      const tagline = taglines[taglineIdxRef.current];
+      if (taglineCharRef.current < tagline.length) {
+        taglineCharRef.current++;
+        setTypedTagline(tagline.substring(0, taglineCharRef.current));
+        timer = setTimeout(type, TYPE_SPEED);
       } else {
-        clearInterval(interval);
+        // Finished typing — pause then delete
+        timer = setTimeout(erase, PAUSE_MS);
       }
-    }, 80);
-    return () => clearInterval(interval);
+    };
+
+    const erase = () => {
+      if (taglineCharRef.current > 0) {
+        taglineCharRef.current--;
+        setTypedTagline(taglines[taglineIdxRef.current].substring(0, taglineCharRef.current));
+        timer = setTimeout(erase, DELETE_SPEED);
+      } else {
+        // Finished erasing — move to next tagline
+        taglineIdxRef.current = (taglineIdxRef.current + 1) % taglines.length;
+        timer = setTimeout(type, 100);
+      }
+    };
+
+    // Start after title finishes (~18ms * title.length + small buffer)
+    const startDelay = fullTitle.length * 18 + 200;
+    timer = setTimeout(type, startDelay);
+    return () => clearTimeout(timer);
   }, []);
 
-  // 2. Tagline Typewriter effect (triggers after title is complete)
+  // ── Command cycler (independent loop, fully ref-based) ───────────────────────
   useEffect(() => {
-    if (typedTitle !== fullTitle) return;
-    
-    let i = 0;
-    const interval = setInterval(() => {
-      if (i < fullTagline.length) {
-        setTypedTagline(fullTagline.substring(0, i + 1));
-        i++;
-      } else {
-        clearInterval(interval);
-      }
-    }, 45);
-    return () => clearInterval(interval);
-  }, [typedTitle]);
+    const TYPE_SPEED   = 15;
+    const DELETE_SPEED = 6;
+    const PAUSE_MS     = 1200;
 
-  // 3. Command Box Typing effect
-  useEffect(() => {
     let timer;
-    const command = '> ' + commands[currentCommandIdx];
-    const typingSpeed = isDeleting ? 25 : 55;
+    let charIdx = 0;
+    let cmdIdx  = 0;
 
-    if (!isDeleting && typedCommand === command) {
-      // Pause before deleting
-      timer = setTimeout(() => setIsDeleting(true), 2500);
-    } else if (isDeleting && typedCommand === '') {
-      setIsDeleting(false);
-      setCurrentCommandIdx((prev) => (prev + 1) % commands.length);
-    } else {
-      timer = setTimeout(() => {
-        setTypedCommand(
-          isDeleting
-            ? command.substring(0, typedCommand.length - 1)
-            : command.substring(0, typedCommand.length + 1)
-        );
-      }, typingSpeed);
-    }
+    const type = () => {
+      const cmd = '> ' + commands[cmdIdx];
+      if (charIdx < cmd.length) {
+        charIdx++;
+        setTypedCommand(cmd.substring(0, charIdx));
+        setIsDeleting(false);
+        timer = setTimeout(type, TYPE_SPEED);
+      } else {
+        timer = setTimeout(erase, PAUSE_MS);
+      }
+    };
 
+    const erase = () => {
+      const cmd = '> ' + commands[cmdIdx];
+      if (charIdx > 0) {
+        charIdx--;
+        setTypedCommand(cmd.substring(0, charIdx));
+        setIsDeleting(true);
+        timer = setTimeout(erase, DELETE_SPEED);
+      } else {
+        cmdIdx = (cmdIdx + 1) % commands.length;
+        timer = setTimeout(type, 80);
+      }
+    };
+
+    timer = setTimeout(type, 300);
     return () => clearTimeout(timer);
-  }, [typedCommand, isDeleting, currentCommandIdx]);
+  }, []);
 
   // Listen for external hover updates to morph the brain
   useEffect(() => {
@@ -306,9 +351,28 @@ export default function Hero({ user, onAuthClick }) {
         p.z3d += (tz - p.z3d) * lerpSpeed;
       });
 
-      orbParticles.sort((a, b) => b.z3d - a.z3d);
+      // Bucket sort for Z-depth (faster than array.sort for this use case)
+      const bucketCount = 10;
+      const buckets = Array.from({ length: bucketCount }, () => []);
+      const minZ = -orbRadius;
+      const maxZ = orbRadius;
+      const zRange = maxZ - minZ;
 
       orbParticles.forEach((p) => {
+        const bucketIdx = Math.min(
+          bucketCount - 1,
+          Math.floor(((p.z3d - minZ) / zRange) * bucketCount)
+        );
+        buckets[bucketIdx].push(p);
+      });
+
+      // Flatten buckets in reverse order (back to front)
+      const sortedParticles = [];
+      for (let i = 0; i < bucketCount; i++) {
+        sortedParticles.push(...buckets[i]);
+      }
+
+      sortedParticles.forEach((p) => {
         let x1 = p.x3d * cosY - p.z3d * sinY;
         let z1 = p.x3d * sinY + p.z3d * cosY;
         let y1 = p.y3d * cosX - z1 * sinX;
@@ -438,16 +502,20 @@ export default function Hero({ user, onAuthClick }) {
               fontSize: 'clamp(2.5rem, 5vw, 4.5rem)',
               lineHeight: 1.1,
               marginBottom: '1.25rem',
-              minHeight: '1.2em' // prevent layout shifting during type
+              minHeight: '1.2em'
             }}>
               {typedTitle}
               <span style={{
-                display: typedTitle !== fullTitle ? 'inline-block' : 'none',
-                width: '6px',
-                height: '36px',
-                background: 'var(--blue)',
-                marginLeft: '4px',
-                animation: 'blink 0.8s step-end infinite'
+                display: 'inline-block',
+                width: '3px',
+                height: '0.85em',
+                background: 'currentColor',
+                marginLeft: '3px',
+                verticalAlign: 'middle',
+                borderRadius: '1px',
+                opacity: typedTitle === fullTitle ? 0 : 1,
+                animation: typedTitle !== fullTitle ? 'blink 0.55s step-end infinite' : 'none',
+                transition: 'opacity 0.4s ease',
               }}></span>
             </h1>
 
@@ -459,16 +527,20 @@ export default function Hero({ user, onAuthClick }) {
               marginBottom: '1.25rem',
               fontFamily: 'var(--font-headlines)',
               letterSpacing: '-0.01em',
-              minHeight: '2.2em' // prevent layout shifts
+              minHeight: '2.2em'
             }}>
               {typedTagline}
               <span style={{
-                display: typedTitle === fullTitle && typedTagline !== fullTagline ? 'inline-block' : 'none',
-                width: '4px',
-                height: '18px',
+                display: 'inline-block',
+                width: '2px',
+                height: '0.8em',
                 background: 'var(--purple)',
-                marginLeft: '3px',
-                animation: 'blink 0.8s step-end infinite'
+                marginLeft: '2px',
+                verticalAlign: 'middle',
+                borderRadius: '1px',
+                opacity: typedTitle === fullTitle ? 1 : 0,
+                animation: typedTitle === fullTitle ? 'blink 0.55s step-end infinite' : 'none',
+                transition: 'opacity 0.3s ease',
               }}></span>
             </p>
 
@@ -479,7 +551,7 @@ export default function Hero({ user, onAuthClick }) {
               marginBottom: '2rem',
               lineHeight: 1.6
             }}>
-              Connect your emails, calendar, Slack, GitHub, Jira, Drive, and meetings into one intelligent workspace. WorkPilot AI automates repetitive tasks, manages workflows, and helps your team stay focused on what matters most.
+              {t('hero.description')}
             </p>
 
             {/* Command terminal box */}
@@ -522,14 +594,14 @@ export default function Hero({ user, onAuthClick }) {
                 </a>
               ) : (
                 <button onClick={onAuthClick} className="btn btn-primary" style={{ gap: '0.5rem', cursor: 'pointer', border: 'none' }}>
-                  Deploy Autopilot Workspace
+                  {t('hero.cta')}
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                     <polyline points="12 5 19 12 12 19"></polyline>
                   </svg>
                 </button>
               )}
-              <a href="#features" className="btn btn-secondary">Audit Integrations Map</a>
+              <a href="#features" className="btn btn-secondary">{t('hero.watchDemo')}</a>
             </div>
 
             {/* Trust checkmarks */}

@@ -19,8 +19,8 @@ class SignupRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=50)
     email: EmailStr
     password: str = Field(..., min_length=8)
-    confirmPassword: str
-    acceptTerms: bool
+    confirmPassword: Optional[str] = None
+    acceptTerms: Optional[bool] = None
     
     @validator('password')
     def validate_password(cls, v):
@@ -36,13 +36,13 @@ class SignupRequest(BaseModel):
     
     @validator('confirmPassword')
     def passwords_match(cls, v, values):
-        if 'password' in values and v != values['password']:
+        if v is not None and 'password' in values and v != values['password']:
             raise ValueError('Passwords do not match')
         return v
     
     @validator('acceptTerms')
     def terms_accepted(cls, v):
-        if not v:
+        if v is not None and not v:
             raise ValueError('You must accept the terms and conditions')
         return v
 

@@ -20,10 +20,10 @@ from firebase.admin_config import initialize_firebase
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     initialize_firebase()
-    print(f"🚀 {settings.PROJECT_NAME} v{settings.VERSION} started")
-    print(f"📝 API Documentation: http://localhost:8000/docs")
+    print(f"{settings.PROJECT_NAME} v{settings.VERSION} started")
+    print(f"API Documentation: http://localhost:8000/docs")
     yield
-    print(f"👋 {settings.PROJECT_NAME} shutting down")
+    print(f"{settings.PROJECT_NAME} shutting down")
 
 
 app = FastAPI(

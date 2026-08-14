@@ -1,0 +1,126 @@
+{
+  "hero": {
+    "title": "WorkPilot AI",
+    "subtitle": "The Future of Workplace Automation.",
+    "description": "AI-powered agents that automate emails, meetings, tasks, and workflows. Save 20+ hours per week and let your team focus on what matters.",
+    "cta": "Start Free Trial",
+    "watchDemo": "Watch Demo"
+  },
+  "features": {
+    "title": "Everything Your Team Needs to Work Smarter",
+    "subtitle": "Exclusive Capabilities",
+    "description": "From intelligent email management and meeting automation to AI-powered knowledge search and workflow orchestration, WorkPilot AI unifies every workplace tool into one intelligent workspace—helping teams save time, stay aligned, and achieve more.",
+    "emailManagement": {
+      "title": "Smart Email Management",
+      "description": "Automatically draft, summarize, prioritize, and schedule follow-ups across your inbox."
+    },
+    "meetingAssistant": {
+      "title": "AI Meeting Assistant",
+      "description": "Schedules meetings, prepares agendas, records action items, and tracks follow-ups automatically."
+    },
+    "taskOrchestration": {
+      "title": "Intelligent Task Orchestration",
+      "description": "Converts emails, chats, and meeting notes into actionable tasks across Jira, Trello, Asana, and GitHub."
+    },
+    "multiAgent": {
+      "title": "Multi-Agent Collaboration",
+      "description": "Specialized AI agents collaborate on scheduling, research, documentation, reporting, and project management simultaneously."
+    },
+    "unifiedSearch": {
+      "title": "Unified Workplace Search",
+      "description": "Instantly search Gmail, Slack, Drive, Notion, Confluence, GitHub, Jira, and more through one conversational interface."
+    },
+    "insights": {
+      "title": "Executive Insights",
+      "description": "Receive AI-powered dashboards highlighting project health, deadlines, team productivity, and operational risks."
+    }
+  },
+  "stats": {
+    "agents": "Autonomous Agent Modules",
+    "automated": "Operational Tasks Automated",
+    "cost": "Implementation Fee",
+    "integrations": "Key App Connections"
+  },
+  "cta": {
+    "title": "Supercharge Your Workflow Today",
+    "description": "Join progressive companies automating code health, managing complex email sequences, and running background data syncs securely with WorkPilot.",
+    "button": "Deploy Agent Free",
+    "secondary": "Schedule Demo call"
+  },
+  "waitlist": {
+    "title": "Get Early Access to WorkPilot AI",
+    "badge": "{{count}}+ teams on waitlist",
+    "description": "Join thousands of teams automating their workflows. Be the first to access new features, get priority onboarding, and lock in founding member pricing.",
+    "placeholder": "Enter your work email",
+    "button": "Join Waitlist",
+    "success": "You're on the list! We'll be in touch soon.",
+    "error": "Please enter a valid email address.",
+    "disclaimer": "No credit card required · Cancel anytime · SOC2 certified"
+  },
+  "howItWorks": {
+    "subtitle": "Operational Flow",
+    "title": "How WorkPilot Orchestrates Tasks",
+    "description": "Go from incident or inbound request to automated resolution in three secure steps.",
+    "step1": {
+      "num": "01",
+      "title": "Configure Triggers",
+      "description": "Connect inputs like Gmail, Webhooks, Slack channels, or production CI/CD servers. Set rules defining when WorkPilot should intervene."
+    },
+    "step2": {
+      "num": "02",
+      "title": "Agent Context Parsing (RAG)",
+      "description": "WorkPilot agent spins up, references internal guidelines via semantic vector search, checks logs, and drafts an optimal resolution path."
+    },
+    "step3": {
+      "num": "03",
+      "title": "Audited Action Execution",
+      "description": "The bot executes the command inside a secure sandbox. The human manager is notified and has a 60-minute undo safety window."
+    }
+  },
+  "uniqueFeatures": {
+    "subtitle": "Exclusive Capabilities",
+    "title": "Why Teams Choose WorkPilot AI",
+    "description": "Powerful AI capabilities designed to automate work, improve collaboration, and keep your organization productive and secure.",
+    "feature1": {
+      "title": "🧠 Personalized AI Assistant",
+      "subtitle": "Learns Your Communication Style",
+      "description": "WorkPilot AI understands how you write emails, messages, and documents, then generates responses that sound naturally like you while preserving your unique tone and professionalism."
+    },
+    "feature2": {
+      "title": "📊 Team Productivity Insights",
+      "subtitle": "Prevent Burnout Before It Happens",
+      "description": "Monitor workload, response times, meeting overload, and task distribution to identify productivity bottlenecks and reduce employee burnout."
+    },
+    "feature3": {
+      "title": "📚 Intelligent Knowledge Validation",
+      "subtitle": "Keep Company Information Consistent",
+      "description": "Automatically detects outdated or conflicting information across documents, knowledge bases, and shared files, ensuring everyone works from the same source of truth."
+    },
+    "feature4": {
+      "title": "🔄 Safe Automation",
+      "subtitle": "Undo AI Actions Anytime",
+      "description": "Every automated email, calendar event, workflow, or task update can be reviewed, tracked, and reverted whenever needed."
+    },
+    "feature5": {
+      "title": "🔍 Transparent AI Decisions",
+      "subtitle": "See Why AI Made a Decision",
+      "description": "Every recommendation includes reasoning, data sources, and confidence levels, giving teams complete visibility and trust in AI-generated actions."
+    },
+    "feature6": {
+      "title": "⚡ Smart Workflow Protection",
+      "subtitle": "Prevent Automation Conflicts",
+      "description": "WorkPilot AI detects overlapping automations, duplicate tasks, and conflicting workflows before they create problems, keeping operations smooth and reliable."
+    }
+  },
+  "integrations": {
+    "subtitle": "Ecosystem Connectivity",
+    "title": "Integrates with Your Entire Stack",
+    "description": "WorkPilot operates directly inside your favorite productivity channels. No custom scripting needed."
+  },
+  "comparison": {
+    "subtitle": "Capabilities Matrix",
+    "title": "Why WorkPilot Leads",
+    "description": "A side-by-side comparison of features, recovery guardrails, and enterprise security policies.",
+    "tableHeader": "System Parameters"
+  }
+}

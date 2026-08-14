@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import GlassShader from './GlassShader';
 
-export default function AutomationWorkspace() {
+const AutomationWorkspace = memo(function AutomationWorkspace() {
   const [activeTab, setActiveTab] = useState('scheduler');
   const [logLines, setLogLines] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -583,4 +583,6 @@ export default function AutomationWorkspace() {
       `}</style>
     </section>
   );
-}
+});
+
+export default AutomationWorkspace;

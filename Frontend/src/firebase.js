@@ -4,7 +4,8 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signInWithPopup, 
-  GoogleAuthProvider, 
+  GoogleAuthProvider,
+  GithubAuthProvider,
   signOut,
   updateProfile,
   sendPasswordResetEmail,
@@ -25,6 +26,9 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('email');
 googleProvider.addScope('profile');
+
+export const githubProvider = new GithubAuthProvider();
+githubProvider.addScope('user:email');
 
 export { 
   signInWithEmailAndPassword, 

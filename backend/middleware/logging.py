@@ -17,7 +17,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable):
         start_time = time.time()
         
-        logger.info(f"→ {request.method} {request.url.path}")
+        logger.info(f"-> {request.method} {request.url.path}")
         
         response = await call_next(request)
         
@@ -25,7 +25,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         response.headers["X-Process-Time"] = str(process_time)
         
         logger.info(
-            f"← {request.method} {request.url.path} "
+            f"<- {request.method} {request.url.path} "
             f"Status: {response.status_code} "
             f"Duration: {process_time:.3f}s"
         )

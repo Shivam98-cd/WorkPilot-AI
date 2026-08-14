@@ -1,0 +1,44 @@
+{
+  "title": "Precios Simples y Transparentes",
+  "subtitle": "Elige el plan que se ajuste a tu equipo",
+  "free": {
+    "name": "Inicial",
+    "price": "0",
+    "period": "Gratis para siempre",
+    "description": "Perfecto para individuos probando automatización",
+    "features": [
+      "5 acciones de agente IA/día",
+      "Sincronización de correo y calendario",
+      "Automatización básica de tareas",
+      "Soporte comunitario"
+    ]
+  },
+  "pro": {
+    "name": "Profesional",
+    "price": "29",
+    "period": "por usuario/mes",
+    "description": "Para equipos pequeños listos para escalar",
+    "features": [
+      "Acciones IA ilimitadas",
+      "Todas las integraciones",
+      "Flujos de trabajo avanzados",
+      "Soporte prioritario",
+      "Automatización personalizada"
+    ]
+  },
+  "enterprise": {
+    "name": "Empresa",
+    "price": "Personalizado",
+    "period": "Contactar ventas",
+    "description": "Para organizaciones a escala",
+    "features": [
+      "Todo en Pro",
+      "Gerente de éxito dedicado",
+      "SSO y seguridad avanzada",
+      "SLA personalizado",
+      "Implementación local"
+    ]
+  },
+  "cta": "Comenzar",
+  "contactSales": "Contactar Ventas"
+}

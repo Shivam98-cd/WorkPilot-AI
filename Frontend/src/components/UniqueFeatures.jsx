@@ -1,42 +1,45 @@
-import React from 'react';
+import React, { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import GlassShader from './GlassShader';
 
-export default function UniqueFeatures() {
+const UniqueFeatures = memo(function UniqueFeatures() {
+  const { t } = useTranslation('home');
+  
   const uniques = [
     {
-      title: '🧠 Personalized AI Assistant',
-      subtitle: 'Learns Your Communication Style',
-      description: 'WorkPilot AI understands how you write emails, messages, and documents, then generates responses that sound naturally like you while preserving your unique tone and professionalism.',
+      title: t('uniqueFeatures.feature1.title'),
+      subtitle: t('uniqueFeatures.feature1.subtitle'),
+      description: t('uniqueFeatures.feature1.description'),
       glowColor: 'var(--blue)'
     },
     {
-      title: '📊 Team Productivity Insights',
-      subtitle: 'Prevent Burnout Before It Happens',
-      description: 'Monitor workload, response times, meeting overload, and task distribution to identify productivity bottlenecks and reduce employee burnout.',
+      title: t('uniqueFeatures.feature2.title'),
+      subtitle: t('uniqueFeatures.feature2.subtitle'),
+      description: t('uniqueFeatures.feature2.description'),
       glowColor: 'var(--purple)'
     },
     {
-      title: '📚 Intelligent Knowledge Validation',
-      subtitle: 'Keep Company Information Consistent',
-      description: 'Automatically detects outdated or conflicting information across documents, knowledge bases, and shared files, ensuring everyone works from the same source of truth.',
+      title: t('uniqueFeatures.feature3.title'),
+      subtitle: t('uniqueFeatures.feature3.subtitle'),
+      description: t('uniqueFeatures.feature3.description'),
       glowColor: 'var(--pink)'
     },
     {
-      title: '🔄 Safe Automation',
-      subtitle: 'Undo AI Actions Anytime',
-      description: 'Every automated email, calendar event, workflow, or task update can be reviewed, tracked, and reverted whenever needed.',
+      title: t('uniqueFeatures.feature4.title'),
+      subtitle: t('uniqueFeatures.feature4.subtitle'),
+      description: t('uniqueFeatures.feature4.description'),
       glowColor: 'var(--green)'
     },
     {
-      title: '🔍 Transparent AI Decisions',
-      subtitle: 'See Why AI Made a Decision',
-      description: 'Every recommendation includes reasoning, data sources, and confidence levels, giving teams complete visibility and trust in AI-generated actions.',
+      title: t('uniqueFeatures.feature5.title'),
+      subtitle: t('uniqueFeatures.feature5.subtitle'),
+      description: t('uniqueFeatures.feature5.description'),
       glowColor: 'var(--amber)'
     },
     {
-      title: '⚡ Smart Workflow Protection',
-      subtitle: 'Prevent Automation Conflicts',
-      description: 'WorkPilot AI detects overlapping automations, duplicate tasks, and conflicting workflows before they create problems, keeping operations smooth and reliable.',
+      title: t('uniqueFeatures.feature6.title'),
+      subtitle: t('uniqueFeatures.feature6.subtitle'),
+      description: t('uniqueFeatures.feature6.description'),
       glowColor: 'var(--indigo)'
     }
   ];
@@ -55,11 +58,11 @@ export default function UniqueFeatures() {
             fontWeight: 600,
             marginBottom: '0.75rem'
           }}>
-            Exclusive Capabilities
+            {t('uniqueFeatures.subtitle')}
           </div>
-          <h2>Why Teams Choose WorkPilot AI</h2>
+          <h2>{t('uniqueFeatures.title')}</h2>
           <p style={{ maxWidth: '800px', margin: '0 auto' }}>
-            Powerful AI capabilities designed to automate work, improve collaboration, and keep your organization productive and secure.
+            {t('uniqueFeatures.description')}
           </p>
         </div>
 
@@ -133,4 +136,6 @@ export default function UniqueFeatures() {
       `}</style>
     </section>
   );
-}
+});
+
+export default UniqueFeatures;

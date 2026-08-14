@@ -1,0 +1,60 @@
+{
+  "hero": {
+    "title": "WorkPilot AI",
+    "subtitle": "L'Avenir de l'Automatisation en Milieu de Travail.",
+    "description": "Des agents alimentés par l'IA qui automatisent les e-mails, les réunions, les tâches et les flux de travail. Économisez plus de 20 heures par semaine et permettez à votre équipe de se concentrer sur ce qui compte.",
+    "cta": "Essai Gratuit",
+    "watchDemo": "Voir la Démo"
+  },
+  "features": {
+    "title": "Tout ce Dont Votre Équipe a Besoin pour Travailler Plus Intelligemment",
+    "subtitle": "Capacités Exclusives",
+    "description": "De la gestion intelligente des e-mails et de l'automatisation des réunions à la recherche de connaissances alimentée par l'IA et à l'orchestration des flux de travail, WorkPilot AI unifie tous les outils de travail en un espace intelligent.",
+    "emailManagement": {
+      "title": "Gestion Intelligente des E-mails",
+      "description": "Rédigez, résumez, priorisez et planifiez automatiquement les suivis dans votre boîte de réception."
+    },
+    "meetingAssistant": {
+      "title": "Assistant de Réunion IA",
+      "description": "Programme les réunions, prépare les ordres du jour, enregistre les points d'action et suit les suivis automatiquement."
+    },
+    "taskOrchestration": {
+      "title": "Orchestration Intelligente des Tâches",
+      "description": "Convertit les e-mails, les chats et les notes de réunion en tâches exploitables dans Jira, Trello, Asana et GitHub."
+    },
+    "multiAgent": {
+      "title": "Collaboration Multi-Agents",
+      "description": "Des agents IA spécialisés collaborent simultanément sur la planification, la recherche, la documentation, les rapports et la gestion de projet."
+    },
+    "unifiedSearch": {
+      "title": "Recherche Unifiée en Milieu de Travail",
+      "description": "Recherchez instantanément dans Gmail, Slack, Drive, Notion, Confluence, GitHub, Jira et plus via une interface conversationnelle."
+    },
+    "insights": {
+      "title": "Informations Exécutives",
+      "description": "Recevez des tableaux de bord alimentés par l'IA mettant en évidence la santé du projet, les délais, la productivité de l'équipe et les risques opérationnels."
+    }
+  },
+  "stats": {
+    "agents": "Modules d'Agents Autonomes",
+    "automated": "Tâches Opérationnelles Automatisées",
+    "cost": "Frais de Mise en Œuvre",
+    "integrations": "Connexions d'Applications Clés"
+  },
+  "cta": {
+    "title": "Boostez Votre Flux de Travail Aujourd'hui",
+    "description": "Rejoignez des entreprises progressistes qui automatisent la santé du code, gèrent des séquences d'e-mails complexes et exécutent des synchronisations de données en arrière-plan en toute sécurité avec WorkPilot.",
+    "button": "Déployer l'Agent Gratuitement",
+    "secondary": "Planifier une Démo"
+  },
+  "waitlist": {
+    "title": "Obtenez un Accès Anticipé à WorkPilot AI",
+    "badge": "{{count}}+ équipes sur liste d'attente",
+    "description": "Rejoignez des milliers d'équipes automatisant leurs flux de travail. Soyez le premier à accéder aux nouvelles fonctionnalités, bénéficiez d'une intégration prioritaire et verrouillez les tarifs de membre fondateur.",
+    "placeholder": "Entrez votre e-mail professionnel",
+    "button": "Rejoindre la Liste d'Attente",
+    "success": "Vous êtes sur la liste ! Nous vous contacterons bientôt.",
+    "error": "Veuillez entrer une adresse e-mail valide.",
+    "disclaimer": "Aucune carte de crédit requise · Annulez à tout moment · Certifié SOC2"
+  }
+}

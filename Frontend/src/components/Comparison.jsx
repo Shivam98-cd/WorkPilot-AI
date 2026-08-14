@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
-export default function Comparison() {
+const Comparison = memo(function Comparison() {
+  const { t } = useTranslation('home');
+  
   const checkIcon = (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--green)' }}>
       <polyline points="20 6 9 17 4 12"></polyline>
@@ -35,10 +38,10 @@ export default function Comparison() {
             fontWeight: 600,
             marginBottom: '0.75rem'
           }}>
-            Capabilities Matrix
+            {t('comparison.subtitle')}
           </div>
-          <h2>Why WorkPilot Leads</h2>
-          <p>A side-by-side comparison of features, recovery guardrails, and enterprise security policies.</p>
+          <h2>{t('comparison.title')}</h2>
+          <p>{t('comparison.description')}</p>
         </div>
 
         <div className="comparison-scroll" style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch' }}>
@@ -51,7 +54,7 @@ export default function Comparison() {
           }}>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                <th style={{ padding: '1.25rem 1rem', color: 'var(--text-muted)', fontWeight: 500 }}>System Parameters</th>
+                <th style={{ padding: '1.25rem 1rem', color: 'var(--text-muted)', fontWeight: 500 }}>{t('comparison.tableHeader')}</th>
                 <th style={{ 
                   padding: '1.25rem 1rem', 
                   color: '#ffffff', 
@@ -106,4 +109,6 @@ export default function Comparison() {
       </div>
     </section>
   );
-}
+});
+
+export default Comparison;

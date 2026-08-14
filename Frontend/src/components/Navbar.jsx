@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { auth, signOut } from '../firebase';
 import Logo from './Logo';
+import LanguageSelector from './LanguageSelector';
 
 export default function Navbar({ user, onAuthClick }) {
+  const { t } = useTranslation('common');
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -48,15 +51,16 @@ export default function Navbar({ user, onAuthClick }) {
           alignItems: 'center',
           gap: '2.5rem',
         }} className="desktop-nav">
-          <a href="#features" className="nav-link">Features</a>
-          <a href="#how-it-works" className="nav-link">How It Works</a>
+          <a href="#features" className="nav-link">{t('nav.features')}</a>
+          <a href="#how-it-works" className="nav-link">{t('nav.howItWorks')}</a>
           <a href="#rag" className="nav-link">Workspace</a>
-          <a href="#demo" className="nav-link">Interactive Demo</a>
-          <a href="#integrations" className="nav-link">Integrations</a>
+          <a href="#demo" className="nav-link">{t('nav.demo')}</a>
+          <a href="#integrations" className="nav-link">{t('nav.integrations')}</a>
         </div>
 
         {/* CTA */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }} className="desktop-nav">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }} className="desktop-nav">
+          <LanguageSelector />
           {user ? (
             <>
               <span style={{ 
@@ -83,14 +87,14 @@ export default function Navbar({ user, onAuthClick }) {
                 className="btn btn-secondary" 
                 style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem' }}
               >
-                Sign In
+                {t('nav.login')}
               </button>
               <button 
                 onClick={onAuthClick} 
                 className="btn btn-primary" 
                 style={{ padding: '0.5rem 1.25rem', fontSize: '0.85rem' }}
               >
-                Get started free
+                {t('nav.startFreeTrial')}
               </button>
             </>
           )}
@@ -142,11 +146,14 @@ export default function Navbar({ user, onAuthClick }) {
           zIndex: 999,
           borderTop: '1px solid rgba(255,255,255,0.06)'
         }}>
-          <a href="#features" onClick={() => setIsMobileMenuOpen(false)} style={{ fontSize: '1.25rem', textDecoration: 'none', color: '#ffffff', fontWeight: 500 }}>Features</a>
-          <a href="#how-it-works" onClick={() => setIsMobileMenuOpen(false)} style={{ fontSize: '1.25rem', textDecoration: 'none', color: '#ffffff', fontWeight: 500 }}>How It Works</a>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+            <LanguageSelector />
+          </div>
+          <a href="#features" onClick={() => setIsMobileMenuOpen(false)} style={{ fontSize: '1.25rem', textDecoration: 'none', color: '#ffffff', fontWeight: 500 }}>{t('nav.features')}</a>
+          <a href="#how-it-works" onClick={() => setIsMobileMenuOpen(false)} style={{ fontSize: '1.25rem', textDecoration: 'none', color: '#ffffff', fontWeight: 500 }}>{t('nav.howItWorks')}</a>
           <a href="#rag" onClick={() => setIsMobileMenuOpen(false)} style={{ fontSize: '1.25rem', textDecoration: 'none', color: '#ffffff', fontWeight: 500 }}>Workspace</a>
-          <a href="#demo" onClick={() => setIsMobileMenuOpen(false)} style={{ fontSize: '1.25rem', textDecoration: 'none', color: '#ffffff', fontWeight: 500 }}>Interactive Demo</a>
-          <a href="#integrations" onClick={() => setIsMobileMenuOpen(false)} style={{ fontSize: '1.25rem', textDecoration: 'none', color: '#ffffff', fontWeight: 500 }}>Integrations</a>
+          <a href="#demo" onClick={() => setIsMobileMenuOpen(false)} style={{ fontSize: '1.25rem', textDecoration: 'none', color: '#ffffff', fontWeight: 500 }}>{t('nav.demo')}</a>
+          <a href="#integrations" onClick={() => setIsMobileMenuOpen(false)} style={{ fontSize: '1.25rem', textDecoration: 'none', color: '#ffffff', fontWeight: 500 }}>{t('nav.integrations')}</a>
           <hr style={{ borderColor: 'rgba(255,255,255,0.06)' }} />
           {user ? (
             <>
@@ -157,8 +164,8 @@ export default function Navbar({ user, onAuthClick }) {
             </>
           ) : (
             <>
-              <button onClick={() => { onAuthClick(); setIsMobileMenuOpen(false); }} className="btn btn-secondary" style={{ width: '100%' }}>Sign In</button>
-              <button onClick={() => { onAuthClick(); setIsMobileMenuOpen(false); }} className="btn btn-primary" style={{ width: '100%' }}>Get started free</button>
+              <button onClick={() => { onAuthClick(); setIsMobileMenuOpen(false); }} className="btn btn-secondary" style={{ width: '100%' }}>{t('nav.login')}</button>
+              <button onClick={() => { onAuthClick(); setIsMobileMenuOpen(false); }} className="btn btn-primary" style={{ width: '100%' }}>{t('nav.startFreeTrial')}</button>
             </>
           )}
         </div>

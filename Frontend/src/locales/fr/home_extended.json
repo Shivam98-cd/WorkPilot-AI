@@ -1,0 +1,68 @@
+{
+  "howItWorks": {
+    "subtitle": "Flux Opérationnel",
+    "title": "Comment WorkPilot Orchestrate les Tâches",
+    "description": "De l'incident ou de la demande entrante à la résolution automatisée en trois étapes sécurisées.",
+    "step1": {
+      "num": "01",
+      "title": "Configurer les Déclencheurs",
+      "description": "Connectez des entrées comme Gmail, Webhooks, canaux Slack ou serveurs CI/CD de production. Définissez des règles définissant quand WorkPilot doit intervenir."
+    },
+    "step2": {
+      "num": "02",
+      "title": "Analyse de Contexte de l'Agent (RAG)",
+      "description": "L'agent WorkPilot se lance, consulte les directives internes via une recherche vectorielle sémantique, vérifie les journaux et rédige un chemin de résolution optimal."
+    },
+    "step3": {
+      "num": "03",
+      "title": "Exécution d'Action Auditée",
+      "description": "Le bot exécute la commande dans un bac à sable sécurisé. Le gestionnaire humain est notifié et dispose d'une fenêtre de sécurité d'annulation de 60 minutes."
+    }
+  },
+  "uniqueFeatures": {
+    "subtitle": "Capacités Exclusives",
+    "title": "Pourquoi les Équipes Choisissent WorkPilot AI",
+    "description": "Des capacités d'IA puissantes conçues pour automatiser le travail, améliorer la collaboration et maintenir votre organisation productive et sécurisée.",
+    "feature1": {
+      "title": "🧠 Assistant IA Personnalisé",
+      "subtitle": "Apprend Votre Style de Communication",
+      "description": "WorkPilot AI comprend comment vous écrivez des e-mails, des messages et des documents, puis génère des réponses qui sonnent naturellement comme vous tout en préservant votre ton unique et votre professionnalisme."
+    },
+    "feature2": {
+      "title": "📊 Informations sur la Productivité de l'Équipe",
+      "subtitle": "Prévenir l'Épuisement Avant qu'il n'Arrive",
+      "description": "Surveillez la charge de travail, les temps de réponse, la surcharge de réunions et la distribution des tâches pour identifier les goulots d'étranglement de productivité et réduire l'épuisement des employés."
+    },
+    "feature3": {
+      "title": "📚 Validation Intelligente des Connaissances",
+      "subtitle": "Maintenir les Informations de l'Entreprise Cohérentes",
+      "description": "Détecte automatiquement les informations obsolètes ou conflictuelles dans les documents, les bases de connaissances et les fichiers partagés, garantissant que tout le monde travaille à partir de la même source de vérité."
+    },
+    "feature4": {
+      "title": "🔄 Automatisation Sécurisée",
+      "subtitle": "Annuler les Actions IA à Tout Moment",
+      "description": "Chaque e-mail automatisé, événement de calendrier, flux de travail ou mise à jour de tâche peut être examiné, suivi et annulé si nécessaire."
+    },
+    "feature5": {
+      "title": "🔍 Décisions IA Transparentes",
+      "subtitle": "Voir Pourquoi l'IA a Pris une Décision",
+      "description": "Chaque recommandation inclut le raisonnement, les sources de données et les niveaux de confiance, donnant aux équipes une visibilité complète et une confiance dans les actions générées par l'IA."
+    },
+    "feature6": {
+      "title": "⚡ Protection Intelligente du Flux de Travail",
+      "subtitle": "Prévenir les Conflits d'Automatisation",
+      "description": "WorkPilot AI détecte les automatisations qui se chevauchent, les tâches en double et les flux de travail conflictuels avant qu'ils ne créent des problèmes, maintenant les opérations fluides et fiables."
+    }
+  },
+  "integrations": {
+    "subtitle": "Connectivité de l'Écosystème",
+    "title": "S'Intègre avec Toute Votre Suite",
+    "description": "WorkPilot fonctionne directement dans vos canaux de productivité préférés. Aucun script personnalisé nécessaire."
+  },
+  "comparison": {
+    "subtitle": "Matrice de Capacités",
+    "title": "Pourquoi WorkPilot Mène",
+    "description": "Une comparaison côte à côte des fonctionnalités, des barrières de récupération et des politiques de sécurité d'entreprise.",
+    "tableHeader": "Paramètres du Système"
+  }
+}
