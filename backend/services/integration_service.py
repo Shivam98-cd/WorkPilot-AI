@@ -13,6 +13,60 @@ from urllib.parse import urlencode
 
 import httpx
 
+# Fail fast on slow external APIs (Gmail, GitHub, etc.) instead of hanging page loads.
+HTTP_TIMEOUT = httpx.Timeout(8.0, connect=3.0)
+
+# ── Shared persistent HTTP client ──────────────────────────────────────────────
+# A single AsyncClient is created at startup and reused across all requests.
+# This allows httpx to pool TCP/TLS connections so repeated calls to the same
+# host (Gmail, GitHub, Google Calendar) skip the handshake.
+# The client is closed gracefully during FastAPI lifespan shutdown.
+_SHARED_CLIENT: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Return the shared AsyncClient, creating it lazily if necessary."""
+    global _SHARED_CLIENT
+    if _SHARED_CLIENT is None or _SHARED_CLIENT.is_closed:
+        _SHARED_CLIENT = httpx.AsyncClient(
+            timeout=HTTP_TIMEOUT,
+            limits=httpx.Limits(
+                max_keepalive_connections=20,
+                max_connections=40,
+                keepalive_expiry=30,
+            ),
+        )
+    return _SHARED_CLIENT
+
+
+async def startup_http_client() -> None:
+    """Call from FastAPI lifespan startup to pre-warm the shared client."""
+    _get_client()
+
+
+async def shutdown_http_client() -> None:
+    """Call from FastAPI lifespan shutdown to close the shared client cleanly."""
+    global _SHARED_CLIENT
+    if _SHARED_CLIENT and not _SHARED_CLIENT.is_closed:
+        await _SHARED_CLIENT.aclose()
+    _SHARED_CLIENT = None
+
+
+# Legacy context-manager shim — kept so that any code still using
+#   async with _http_client() as client: ...
+# continues to work unchanged.  It returns the shared client without closing it
+# when the context exits.
+class _SharedClientContext:
+    async def __aenter__(self) -> httpx.AsyncClient:
+        return _get_client()
+
+    async def __aexit__(self, *_) -> None:
+        pass  # do NOT close — the shared client must stay open
+
+
+def _http_client() -> "_SharedClientContext":
+    return _SharedClientContext()
+
 from core.config import settings
 from core.crypto import decrypt_value, encrypt_value
 from core.exceptions import ExternalServiceException, NotFoundException, ValidationException
@@ -93,10 +147,20 @@ class IntegrationService:
             rows = await integration_repository.list_for_user(uid)
         except Exception:
             rows = []
+        return await self.build_integrations_list_from_records(rows)
 
+    async def build_integrations_list_from_records(
+        self, records: List[UserIntegration]
+    ) -> List[Dict[str, Any]]:
+        """
+        Build the integrations panel list from an already-fetched list of
+        UserIntegration records.  This avoids querying Firestore again when the
+        dashboard has already called integration_repository.list_for_user().
+        The output is identical to list_for_user().
+        """
         connected = {
             row.platform: row
-            for row in rows
+            for row in records
             if row.status == "connected"
         }
         items = []
@@ -155,7 +219,7 @@ class IntegrationService:
         if needs_refresh and record.refresh_token_enc:
             refresh_token = decrypt_value(record.refresh_token_enc)
             try:
-                async with httpx.AsyncClient() as client:
+                async with _http_client() as client:
                     resp = await client.post(
                         "https://oauth2.googleapis.com/token",
                         data={
@@ -175,29 +239,41 @@ class IntegrationService:
                     record.last_sync_status = "success"
                     await integration_repository.upsert(record)
                     return new_access
-            except Exception:
-                pass  # Fall through to use existing token if refresh fails
+            except Exception as e:
+                logger.warning(f"Token refresh failed for {platform}: {e}")
+                # If refresh fails with 400, the refresh token is invalid - user must reconnect
+                if "400" in str(e) or "Bad Request" in str(e):
+                    raise HTTPException(
+                        status_code=401,
+                        detail=f"Your {platform.replace('_', ' ').title()} connection has expired. Please reconnect it in the Integrations page."
+                    )
         return decrypt_value(record.access_token_enc) if record.access_token_enc else ""
 
     async def list_user_emails(self, uid: str) -> List[Dict[str, Any]]:
-        record = await integration_repository.get(uid, "gmail")
-        if not record or record.status != "connected":
+        try:
+            record = await integration_repository.get(uid, "gmail")
+            if not record or record.status != "connected":
+                return []
+            token = await self._get_valid_google_token(uid, "gmail", record)
+            if not token:
+                return []
+            messages = await self._fetch_gmail_messages(token)
+            return [self._normalize_gmail_message(message) for message in messages]
+        except Exception:
             return []
-        token = await self._get_valid_google_token(uid, "gmail", record)
-        if not token:
-            raise ValidationException("Gmail integration is missing an access token")
-        messages = await self._fetch_gmail_messages(token)
-        return [self._normalize_gmail_message(message) for message in messages]
 
     async def list_user_events(self, uid: str) -> List[Dict[str, Any]]:
-        record = await integration_repository.get(uid, "google_calendar")
-        if not record or record.status != "connected":
+        try:
+            record = await integration_repository.get(uid, "google_calendar")
+            if not record or record.status != "connected":
+                return []
+            token = await self._get_valid_google_token(uid, "google_calendar", record)
+            if not token:
+                return []
+            events = await self._fetch_google_calendar_events(token)
+            return [self._normalize_google_calendar_event(event) for event in events]
+        except Exception:
             return []
-        token = await self._get_valid_google_token(uid, "google_calendar", record)
-        if not token:
-            raise ValidationException("Google Calendar integration is missing an access token")
-        events = await self._fetch_google_calendar_events(token)
-        return [self._normalize_google_calendar_event(event) for event in events]
 
     async def create_user_event(self, uid: str, event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Create an event in a connected Google Calendar, if present."""
@@ -216,7 +292,7 @@ class IntegrationService:
             "end": {"dateTime": end, "timeZone": event.get("timezone", "UTC")},
             "attendees": [{"email": email} for email in event.get("attendees", [])],
         }
-        async with httpx.AsyncClient() as client:
+        async with _http_client() as client:
             response = await client.post(
                 "https://www.googleapis.com/calendar/v3/calendars/primary/events",
                 json=payload, headers={"Authorization": f"Bearer {token}"},
@@ -245,7 +321,7 @@ class IntegrationService:
         message["Subject"] = subject
         message.set_content(body)
         
-        async with httpx.AsyncClient() as client:
+        async with _http_client() as client:
             response = await client.post(
                 "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
                 json={"raw": urlsafe_b64encode(message.as_bytes()).decode("ascii")},
@@ -266,7 +342,7 @@ class IntegrationService:
         token = await self._get_valid_google_token(uid, "gmail", record)
         if not token:
             raise ValidationException("Gmail integration is missing an access token")
-        async with httpx.AsyncClient() as client:
+        async with _http_client() as client:
             response = await client.post(
                 f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}/modify",
                 json={"removeLabelIds": ["UNREAD"]}, headers={"Authorization": f"Bearer {token}"},
@@ -275,14 +351,17 @@ class IntegrationService:
         return True
 
     async def list_user_deployments(self, uid: str) -> List[Dict[str, Any]]:
-        record = await integration_repository.get(uid, "github")
-        if not record or record.status != "connected":
+        try:
+            record = await integration_repository.get(uid, "github")
+            if not record or record.status != "connected":
+                return []
+            token = decrypt_value(record.access_token_enc) if record.access_token_enc else None
+            if not token:
+                return []
+            projects = await self._fetch_github_projects(token)
+            return [self._normalize_github_project(project) for project in projects]
+        except Exception:
             return []
-        token = decrypt_value(record.access_token_enc) if record.access_token_enc else None
-        if not token:
-            raise ValidationException("GitHub integration is missing an access token")
-        projects = await self._fetch_github_projects(token)
-        return [self._normalize_github_project(project) for project in projects]
 
     async def sync_integration(self, uid: str, platform: str) -> Dict[str, Any]:
         get_platform(platform)
@@ -379,8 +458,12 @@ class IntegrationService:
             metadata=profile.get("metadata") or {},
         )
         try:
-            return await integration_repository.upsert(integration)
+            print(f"[OAuth] Saving integration: uid={uid}, platform={platform}, status=connected, account={profile.get('email')}")
+            result = await integration_repository.upsert(integration)
+            print(f"[OAuth] Integration saved successfully: {result.platform} for user {result.uid}")
+            return result
         except Exception as exc:
+            print(f"[OAuth ERROR] Failed to save integration: {exc}")
             raise ExternalServiceException("Unable to save integration") from exc
 
     def _store_oauth_state(self, uid: str, platform: str) -> str:
@@ -522,7 +605,7 @@ class IntegrationService:
     async def _exchange_google_code(self, code: str, platform: str, meta: Dict[str, Any]) -> tuple:
         if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
             raise ValidationException("Google OAuth credentials are not configured")
-        async with httpx.AsyncClient() as client:
+        async with _http_client() as client:
             token_resp = await client.post(
                 "https://oauth2.googleapis.com/token",
                 data={
@@ -551,7 +634,7 @@ class IntegrationService:
     async def _exchange_github_code(self, code: str, meta: Dict[str, Any]) -> tuple:
         if not settings.GITHUB_CLIENT_ID or not settings.GITHUB_CLIENT_SECRET:
             raise ValidationException("GitHub OAuth credentials are not configured")
-        async with httpx.AsyncClient() as client:
+        async with _http_client() as client:
             token_resp = await client.post(
                 "https://github.com/login/oauth/access_token",
                 headers={"Accept": "application/json"},
@@ -580,7 +663,7 @@ class IntegrationService:
     async def _exchange_jira_code(self, code: str, platform: str, meta: Dict[str, Any]) -> tuple:
         if not settings.JIRA_CLIENT_ID or not settings.JIRA_CLIENT_SECRET:
             raise ValidationException("Jira OAuth credentials are not configured")
-        async with httpx.AsyncClient() as client:
+        async with _http_client() as client:
             token_resp = await client.post(
                 "https://auth.atlassian.com/oauth/token",
                 json={
@@ -610,7 +693,7 @@ class IntegrationService:
     async def _exchange_slack_code(self, code: str, platform: str, meta: Dict[str, Any]) -> tuple:
         if not settings.SLACK_CLIENT_ID or not settings.SLACK_CLIENT_SECRET:
             raise ValidationException("Slack OAuth credentials are not configured")
-        async with httpx.AsyncClient() as client:
+        async with _http_client() as client:
             token_resp = await client.post(
                 "https://slack.com/api/oauth.v2.access",
                 data={
@@ -638,7 +721,7 @@ class IntegrationService:
         if not settings.MICROSOFT_CLIENT_ID or not settings.MICROSOFT_CLIENT_SECRET:
             raise ValidationException("Microsoft OAuth credentials are not configured")
         tenant = settings.MICROSOFT_TENANT_ID or "common"
-        async with httpx.AsyncClient() as client:
+        async with _http_client() as client:
             token_resp = await client.post(
                 f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
                 data={
@@ -671,7 +754,7 @@ class IntegrationService:
         credentials = base64.b64encode(
             f"{settings.NOTION_CLIENT_ID}:{settings.NOTION_CLIENT_SECRET}".encode()
         ).decode()
-        async with httpx.AsyncClient() as client:
+        async with _http_client() as client:
             token_resp = await client.post(
                 "https://api.notion.com/v1/oauth/token",
                 headers={
@@ -701,7 +784,7 @@ class IntegrationService:
             f"{settings.ZOOM_CLIENT_ID}:{settings.ZOOM_CLIENT_SECRET}".encode()
         ).decode()
         redirect_uri = getattr(settings, "ZOOM_REDIRECT_URI", None) or self._callback_url(platform)
-        async with httpx.AsyncClient() as client:
+        async with _http_client() as client:
             token_resp = await client.post(
                 "https://zoom.us/oauth/token",
                 headers={"Authorization": f"Basic {credentials}"},
@@ -727,35 +810,72 @@ class IntegrationService:
         }
 
     async def _fetch_gmail_messages(self, access_token: str) -> List[Dict[str, Any]]:
-        async with httpx.AsyncClient() as client:
-            # Step 1: get message IDs
-            list_resp = await client.get(
-                "https://www.googleapis.com/gmail/v1/users/me/messages",
-                params={"labelIds": "INBOX", "maxResults": 5},
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
-            list_resp.raise_for_status()
-            msg_ids = list_resp.json().get("messages", [])
+        """
+        Fetch up to 5 inbox messages with subject, sender, and preview.
 
-            # Step 2: fetch full details for each message
-            messages = []
-            for item in msg_ids:
-                try:
-                    detail_resp = await client.get(
-                        f"https://www.googleapis.com/gmail/v1/users/me/messages/{item['id']}",
-                        params={"format": "metadata", "metadataHeaders": ["Subject", "From", "Date"]},
-                        headers={"Authorization": f"Bearer {access_token}"},
-                    )
-                    detail_resp.raise_for_status()
-                    messages.append(detail_resp.json())
-                except Exception:
-                    messages.append(item)  # fallback: include ID-only record
-        return messages
+        Strategy
+        --------
+        • Request 1  : messages.list — returns IDs + snippet in one call using
+                       the `fields` projection so the list already includes the
+                       preview text (snippet).  This avoids a second fetch just
+                       for the snippet.
+        • Requests 2–N: messages.get with format=metadata — only Subject and From
+                        headers are requested, keeping payloads tiny.
+        • All N detail fetches run concurrently via asyncio.gather() and share
+          the module-level TLS connection pool (no repeated handshakes).
+        """
+        auth_headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept-Encoding": "gzip",
+        }
+        client = _get_client()
+
+        # Step 1: get IDs + snippet in one list call
+        list_resp = await client.get(
+            "https://www.googleapis.com/gmail/v1/users/me/messages",
+            params={
+                "labelIds": "INBOX",
+                "maxResults": 5,
+                "fields": "messages(id,snippet)",   # snippet = email preview
+            },
+            headers=auth_headers,
+        )
+        list_resp.raise_for_status()
+        msg_stubs = list_resp.json().get("messages", [])
+
+        if not msg_stubs:
+            return []
+
+        # Build a lookup so _normalize can still find snippet even from the stub
+        snippet_map = {m["id"]: m.get("snippet", "") for m in msg_stubs}
+
+        # Step 2: fetch Subject + From in parallel over the shared connection
+        async def fetch_metadata(stub: Dict[str, Any]) -> Dict[str, Any]:
+            try:
+                r = await client.get(
+                    f"https://www.googleapis.com/gmail/v1/users/me/messages/{stub['id']}",
+                    params={
+                        "format": "metadata",
+                        "metadataHeaders": ["Subject", "From", "Date"],
+                        "fields": "id,payload/headers",
+                    },
+                    headers=auth_headers,
+                )
+                r.raise_for_status()
+                detail = r.json()
+                # Inject snippet from the list call so _normalize_gmail_message works
+                detail.setdefault("snippet", snippet_map.get(stub["id"], ""))
+                return detail
+            except Exception:
+                # Fallback: return a minimal dict that _normalize can handle safely
+                return {"id": stub["id"], "snippet": snippet_map.get(stub["id"], ""), "payload": {}}
+
+        return list(await asyncio.gather(*(fetch_metadata(s) for s in msg_stubs)))
 
     async def _fetch_google_calendar_events(self, access_token: str) -> List[Dict[str, Any]]:
         from datetime import datetime, timezone
         now_iso = datetime.now(timezone.utc).isoformat()
-        async with httpx.AsyncClient() as client:
+        async with _http_client() as client:
             response = await client.get(
                 "https://www.googleapis.com/calendar/v3/calendars/primary/events",
                 params={"maxResults": 5, "singleEvents": True, "orderBy": "startTime", "timeMin": now_iso},
@@ -766,7 +886,7 @@ class IntegrationService:
         return payload.get("items", [])
 
     async def _fetch_github_projects(self, access_token: str) -> List[Dict[str, Any]]:
-        async with httpx.AsyncClient() as client:
+        async with _http_client() as client:
             response = await client.get(
                 "https://api.github.com/user/repos",
                 params={"per_page": 5, "sort": "updated"},
@@ -821,7 +941,7 @@ class IntegrationService:
         meta = get_platform(platform)
         provider = meta.get("oauthProvider")
         try:
-            async with httpx.AsyncClient() as client:
+            async with _http_client() as client:
                 if provider == "google":
                     await client.post(
                         "https://oauth2.googleapis.com/revoke",

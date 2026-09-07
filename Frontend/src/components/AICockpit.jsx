@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { SiGmail, SiGooglecalendar, SiGoogledrive, SiGithub, SiZoom, SiNotion, SiJira, SiTrello } from 'react-icons/si';
 import ComposeEmailCard from './ComposeEmailCard';
+import { getChatConversations, getChatConversation, deleteChatConversation, uploadDocument, updateAutomation, deleteAutomation, getIntegrations } from '../api';
 
 /* ══════════════════════════════════════
    ICONS
@@ -25,6 +27,17 @@ const Ic = {
   back:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>,
   clock:   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
   brain:   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2z"/></svg>,
+};
+
+const INTEGRATION_ICONS = {
+  gmail: <SiGmail size={14} color="#EA4335" />,
+  google_calendar: <SiGooglecalendar size={14} color="#4285F4" />,
+  google_drive: <SiGoogledrive size={14} color="#34A853" />,
+  github: <SiGithub size={14} color="#fff" />,
+  zoom: <SiZoom size={14} color="#2D8CFF" />,
+  notion: <SiNotion size={14} color="#fff" />,
+  jira: <SiJira size={14} color="#579DFF" />,
+  trello: <SiTrello size={14} color="#579DFF" />,
 };
 
 /* ══════════════════════════════════════
@@ -176,6 +189,17 @@ function RealCalendarCard({ events, T, onDismiss }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function LiveDataNotice({ source, message, T, onOpenIntegrations }) {
+  const isError = source?.endsWith('_error');
+  return (
+    <div style={{ marginTop: 8, padding: '12px 14px', borderRadius: 12, background: isError ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.07)', border: `1px solid ${isError ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.2)'}` }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: isError ? '#fca5a5' : '#6ee7b7' }}>{isError ? 'Live data unavailable' : 'No live data found'}</div>
+      <div style={{ marginTop: 4, fontSize: 11, lineHeight: 1.5, color: 'rgba(255,255,255,0.55)' }}>{message || (isError ? 'The provider returned an error. Reconnect the integration and try again.' : 'The connected account returned no records for this request.')}</div>
+      {isError && <button onClick={onOpenIntegrations} style={{ marginTop: 9, padding: '5px 9px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.06)', color: T.primary, fontSize: 11, cursor: 'pointer' }}>Open Integrations</button>}
     </div>
   );
 }
@@ -352,32 +376,297 @@ function AnalyticsCard({ data, T, onDismiss }) {
   );
 }
 
-/** Render markdown: **bold**, *italic*, bullet • */
+/** Enhanced markdown renderer: tables, headers, lists, code blocks, links, quotes */
 function MdText({ text }) {
   if (!text) return null;
-  // Split by lines, then parse inline bold/italic
+  
   const lines = text.split('\n');
-  return (
-    <>
-      {lines.map((line, li) => {
-        // Parse **bold** and *italic* inline
-        const parts = line.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
-        const inline = parts.map((part, pi) => {
-          if (part.startsWith('**') && part.endsWith('**'))
-            return <strong key={pi} style={{ color: '#fff', fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
-          if (part.startsWith('*') && part.endsWith('*'))
-            return <em key={pi} style={{ color: 'rgba(255,255,255,0.85)' }}>{part.slice(1, -1)}</em>;
-          return <span key={pi}>{part}</span>;
-        });
-        return (
-          <span key={li}>
-            {inline}
-            {li < lines.length - 1 && <br />}
-          </span>
+  const elements = [];
+  let inTable = false;
+  let tableRows = [];
+  let inCodeBlock = false;
+  let codeLines = [];
+  let codeLang = '';
+  
+  // Helper: Parse inline markdown (bold, italic, code, links)
+  const parseInline = (str) => {
+    // Regex for: **bold**, *italic*, `code`, [link](url)
+    const parts = str.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
+    return parts.map((part, pi) => {
+      // Bold
+      if (part.startsWith('**') && part.endsWith('**'))
+        return <strong key={pi} style={{ color: '#fff', fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
+      // Italic
+      if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**'))
+        return <em key={pi} style={{ color: 'rgba(255,255,255,0.85)', fontStyle: 'italic' }}>{part.slice(1, -1)}</em>;
+      // Inline code
+      if (part.startsWith('`') && part.endsWith('`'))
+        return <code key={pi} style={{ 
+          background: 'rgba(255,255,255,0.1)', 
+          padding: '2px 6px', 
+          borderRadius: '4px', 
+          fontSize: '12px',
+          fontFamily: "'JetBrains Mono', monospace",
+          color: '#10b981'
+        }}>{part.slice(1, -1)}</code>;
+      // Links: [text](url)
+      const linkMatch = part.match(/\[([^\]]+)\]\(([^)]+)\)/);
+      if (linkMatch) {
+        return <a key={pi} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" style={{
+          color: '#3b82f6',
+          textDecoration: 'underline',
+          cursor: 'pointer'
+        }}>{linkMatch[1]}</a>;
+      }
+      return <span key={pi}>{part}</span>;
+    });
+  };
+  
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    
+    // Code block detection: ```lang
+    if (line.trim().startsWith('```')) {
+      if (!inCodeBlock) {
+        inCodeBlock = true;
+        codeLang = line.trim().slice(3).trim() || 'text';
+        codeLines = [];
+      } else {
+        // End of code block
+        elements.push(
+          <div key={`code-${li}`} style={{
+            background: 'rgba(0,0,0,0.3)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '8px',
+            padding: '12px',
+            margin: '12px 0',
+            overflow: 'auto'
+          }}>
+            <div style={{
+              fontSize: '10px',
+              color: 'rgba(255,255,255,0.4)',
+              marginBottom: '8px',
+              fontFamily: "'JetBrains Mono', monospace",
+              textTransform: 'uppercase'
+            }}>{codeLang}</div>
+            <pre style={{
+              margin: 0,
+              fontSize: '12px',
+              fontFamily: "'JetBrains Mono', monospace",
+              color: '#10b981',
+              lineHeight: 1.6,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word'
+            }}>{codeLines.join('\n')}</pre>
+          </div>
         );
-      })}
-    </>
-  );
+        inCodeBlock = false;
+        codeLines = [];
+        codeLang = '';
+      }
+      continue;
+    }
+    
+    if (inCodeBlock) {
+      codeLines.push(line);
+      continue;
+    }
+    
+    // Table detection: starts with |
+    if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+      if (!inTable) {
+        inTable = true;
+        tableRows = [];
+      }
+      tableRows.push(line);
+      
+      // Check if next line is not a table row (end of table)
+      if (li === lines.length - 1 || !lines[li + 1]?.trim().startsWith('|')) {
+        // Render table
+        elements.push(
+          <table key={`table-${li}`} style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            margin: '14px 0',
+            fontSize: '13px',
+            background: 'rgba(255,255,255,0.02)',
+            borderRadius: '10px',
+            overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.08)'
+          }}>
+            <tbody>
+              {tableRows.map((row, ri) => {
+                const cells = row.split('|').filter(c => c.trim());
+                const isHeader = ri === 0;
+                const isSeparator = ri === 1 && row.includes('---');
+                
+                if (isSeparator) return null; // Skip separator row
+                
+                return (
+                  <tr key={ri} style={{
+                    borderBottom: isHeader ? '2px solid rgba(255,255,255,0.15)' : '1px solid rgba(255,255,255,0.04)',
+                    transition: 'background 0.2s',
+                  }}>
+                    {cells.map((cell, ci) => {
+                      const Tag = isHeader ? 'th' : 'td';
+                      const content = parseInline(cell.trim());
+                      
+                      return (
+                        <Tag key={ci} style={{
+                          padding: '12px 14px',
+                          textAlign: 'left',
+                          fontWeight: isHeader ? 700 : 400,
+                          color: isHeader ? '#fff' : 'rgba(255,255,255,0.87)',
+                          background: isHeader ? 'rgba(255,255,255,0.06)' : 'transparent',
+                          fontSize: isHeader ? '13px' : '13px',
+                          letterSpacing: isHeader ? '0.3px' : '0'
+                        }}>
+                          {content}
+                        </Tag>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        );
+        inTable = false;
+        tableRows = [];
+      }
+      continue;
+    }
+    
+    // Blockquotes: > text
+    if (line.trim().startsWith('> ')) {
+      elements.push(
+        <div key={li} style={{
+          borderLeft: '3px solid rgba(59,130,246,0.5)',
+          paddingLeft: '12px',
+          marginLeft: '4px',
+          marginTop: '8px',
+          marginBottom: '8px',
+          color: 'rgba(255,255,255,0.7)',
+          fontStyle: 'italic'
+        }}>
+          {parseInline(line.trim().slice(2))}
+        </div>
+      );
+      continue;
+    }
+    
+    // Horizontal rule: --- or ***
+    if (line.trim() === '---' || line.trim() === '***') {
+      elements.push(
+        <hr key={li} style={{
+          border: 'none',
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+          margin: '16px 0'
+        }} />
+      );
+      continue;
+    }
+    
+    // Headers: ###, ##, or #
+    if (line.startsWith('###')) {
+      elements.push(
+        <h4 key={li} style={{ 
+          fontSize: '14px', 
+          fontWeight: 600, 
+          color: '#fff', 
+          margin: '14px 0 6px 0',
+          letterSpacing: '0.3px'
+        }}>
+          {parseInline(line.replace(/^###\s*/, ''))}
+        </h4>
+      );
+      continue;
+    }
+    if (line.startsWith('##')) {
+      elements.push(
+        <h3 key={li} style={{ 
+          fontSize: '16px', 
+          fontWeight: 700, 
+          color: '#fff', 
+          margin: '16px 0 8px 0',
+          letterSpacing: '0.3px'
+        }}>
+          {parseInline(line.replace(/^##\s*/, ''))}
+        </h3>
+      );
+      continue;
+    }
+    if (line.startsWith('#')) {
+      elements.push(
+        <h2 key={li} style={{ 
+          fontSize: '18px', 
+          fontWeight: 800, 
+          color: '#fff', 
+          margin: '18px 0 10px 0',
+          letterSpacing: '0.5px'
+        }}>
+          {parseInline(line.replace(/^#\s*/, ''))}
+        </h2>
+      );
+      continue;
+    }
+    
+    // Numbered lists: 1. item
+    if (line.trim().match(/^\d+\.\s/)) {
+      const content = line.trim().replace(/^\d+\.\s/, '');
+      const num = line.trim().match(/^(\d+)\./)[1];
+      elements.push(
+        <div key={li} style={{ 
+          display: 'flex', 
+          gap: '10px', 
+          marginLeft: '4px', 
+          marginTop: '4px',
+          alignItems: 'flex-start'
+        }}>
+          <span style={{ 
+            color: 'rgba(255,255,255,0.5)', 
+            minWidth: '20px',
+            fontWeight: 600,
+            fontSize: '12px'
+          }}>{num}.</span>
+          <span style={{ flex: 1 }}>{parseInline(content)}</span>
+        </div>
+      );
+      continue;
+    }
+    
+    // Bullet lists: - or *
+    if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+      const content = line.trim().slice(2);
+      elements.push(
+        <div key={li} style={{ 
+          display: 'flex', 
+          gap: '10px', 
+          marginLeft: '4px', 
+          marginTop: '4px',
+          alignItems: 'flex-start'
+        }}>
+          <span style={{ color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>•</span>
+          <span style={{ flex: 1 }}>{parseInline(content)}</span>
+        </div>
+      );
+      continue;
+    }
+    
+    // Regular text with inline formatting
+    const inline = parseInline(line);
+    
+    elements.push(
+      <div key={li} style={{ 
+        marginTop: line.trim() === '' ? '10px' : '2px',
+        lineHeight: '1.6'
+      }}>
+        {inline}
+      </div>
+    );
+  }
+  
+  return <>{elements}</>;
 }
 
 /** Render markdown: **bold**, *italic*, bullet • */
@@ -475,7 +764,151 @@ function getAIResponse(input) {
   return AI_RESPONSES.default(input);
 }
 
-export default function AICockpit({ user, theme, onBack }) {
+function TasksCard({ data, T, onDismiss }) {
+  const PRIORITY_COLOR = { high: '#ef4444', medium: '#f59e0b', low: '#10b981' };
+  const STATUS_ICON = { pending: '⏳', in_progress: '🔄', completed: '✅' };
+  const tasks = data?.tasks || [];
+  return (
+    <div style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 14, overflow: 'hidden', marginTop: 8 }}>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(245,158,11,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ width: 26, height: 26, borderRadius: 8, background: 'rgba(245,158,11,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✅</div>
+        <div style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace" }}>
+          TASKS · {data?.pending ?? 0} pending · {data?.in_progress ?? 0} in progress
+        </div>
+        <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 16 }}>×</button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {tasks.slice(0, 6).map((t, i) => (
+          <div key={t.id || i} style={{ padding: '9px 14px', borderBottom: i < tasks.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 13 }}>{STATUS_ICON[t.status] || '⏳'}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>Due: {t.due_date || '—'} · {t.assignee || 'Unassigned'}</div>
+            </div>
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: `${PRIORITY_COLOR[t.priority] || '#f59e0b'}18`, border: `1px solid ${PRIORITY_COLOR[t.priority] || '#f59e0b'}40`, color: PRIORITY_COLOR[t.priority] || '#f59e0b', flexShrink: 0 }}>{t.priority}</span>
+          </div>
+        ))}
+      </div>
+      {tasks.length === 0 && <div style={{ padding: '14px', textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>No tasks found. Try "Add task [title]"</div>}
+    </div>
+  );
+}
+
+function AutomationCard({ data, T, onDismiss }) {
+  const [active, setActive] = useState(data?.status !== 'paused');
+  const changeStatus = (nextActive) => {
+    setActive(nextActive);
+    updateAutomation(data?.id, { status: nextActive ? 'active' : 'paused' }).catch(() => setActive(!nextActive));
+  };
+  return (
+    <div style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 14, overflow: 'hidden', marginTop: 8 }}>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ width: 26, height: 26, borderRadius: 8, background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>⚡</div>
+        <div style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace" }}>AUTOMATION CREATED</div>
+        <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 16 }}>×</button>
+      </div>
+      <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{data?.name || 'Automation'}</span>
+          <button onClick={() => changeStatus(!active)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, background: active ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.12)', border: `1px solid ${active ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`, color: active ? '#10b981' : '#f59e0b', cursor: 'pointer' }}>{active ? '● Active' : 'Ⅱ Paused'}</button>
+        </div>
+        {[['Schedule', data?.schedule_human || data?.schedule || '—'], ['Next Run', data?.next_run || 'Tomorrow 08:00'], ['Type', data?.type?.replace('_', ' ') || 'custom']].map(([k, v]) => (
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+            <span style={{ color: 'rgba(255,255,255,0.4)' }}>{k}</span>
+            <span style={{ color: 'rgba(255,255,255,0.75)', fontFamily: "'JetBrains Mono',monospace", fontSize: 11 }}>{v}</span>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 7, marginTop: 3 }}>
+          <button onClick={() => changeStatus(true)} style={{ flex: 1, padding: '7px 8px', borderRadius: 7, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 11 }}>Activate</button>
+          <button onClick={() => { deleteAutomation(data?.id).catch(() => {}); onDismiss(); }} style={{ padding: '7px 10px', borderRadius: 7, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 11 }}>Delete</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportCard({ data, T, onDismiss }) {
+  const s = data?.sections || {};
+  const stats = [
+    { label: 'Emails Sent', value: s.emails?.sent ?? 15, color: '#3b82f6' },
+    { label: 'Team On-Track', value: s.team?.on_track ?? 3, color: '#10b981' },
+    { label: 'Deployments', value: s.deployments?.successful ?? 2, color: '#6366f1' },
+    { label: 'Productivity', value: `${s.productivity?.score ?? 87}%`, color: '#f59e0b' },
+  ];
+  return (
+    <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 14, overflow: 'hidden', marginTop: 8 }}>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(59,130,246,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ width: 26, height: 26, borderRadius: 8, background: 'rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>📋</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace" }}>{data?.report_type?.toUpperCase() || 'WEEKLY'} REPORT · {data?.period || 'This Week'}</div>
+        </div>
+        <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 16 }}>×</button>
+      </div>
+      {s.summary && <div style={{ padding: '10px 14px', fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>{s.summary}</div>}
+      <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {stats.map(stat => (
+          <div key={stat.label} style={{ padding: '8px 10px', borderRadius: 8, background: `${stat.color}10`, border: `1px solid ${stat.color}25` }}>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 3 }}>{stat.label}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: stat.color, fontFamily: "'JetBrains Mono',monospace" }}>{stat.value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MeetingTimeCard({ data, T, onDismiss }) {
+  const slots = data?.suggestions || [];
+  return (
+    <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 14, overflow: 'hidden', marginTop: 8 }}>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(16,185,129,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ width: 26, height: 26, borderRadius: 8, background: 'rgba(16,185,129,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>🕐</div>
+        <div style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace" }}>AVAILABLE TIME SLOTS · {data?.duration_minutes || 30} min</div>
+        <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 16 }}>×</button>
+      </div>
+      <div style={{ padding: '8px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {slots.map((slot, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: i === 0 ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.03)', border: `1px solid ${i === 0 ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.06)'}` }}>
+            {i === 0 && <span style={{ fontSize: 10, color: '#10b981', fontWeight: 700 }}>BEST</span>}
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#fff', flex: 1 }}>{slot.date} at {slot.time}</span>
+            <span style={{ fontSize: 10, color: slot.conflicts === 0 ? '#10b981' : '#f59e0b' }}>{slot.conflicts === 0 ? '✓ No conflicts' : `${slot.conflicts} conflict`}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CreatedEventCard({ data, T, onDismiss }) {
+  return (
+    <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 14, overflow: 'hidden', marginTop: 8 }}>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(16,185,129,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ width: 26, height: 26, borderRadius: 8, background: 'rgba(16,185,129,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>📅</div>
+        <div style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace" }}>EVENT SCHEDULED · {data?.source === 'google_calendar' ? 'Google Calendar' : 'Calendar'}</div>
+        <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 16 }}>×</button>
+      </div>
+      <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{data?.title || data?.event?.title || 'New Event'}</div>
+        {[
+          ['📅 Date', data?.date || data?.event?.date || '—'],
+          ['⏰ Time', `${data?.time || data?.event?.time || '—'} (${data?.duration_minutes || 30} min)`],
+          ['👥 Attendees', (data?.attendees || data?.event?.attendees || []).join(', ') || 'None'],
+        ].map(([label, value]) => value && value !== '—' && (
+          <div key={label} style={{ display: 'flex', gap: 8, fontSize: 12 }}>
+            <span style={{ color: 'rgba(255,255,255,0.4)', minWidth: 70 }}>{label}</span>
+            <span style={{ color: 'rgba(255,255,255,0.8)' }}>{value}</span>
+          </div>
+        ))}
+        {data?.meetLink && <a href={data.meetLink} target="_blank" rel="noopener noreferrer" style={{ marginTop: 4, padding: '8px 10px', borderRadius: 7, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)', fontSize: 11, color: '#6ee7b7', textAlign: 'center', textDecoration: 'none' }}>🎥 Join Google Meet</a>}
+        <div style={{ marginTop: 4, padding: '6px 10px', borderRadius: 7, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)', fontSize: 11, color: '#10b981', textAlign: 'center' }}>
+          {data?.email ? `✓ Invitation sent to ${data.attendees?.length || 0} recipients` : data?.message || '✓ Event added to Google Calendar'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIntegrations }) {
   const T = theme || { primary: '#3b82f6', secondary: '#7c3aed', accent: '#06b6d4', glow: 'rgba(59,130,246,0.3)' };
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Alex';
   const firstName = displayName.split(' ')[0];
@@ -491,16 +924,30 @@ export default function AICockpit({ user, theme, onBack }) {
   const [pins, setPins] = useState(DEFAULT_PINS);
   const [showAddPin, setShowAddPin] = useState(false);
   const [newPin, setNewPin] = useState('');
-  const [showModeMenu, setShowModeMenu] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
   const [searchQ, setSearchQ] = useState('');
   const [statsCount, setStatsCount] = useState({ handled: 12, saved: 3, actions: 7 });
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [conversationTitle, setConversationTitle] = useState('New workspace chat');
+  const [conversationHistory, setConversationHistory] = useState([]);
+  const [conversationId, setConversationId] = useState(() => {
+    const saved = localStorage.getItem('wp_active_conversation');
+    return saved || crypto.randomUUID();
+  });
+  const [showHistory, setShowHistory] = useState(false);
+  const [attachedFile, setAttachedFile] = useState(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [activeProvider, setActiveProvider] = useState('Groq GPT OSS 120B');
+  const [showIntegrations, setShowIntegrations] = useState(false);
+  const [connectionState, setConnectionState] = useState({ platforms: [], loading: true, error: false });
 
   const endRef = useRef(null);
   const inputRef = useRef(null);
   const thinkIdx = useRef(0);
+  const initialPromptSent = useRef('');
+  const fileInputRef = useRef(null);
+  const abortRef = useRef(null);
 
   useEffect(() => {
     const handleResize = () => setSidebarOpen(window.innerWidth >= 768);
@@ -509,14 +956,65 @@ export default function AICockpit({ user, theme, onBack }) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const loadConnectionState = useCallback(async () => {
+    setConnectionState(prev => ({ ...prev, loading: true, error: false }));
+    try {
+      const result = await getIntegrations();
+      const integrations = result?.data || [];
+      setConnectionState({ platforms: integrations, loading: false, error: false });
+    } catch {
+      setConnectionState(prev => ({ ...prev, loading: false, error: true }));
+    }
+  }, []);
+
+  useEffect(() => { loadConnectionState(); }, [loadConnectionState]);
+
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs, thinking]);
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  const sendMsg = useCallback(async () => {
-    if (!input.trim() || thinking) return;
-    const userText = input.trim();
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('wp_cockpit_history') || '[]');
+      setConversationHistory(Array.isArray(saved) ? saved : []);
+    } catch { setConversationHistory([]); }
+    try {
+      const savedPins = JSON.parse(localStorage.getItem('wp_cockpit_pins') || 'null');
+      if (Array.isArray(savedPins)) setPins(savedPins);
+    } catch { /* ignore malformed local state */ }
+    getChatConversations().then(result => {
+      const conversations = result?.conversations || result?.data?.conversations;
+      if (Array.isArray(conversations)) setConversationHistory(conversations);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('wp_active_conversation', conversationId);
+  }, [conversationId]);
+
+  useEffect(() => {
+    localStorage.setItem('wp_cockpit_pins', JSON.stringify(pins));
+  }, [pins]);
+
+  useEffect(() => {
+    const latestUserMessage = [...msgs].reverse().find(m => m.r === 'user');
+    if (!latestUserMessage) return;
+    const title = latestUserMessage.text.slice(0, 42) || 'New workspace chat';
+    setConversationTitle(title);
+    const record = { id: latestUserMessage.id, title, updatedAt: Date.now() };
+    setConversationHistory(prev => {
+      const next = [record, ...prev.filter(item => item.title !== title)].slice(0, 12);
+      localStorage.setItem('wp_cockpit_history', JSON.stringify(next));
+      return next;
+    });
+  }, [msgs]);
+
+  const sendMsg = useCallback(async (promptOverride) => {
+    const userText = (promptOverride ?? input).trim();
+    if (!userText || thinking) return;
+    const requestText = attachedFile ? `${userText}\n\nAttached file: ${attachedFile.name}` : userText;
     setInput('');
-    setMsgs(p => [...p, { id: Date.now(), r: 'user', text: userText, card: null, done: true }]);
+    setAttachedFile(null);
+    setMsgs(p => [...p, { id: Date.now(), r: 'user', text: requestText, card: null, done: true }]);
 
     setThinking(true);
     thinkIdx.current = 0;
@@ -540,17 +1038,47 @@ export default function AICockpit({ user, theme, onBack }) {
         authToken = stored?.accessToken || '';
       }
 
-      const res = await fetch(`${API}/ai/chat`, {
+      if (!authToken) {
+        throw new Error('Your workspace session is not authenticated. Sign in again to load live Gmail and Calendar data.');
+      }
+      let endpoint = `${API}/ai/superchat`;  // SuperBrain multi-agent endpoint
+      console.log('[WorkPilot] Chat endpoint:', endpoint, '| Auth: YES');
+
+      abortRef.current = new AbortController();
+      const streamTimeout = setTimeout(() => abortRef.current?.abort(), 45000);
+      const requestOptions = {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+        },
         body: JSON.stringify({
-          message: userText,
+          message: requestText,
+          conversation_id: conversationId,
           history: msgs.slice(-8).map(m => ({ role: m.r === 'ai' ? 'assistant' : 'user', content: m.text }))
         }),
-      });
+        signal: abortRef.current.signal,
+      };
+      let res = await fetch(endpoint, requestOptions);
+
+      // A stale token must not silently switch to a debug user with no workspace data.
+      if (res.status === 401 && authToken) {
+        throw new Error('Your workspace session expired. Sign in again to load live Gmail and Calendar data.');
+      }
 
       clearInterval(thinkTimer);
       setThinking(false);
+
+      // Log non-200 status for debugging
+      if (!res.ok) {
+        clearTimeout(streamTimeout);
+        abortRef.current = null;
+        const errText = await res.text();
+        console.error('[WorkPilot] Chat API error:', res.status, errText);
+        const msgId2 = Date.now() + 1;
+        setMsgs(p => [...p, { id: msgId2, r: 'ai', text: `❌ Backend error ${res.status}: ${errText.slice(0, 200)}`, card: null, streaming: false, done: true }]);
+        return;
+      }
 
       const msgId = Date.now() + 1;
       setMsgs(p => [...p, { id: msgId, r: 'ai', text: '', card: null, toolCall: null, toolResult: null, streaming: true, done: false }]);
@@ -560,10 +1088,35 @@ export default function AICockpit({ user, theme, onBack }) {
       const dec = new TextDecoder();
       let full = '';
       let buf = '';
+      let lastActivityTime = Date.now();
+      
+      // Monitor for stuck streams
+      const activityMonitor = setInterval(() => {
+        const elapsed = Date.now() - lastActivityTime;
+        if (elapsed > 15000) { // 15 seconds without activity
+          console.warn('[WorkPilot] Stream appears stuck, forcing completion');
+          clearInterval(activityMonitor);
+          clearTimeout(streamTimeout);
+          setThinking(false);
+          setMsgs(p => p.map(m => m.id === msgId ? {
+            ...m,
+            text: m.text || 'I encountered an issue processing your request. Please try again.',
+            done: true,
+            streaming: false,
+            toolCall: null,
+            error: true
+          } : m));
+          reader.cancel();
+        }
+      }, 2000);
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          clearInterval(activityMonitor);
+          break;
+        }
+        lastActivityTime = Date.now(); // Reset activity timer
         buf += dec.decode(value, { stream: true });
         const lines = buf.split('\n');
         buf = lines.pop(); // keep incomplete line
@@ -571,58 +1124,115 @@ export default function AICockpit({ user, theme, onBack }) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6).trim();
           if (payload === '[DONE]') {
+            clearTimeout(streamTimeout);
+            clearInterval(activityMonitor);
+            setThinking(false);  // Stop thinking animation
             setMsgs(p => p.map(m => m.id === msgId ? { ...m, done: true, streaming: false, toolCall: null } : m));
             break;
           }
           try {
             const parsed = JSON.parse(payload);
-            const { event, data } = parsed;
 
-            if (event === 'token') {
-              full += data;
-              setMsgs(p => p.map(m => m.id === msgId ? { ...m, text: full } : m));
+            // ── SuperBrain new event format: { type, content/tool/level/items } ──
+            if (parsed.type !== undefined) {
+              const { type, content, tool, message, level, items } = parsed;
 
-            } else if (event === 'tool_call') {
-              const labels = {
-                get_emails: 'Reading your emails...',
-                get_calendar_events: 'Checking your calendar...',
-                get_integrations_status: 'Checking integrations...',
-                get_analytics: 'Loading analytics...',
-                get_team_members: 'Fetching team status...',
-                get_deployments: 'Checking deployments...',
-                sync_integration: `Syncing ${data.args?.platform || 'integration'}...`,
-                compose_email: 'Preparing compose form...',
-                improve_text: `${data.args?.mode === 'fix_grammar' ? 'Fixing grammar' : data.args?.mode === 'rephrase' ? 'Rephrasing' : 'Improving'} your text...`,
-              };
-              const label = labels[data.name] || 'Using tool...';
-              setThinkMsg(label);
-              setThinking(true);
-              setMsgs(p => p.map(m => m.id === msgId ? { ...m, toolCall: { name: data.name, label } } : m));
+              if (type === 'token') {
+                full += content;
+                setMsgs(p => p.map(m => m.id === msgId ? { ...m, text: full } : m));
 
-            } else if (event === 'tool_result') {
-              setThinking(false);
-              const cardMap = {
-                get_emails: 'email', get_calendar_events: 'calendar',
-                get_team_members: 'team', get_deployments: 'deploy',
-                get_integrations_status: 'integrations', get_analytics: 'analytics',
-                compose_email: 'compose', improve_text: 'improve_text',
-              };
-              const card = cardMap[data.name] || null;
-              // For compose and improve_text: pass raw tool result as toolResult
-              setMsgs(p => p.map(m => m.id === msgId ? { ...m, toolCall: null, toolResult: data.result, card } : m));
+              } else if (type === 'thinking') {
+                setThinkMsg(content || 'Thinking...');
+                setThinking(true);
 
-            } else if (event === 'done') {
-              setMsgs(p => p.map(m => m.id === msgId ? { ...m, done: true, streaming: false, toolCall: null, card: m.card || data?.card || null } : m));
+              } else if (type === 'tool_start') {
+                setThinkMsg(message || `Running ${tool}...`);
+                setThinking(true);
+                setMsgs(p => p.map(m => m.id === msgId ? { ...m, toolCall: { name: tool, label: message } } : m));
 
-            } else if (event === 'error') {
-              setMsgs(p => p.map(m => m.id === msgId ? { ...m, text: `Error: ${data}`, done: true, streaming: false } : m));
+              } else if (type === 'tool_done') {
+                setThinking(false);
+                // Map tool name to card type
+                const cardMap = {
+                  get_emails: 'email', get_calendar_events: 'calendar',
+                  get_team_members: 'team', get_deployments: 'deploy',
+                  get_integrations_status: 'integrations', get_analytics: 'analytics',
+                  compose_email: 'compose', improve_text: 'improve_text',
+                  create_calendar_event: 'create_event', create_meet_and_email: 'create_event',
+                  schedule_automation: 'automation', generate_report: 'report',
+                  find_meeting_time: 'meeting_time', task_management: 'tasks',
+                  notion_tool: 'notion', diagnose_issue: 'diagnose',
+                  get_system_health: 'health', get_weather: 'weather',
+                  github_tool: 'github', jira_tool: 'jira',
+                };
+                const card = cardMap[tool] || null;
+                setMsgs(p => p.map(m => m.id === msgId ? { ...m, toolCall: null, card: m.card || card } : m));
+
+              } else if (type === 'alert') {
+                // Show alert as a special inline message
+                const alertColors = { error: '#ef4444', warning: '#f59e0b', info: '#3b82f6' };
+                const alertIcons  = { error: '🔴', warning: '⚠️', info: 'ℹ️' };
+                setMsgs(p => p.map(m => m.id === msgId
+                  ? { ...m, alerts: [...(m.alerts || []), { level: level || 'info', message, color: alertColors[level] || '#3b82f6', icon: alertIcons[level] || 'ℹ️' }] }
+                  : m
+                ));
+
+              } else if (type === 'suggestions') {
+                setMsgs(p => p.map(m => m.id === msgId ? { ...m, suggestions: items || [] } : m));
+              }
+
+            // ── Legacy format: { event, data } (old /ai/chat endpoint) ──
+            } else {
+              const { event, data } = parsed;
+              if (event === 'token') {
+                full += data;
+                setMsgs(p => p.map(m => m.id === msgId ? { ...m, text: full } : m));
+              } else if (event === 'tool_call') {
+                setThinkMsg(data?.label || '🤖 Processing...');
+                setThinking(true);
+                setMsgs(p => p.map(m => m.id === msgId ? { ...m, toolCall: { name: data?.name, label: data?.label } } : m));
+              } else if (event === 'tool_result') {
+                setThinking(false);
+                setMsgs(p => p.map(m => m.id === msgId ? { ...m, toolCall: null } : m));
+              } else if (event === 'done') {
+                if (data?.provider === 'gemini') setActiveProvider('Gemini');
+                if (data?.provider === 'groq') setActiveProvider('Groq Llama');
+                setMsgs(p => p.map(m => m.id === msgId ? { ...m, done: true, streaming: false, toolCall: null } : m));
+              } else if (event === 'error') {
+                setThinking(false);
+                setMsgs(p => p.map(m => m.id === msgId ? { ...m, text: `I couldn't complete that action.\n\n${data}`, error: true, done: true, streaming: false } : m));
+              }
             }
+
+            // Also check for simple { token: "..." } legacy format
+            if (parsed.token !== undefined && parsed.type === undefined && parsed.event === undefined) {
+              full += parsed.token;
+              setMsgs(p => p.map(m => m.id === msgId ? { ...m, text: full } : m));
+            }
+
           } catch { /* skip malformed line */ }
         }
       }
+      
+      // Safety net: Ensure stream is marked complete even if [DONE] wasn't received
+      clearInterval(activityMonitor);
+      clearTimeout(streamTimeout);
+      setThinking(false);
+      setMsgs(p => p.map(m => {
+        if (m.id === msgId && !m.done) {
+          console.warn('[WorkPilot] Stream ended without [DONE], forcing completion');
+          return { ...m, done: true, streaming: false, toolCall: null };
+        }
+        return m;
+      }));
+      
+      abortRef.current = null;
     } catch (err) {
+      clearInterval(activityMonitor);
       clearInterval(thinkTimer);
       setThinking(false);
+      abortRef.current = null;
+      if (err?.name === 'AbortError') return;
       // Offline fallback
       const fallbacks = {
         email: 'I checked your inbox. You have 5 emails — 2 urgent (CFO Budget, Acme complaint). Want me to draft replies?',
@@ -636,7 +1246,14 @@ export default function AICockpit({ user, theme, onBack }) {
       setMsgs(p => [...p, { id: msgId, r: 'ai', text: fallbackText, card: key || null, streaming: false, done: true }]);
       setStatsCount(p => ({ ...p, handled: p.handled + 1 }));
     }
-  }, [input, thinking, msgs]);
+  }, [attachedFile, conversationId, input, thinking, msgs]);
+
+  useEffect(() => {
+    if (initialPrompt && initialPromptSent.current !== initialPrompt) {
+      initialPromptSent.current = initialPrompt;
+      sendMsg(initialPrompt);
+    }
+  }, [initialPrompt, sendMsg]);
 
 
   const startListening = useCallback(() => {
@@ -651,7 +1268,7 @@ export default function AICockpit({ user, theme, onBack }) {
     r.start();
   }, []);
 
-  const usePin = (prompt) => { setInput(prompt); inputRef.current?.focus(); };
+  const applyPinnedPrompt = (prompt) => { setInput(prompt); inputRef.current?.focus(); };
 
   const copyMsg = (id, text) => {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -661,9 +1278,34 @@ export default function AICockpit({ user, theme, onBack }) {
 
   const removeCard = (id) => setMsgs(p => p.map(m => m.id === id ? { ...m, card: null } : m));
 
+  const startNewChat = () => {
+    setMsgs([{ id: Date.now(), r: 'ai', text: `Welcome back, ${firstName}. What would you like to get done?`, card: null, streaming: false, done: true }]);
+    setInput('');
+    setConversationTitle('New workspace chat');
+    setConversationId(crypto.randomUUID());
+    setSearchQ('');
+    setShowHistory(false);
+    inputRef.current?.focus();
+  };
+
+  const attachFile = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingFile(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    uploadDocument(formData)
+      .then(result => setAttachedFile({ name: file.name, size: file.size, documentId: result?.id || result?.data?.id }))
+      .catch(() => setAttachedFile({ name: file.name, size: file.size }))
+      .finally(() => setUploadingFile(false));
+    event.target.value = '';
+  };
+
   const filteredMsgs = searchQ
     ? msgs.filter(m => m.text?.toLowerCase().includes(searchQ.toLowerCase()))
     : msgs;
+  const connectedPlatforms = connectionState.platforms.filter(integration => integration.connected);
+  const integrationCount = connectionState.platforms.length;
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: '#000', color: '#fff', fontFamily: "'Inter',sans-serif", overflow: 'hidden', position: 'relative' }}>
@@ -682,6 +1324,10 @@ export default function AICockpit({ user, theme, onBack }) {
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace" }}>AI Chief of Staff</div>
             </div>
           </div>
+
+          <button onClick={startNewChat} className="new-chat-btn" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 36, borderRadius: 9, background: '#fff', color: '#08080b', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+            {Ic.plus} New chat
+          </button>
 
           {/* AI MODE SWITCHER */}
           <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: 4 }}>
@@ -713,6 +1359,36 @@ export default function AICockpit({ user, theme, onBack }) {
           </div>
         </div>
 
+        <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <button onClick={() => setShowHistory(v => !v)} className="section-toggle" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', color: 'rgba(255,255,255,0.55)', cursor: 'pointer', padding: 0 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', fontFamily: "'JetBrains Mono',monospace" }}>RECENT CHATS</span>
+            <span style={{ fontSize: 11 }}>{showHistory ? 'Hide' : conversationHistory.length || '0'}</span>
+          </button>
+          {showHistory && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 9 }}>
+              {conversationHistory.length === 0 && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Your recent chats will appear here.</span>}
+              {conversationHistory.map(chat => (
+                <div key={chat.id} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <button onClick={() => {
+                    getChatConversation(chat.id).then(result => {
+                      const conversation = result?.conversation || result?.data?.conversation;
+                      if (conversation) {
+                        setMsgs(conversation.messages.map((message, index) => ({ id: `${chat.id}-${index}`, r: message.role === 'assistant' ? 'ai' : 'user', text: message.content, card: null, done: true })));
+                        setConversationId(chat.id);
+                        setConversationTitle(conversation.title || chat.title);
+                      }
+                    }).catch(() => {});
+                    setInput(''); inputRef.current?.focus();
+                  }} className="history-row" style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.65)', padding: '7px 8px', borderRadius: 7, cursor: 'pointer', fontSize: 11 }}>
+                    {chat.title}
+                  </button>
+                  <button onClick={() => { deleteChatConversation(chat.id).catch(() => {}); setConversationHistory(prev => prev.filter(item => item.id !== chat.id)); }} aria-label="Delete conversation" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: 3 }}>{Ic.x}</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Pinned Prompts */}
         <div style={{ padding: '16px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)', flex: 1, overflowY: 'auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -730,7 +1406,7 @@ export default function AICockpit({ user, theme, onBack }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {pins.map(p => (
               <div key={p.id} className="pin-row" style={{ display: 'flex', alignItems: 'center' }}>
-                <button onClick={() => usePin(p.prompt)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'transparent', border: 'none', borderRadius: 8, cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s' }} className="pin-btn">
+                <button onClick={() => applyPinnedPrompt(p.prompt)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'transparent', border: 'none', borderRadius: 8, cursor: 'pointer', textAlign: 'left', transition: 'background 0.2s' }} className="pin-btn">
                   <span style={{ color: T.accent, display: 'flex', flexShrink: 0 }}>{Ic.star}</span>
                   <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.label}</span>
                 </button>
@@ -788,9 +1464,12 @@ export default function AICockpit({ user, theme, onBack }) {
             {Ic.back} Dashboard
           </button>
 
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minWidth: 0 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
-            <span style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 15, color: '#fff' }}>AI Cockpit</span>
+            <div style={{ minWidth: 0, textAlign: 'center' }}>
+              <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 14, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conversationTitle}</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>WorkPilot AI · {activeProvider}</div>
+            </div>
             <div style={{ padding: '2px 8px', borderRadius: 99, background: `${MODES[mode].color}15`, border: `1px solid ${MODES[mode].color}30`, fontSize: 10, fontWeight: 600, color: MODES[mode].color, marginLeft: 4 }}>
               {MODES[mode].label}
             </div>
@@ -806,6 +1485,28 @@ export default function AICockpit({ user, theme, onBack }) {
             </div>
           </div>
         </header>
+
+        <div style={{ position: 'relative', minHeight: 42, padding: '4px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderBottom: '1px solid rgba(255,255,255,0.04)', background: 'rgba(255,255,255,0.015)', flexShrink: 0 }}>
+          <span className="status-pill"><span className="status-dot" /> {activeProvider}</span>
+          <button onClick={() => setShowIntegrations(value => !value)} title="View all integration connections" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.1)', background: showIntegrations ? 'rgba(99,102,241,0.14)' : 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 10, cursor: 'pointer' }}>
+            <span style={{ display: 'flex', gap: 3 }}>{connectedPlatforms.slice(0, 4).map(integration => <span key={integration.platform}>{INTEGRATION_ICONS[integration.platform] || Ic.pin}</span>)}</span>
+            {connectionState.loading ? 'Checking integrations' : connectionState.error ? 'Status unavailable' : `${connectedPlatforms.length}/${integrationCount} connected`}
+            {!connectionState.loading && !connectionState.error && <span style={{ color: '#10b981' }}>●</span>}
+          </button>
+          <button onClick={loadConnectionState} title="Refresh integration status" style={{ padding: '4px 7px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: 'rgba(255,255,255,0.45)', cursor: 'pointer', fontSize: 13 }}>↻</button>
+          {showIntegrations && !connectionState.loading && !connectionState.error && (
+            <div style={{ position: 'absolute', zIndex: 5, top: 'calc(100% + 8px)', right: 20, width: 'min(360px, calc(100vw - 40px))', padding: 10, borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)', background: '#101014', boxShadow: '0 16px 40px rgba(0,0,0,0.45)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 5px 9px', color: 'rgba(255,255,255,0.55)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}><span>Workspace connections</span><span>{connectedPlatforms.length} active</span></div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 5 }}>
+                {connectionState.platforms.map(integration => (
+                  <button key={integration.platform} onClick={onOpenIntegrations} title={`Manage ${integration.displayName}`} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, padding: '7px 8px', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7, background: 'rgba(255,255,255,0.03)', color: integration.connected ? '#d1fae5' : 'rgba(255,255,255,0.48)', cursor: 'pointer', fontSize: 10, textAlign: 'left' }}>
+                    <span style={{ display: 'flex', flexShrink: 0 }}>{INTEGRATION_ICONS[integration.platform] || Ic.pin}</span><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{integration.displayName}</span><span style={{ marginLeft: 'auto', color: integration.connected ? '#10b981' : '#6b7280' }}>●</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* MESSAGES */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -826,16 +1527,18 @@ export default function AICockpit({ user, theme, onBack }) {
                 <div style={{
                   padding: msg.r === 'user' ? '12px 16px' : '14px 16px',
                   borderRadius: msg.r === 'user' ? '18px 4px 18px 18px' : '4px 18px 18px 18px',
-                  background: msg.r === 'user' ? `linear-gradient(135deg,${T.primary},${T.secondary})` : 'rgba(255,255,255,0.08)',
-                  border: msg.r === 'ai' ? '1px solid rgba(255,255,255,0.09)' : 'none',
-                  borderLeft: msg.r === 'ai' ? `3px solid ${T.primary}50` : 'none',
+                  background: msg.r === 'user' ? `linear-gradient(135deg,${T.primary},${T.secondary})` : msg.error ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.08)',
+                  border: msg.r === 'ai' ? `1px solid ${msg.error ? 'rgba(239,68,68,0.35)' : 'rgba(255,255,255,0.09)'}` : 'none',
+                  borderLeft: msg.r === 'ai' ? `3px solid ${msg.error ? '#ef4444' : `${T.primary}50`}` : 'none',
                   fontSize: 14, lineHeight: 1.7, color: '#fff',
                   boxShadow: msg.r === 'user' ? `0 6px 24px ${T.glow}` : 'none',
                   width: '100%'
                 }}>
-                  {msg.streaming && !msg.done
-                    ? <StreamText text={msg.text} onDone={() => setMsgs(p => p.map(m => m.id === msg.id ? { ...m, done: true } : m))} />
-                    : <MdText text={msg.text} />}
+                  {/* Render text directly — StreamText caused blank bubble by restarting from char 0 on each token */}
+                  <MdText text={msg.text} />
+                  {msg.streaming && !msg.done && (
+                    <span style={{ display: 'inline-block', width: 2, height: '1em', background: 'rgba(255,255,255,0.7)', marginLeft: 2, animation: 'blink .7s step-end infinite', verticalAlign: 'text-bottom' }} />
+                  )}
 
                   {/* Tool call status badge */}
                   {msg.toolCall && (
@@ -850,7 +1553,10 @@ export default function AICockpit({ user, theme, onBack }) {
                         {msg.card === 'email' && (
                           msg.toolResult?.emails?.length > 0
                             ? <RealEmailsCard emails={msg.toolResult.emails} source={msg.toolResult.source} T={T} onDismiss={() => removeCard(msg.id)} />
-                            : <EmailCard T={T} onSend={() => { removeCard(msg.id); setStatsCount(p => ({ ...p, saved: p.saved + 1, actions: p.actions + 1 })); }} onDiscard={() => removeCard(msg.id)} />
+                            : // Only show "No live data" notice if the main text response is also empty/short
+                              (!msg.text || msg.text.length < 100)
+                                ? <LiveDataNotice source={msg.toolResult?.source} message={msg.toolResult?.note || msg.toolResult?.error} T={T} onOpenIntegrations={onOpenIntegrations} />
+                                : null
                         )}
                         {msg.card === 'compose' && msg.toolResult && (
                           <ComposeEmailCard
@@ -878,7 +1584,10 @@ export default function AICockpit({ user, theme, onBack }) {
                         {msg.card === 'calendar' && (
                           msg.toolResult?.events?.length > 0
                             ? <RealCalendarCard events={msg.toolResult.events} T={T} onDismiss={() => removeCard(msg.id)} />
-                            : <CalendarCard T={T} onConfirm={() => { removeCard(msg.id); setStatsCount(p => ({ ...p, actions: p.actions + 1 })); }} onDiscard={() => removeCard(msg.id)} />
+                            : // Only show "No live data" notice if the main text response is also empty/short
+                              (!msg.text || msg.text.length < 100)
+                                ? <LiveDataNotice source={msg.toolResult?.source} message={msg.toolResult?.note || msg.toolResult?.error} T={T} onOpenIntegrations={onOpenIntegrations} />
+                                : null
                         )}
                         {msg.card === 'deploy' && <DeployCard T={T} data={msg.toolResult} />}
                         {msg.card === 'team' && <TeamCard data={msg.toolResult} />}
@@ -888,10 +1597,79 @@ export default function AICockpit({ user, theme, onBack }) {
                         {msg.card === 'analytics' && (
                           <AnalyticsCard data={msg.toolResult} T={T} onDismiss={() => removeCard(msg.id)} />
                         )}
+                        {msg.card === 'tasks' && msg.toolResult && (
+                          <TasksCard data={msg.toolResult} T={T} onDismiss={() => removeCard(msg.id)} />
+                        )}
+                        {msg.card === 'automation' && msg.toolResult && (
+                          <AutomationCard data={msg.toolResult} T={T} onDismiss={() => removeCard(msg.id)} />
+                        )}
+                        {msg.card === 'report' && msg.toolResult && (
+                          <ReportCard data={msg.toolResult} T={T} onDismiss={() => removeCard(msg.id)} />
+                        )}
+                        {msg.card === 'meeting_time' && msg.toolResult && (
+                          <MeetingTimeCard data={msg.toolResult} T={T} onDismiss={() => removeCard(msg.id)} />
+                        )}
+                        {msg.card === 'create_event' && msg.toolResult && (
+                          <CreatedEventCard data={msg.toolResult} T={T} onDismiss={() => removeCard(msg.id)} />
+                        )}
                       </div>
                     </>
                   )}
                 </div>
+
+                {/* ── SuperBrain Alert Banners ───────────────────────────── */}
+                {msg.r === 'ai' && msg.alerts?.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                    {msg.alerts.map((alert, ai) => (
+                      <div key={ai} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 8,
+                        padding: '8px 12px', borderRadius: 10,
+                        background: alert.level === 'error'   ? 'rgba(239,68,68,0.1)'
+                                  : alert.level === 'warning' ? 'rgba(245,158,11,0.1)'
+                                  : 'rgba(59,130,246,0.1)',
+                        border: `1px solid ${
+                          alert.level === 'error'   ? 'rgba(239,68,68,0.3)'
+                        : alert.level === 'warning' ? 'rgba(245,158,11,0.3)'
+                        : 'rgba(59,130,246,0.3)'}`,
+                      }}>
+                        <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>
+                          {alert.level === 'error' ? '🔴' : alert.level === 'warning' ? '⚠️' : 'ℹ️'}
+                        </span>
+                        <span style={{
+                          fontSize: 12, lineHeight: 1.5,
+                          color: alert.level === 'error'   ? '#fca5a5'
+                               : alert.level === 'warning' ? '#fcd34d'
+                               : '#93c5fd',
+                        }}>{alert.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* ── Smart Suggestion Chips ─────────────────────────────── */}
+                {msg.r === 'ai' && msg.done && msg.suggestions?.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                    {msg.suggestions.map((sug, si) => (
+                      <button
+                        key={si}
+                        onClick={() => sendMsg(sug)}
+                        style={{
+                          padding: '5px 11px', borderRadius: 20,
+                          background: 'rgba(255,255,255,0.05)',
+                          border: `1px solid ${T.primary}40`,
+                          color: T.primary, fontSize: 11, fontWeight: 500,
+                          cursor: 'pointer', fontFamily: "'Inter',sans-serif",
+                          whiteSpace: 'nowrap', transition: 'all 0.15s',
+                          display: 'flex', alignItems: 'center', gap: 5,
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = `${T.primary}18`; e.currentTarget.style.borderColor = `${T.primary}80`; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = `${T.primary}40`; }}
+                      >
+                        {Ic.arr} {sug}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Actions */}
                 {msg.done && (
@@ -983,7 +1761,8 @@ export default function AICockpit({ user, theme, onBack }) {
               padding: '10px 14px', 
               transition: 'all 0.25s' 
             }} className="ibar">
-              <div style={{ color: T.primary, display: 'flex', flexShrink: 0, paddingLeft: 4 }}>{Ic.bolt}</div>
+              <button onClick={() => fileInputRef.current?.click()} title="Attach a file" className="composer-icon" style={{ color: T.primary, display: 'flex', flexShrink: 0, padding: 4, background: 'none', border: 'none', cursor: 'pointer' }}>{Ic.docs}</button>
+              <input ref={fileInputRef} type="file" onChange={attachFile} style={{ display: 'none' }} />
               
               <textarea
                 ref={inputRef}
@@ -1013,26 +1792,32 @@ export default function AICockpit({ user, theme, onBack }) {
                   {Ic.mic}
                 </button>
                 <button
-                  onClick={sendMsg}
-                  disabled={!input.trim() || thinking}
+                  onClick={() => { if (thinking) abortRef.current?.abort(); else sendMsg(); }}
+                  disabled={uploadingFile || (!input.trim() && !thinking)}
                   style={{ 
                     width: 38, height: 38, borderRadius: '50%', 
                     background: `linear-gradient(135deg,${T.primary},${T.secondary})`, 
                     border: 'none', color: '#fff', 
-                    cursor: input.trim() && !thinking ? 'pointer' : 'not-allowed', 
+                    cursor: thinking || input.trim() ? 'pointer' : 'not-allowed',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', 
                     transition: 'all 0.2s', 
                     boxShadow: input.trim() && !thinking ? `0 4px 14px ${T.glow}` : 'none',
-                    opacity: input.trim() && !thinking ? 1 : 0.4
+                    opacity: thinking || input.trim() ? 1 : 0.4
                   }}
                 >
-                  {Ic.send}
+                  {thinking ? Ic.x : Ic.send}
                 </button>
               </div>
             </div>
+            {attachedFile && (
+              <div className="attachment-chip" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 7, padding: '5px 9px', borderRadius: 7, background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)', color: 'rgba(255,255,255,0.75)', fontSize: 11 }}>
+                {Ic.docs} <span>{attachedFile.name}</span>
+                <button onClick={() => setAttachedFile(null)} aria-label="Remove attachment" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: 0 }}>{Ic.x}</button>
+            </div>
+            )}
             
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 12px' }}>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: "'Inter',sans-serif" }}>Enter to send · Shift+Enter for newline</span>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: "'Inter',sans-serif" }}>Enter to send · Shift+Enter for newline · Attach context</span>
               <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: "'Inter',sans-serif" }}>{input.length}/2000</span>
             </div>
           </div>
@@ -1081,10 +1866,23 @@ export default function AICockpit({ user, theme, onBack }) {
 
         .back-btn:hover { color: #fff!important; background: rgba(255,255,255,0.05)!important; }
         .pin-btn:hover { background: rgba(255,255,255,0.06)!important; }
+        .new-chat-btn:hover { background: #dbeafe!important; transform: translateY(-1px); }
+        .history-row:hover { background: rgba(255,255,255,0.07)!important; color: #fff!important; }
+        .section-toggle:hover { color: #fff!important; }
+        .composer-icon:hover { color: #fff!important; background: rgba(255,255,255,0.07)!important; border-radius: 6px; }
         .pin-row:hover .pin-del { display: flex!important; }
         .sinput:focus { border-color: rgba(59,130,246,0.4)!important; background: rgba(255,255,255,0.08)!important; }
         .ibar:focus-within { border-color: rgba(59,130,246,0.4)!important; box-shadow: 0 0 0 3px rgba(59,130,246,0.1)!important; }
         .mic-btn:hover { background: rgba(255,255,255,0.1)!important; }
+        .status-pill { display: inline-flex; align-items: center; gap: 5px; color: rgba(255,255,255,0.4); font-size: 10px; }
+        .status-dot { width: 5px; height: 5px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 5px rgba(245,158,11,0.55); }
+        .status-dot.connected { background: #10b981; box-shadow: 0 0 5px rgba(16,185,129,0.55); }
+        @media (max-width: 640px) {
+          .status-pill:nth-child(3) { display: none; }
+          .status-pill { font-size: 9px; }
+          .sinput { width: 34px!important; padding: 6px 10px!important; }
+          .sinput:focus { width: 130px!important; padding: 6px 28px!important; }
+        }
       `}</style>
     </div>
   );

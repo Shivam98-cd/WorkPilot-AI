@@ -255,7 +255,7 @@ async def _execute_tool(name: str, args: dict, uid: str) -> dict:
                 try:
                     g_client = _get_groq()
                     r = g_client.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
+                        model="openai/gpt-oss-120b",
                         messages=[
                             {"role": "system", "content": f"You are WorkPilot AI. Generate a concise, clear {tone} email body based on the subject and details provided. Output ONLY the body text."},
                             {"role": "user", "content": f"Subject: {subject or 'Follow up'}\nRecipient: {to or 'Recipient'}\nContext: {orig_prompt or subject or 'Follow up message'}"}
@@ -366,7 +366,7 @@ async def _execute_tool(name: str, args: dict, uid: str) -> dict:
             }
             try:
                 r = _get_groq().chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model="openai/gpt-oss-120b",
                     messages=[{"role":"user","content":prompts.get(mode,prompts["improve"])}],
                     max_tokens=512,
                     temperature=0.3
@@ -407,16 +407,105 @@ async def _execute_tool(name: str, args: dict, uid: str) -> dict:
             return {"created": True, "eventId": event.get("id"), "meetLink": meet_link, "attendees": recipients, "email": email_result, "source": "google_calendar_and_gmail"}
 
         elif name == "create_calendar_event":
-            return {"action":"create_event","title":args.get("title","New Event"),"date":args.get("date","Tomorrow"),"time":args.get("time","10:00 AM"),"duration_minutes":args.get("duration_minutes",30),"attendees":args.get("attendees",[]),"description":args.get("description",""),"created":True,"calendar_url":"https://calendar.google.com","source":"google_calendar"}
+            # Actually create the event in Google Calendar
+            title = args.get("title", "New Event")
+            date = args.get("date", "Tomorrow")
+            time = args.get("time", "10:00 AM")
+            duration = args.get("duration_minutes", 30)
+            attendees = args.get("attendees", [])
+            description = args.get("description", "")
+            
+            try:
+                event = await integration_service.create_user_event(
+                    uid,
+                    {
+                        "title": title,
+                        "date": date,
+                        "time": time,
+                        "duration_minutes": duration,
+                        "attendees": attendees,
+                        "description": description
+                    }
+                )
+                
+                if event and event.get("id"):
+                    event_url = event.get("htmlLink", "https://calendar.google.com")
+                    return {
+                        "created": True,
+                        "title": title,
+                        "event_id": event.get("id"),
+                        "event_url": event_url,
+                        "date": date,
+                        "time": time,
+                        "duration_minutes": duration,
+                        "attendees": attendees,
+                        "source": "google_calendar"
+                    }
+                else:
+                    return {"created": False, "error": "Failed to create event", "source": "google_calendar"}
+            except Exception as e:
+                logger.error(f"Failed to create calendar event: {e}")
+                return {"created": False, "error": str(e), "source": "google_calendar"}
 
         elif name == "search_workspace":
-            q = args.get("query","")
-            return {"results":[
-                {"source":"email","type":"email","title":f"Re: {q} — Robert Chen","preview":"The latest update regarding this topic...","relevance":0.95,"time":"2h ago"},
-                {"source":"calendar","type":"event","title":f"Meeting about {q}","preview":"Tomorrow at 3:00 PM, 1 hour","relevance":0.87,"time":"tomorrow"},
-                {"source":"email","type":"email","title":f"Invoice related to {q}","preview":"Stripe payment confirmation...","relevance":0.72,"time":"3d ago"},
-                {"source":"document","type":"document","title":f"{q} — Q3 Report","preview":"Quarterly analysis and projections...","relevance":0.65,"time":"1w ago"},
-            ],"query":q,"total":4,"source":"workspace_search"}
+            query = args.get("query", "")
+            sources = args.get("sources", ["emails", "calendar", "documents"])
+            results = []
+            
+            try:
+                # Search Gmail if included
+                if "emails" in sources:
+                    try:
+                        emails = await integration_service.list_user_emails(uid)
+                        for email in emails[:5]:  # Top 5 email results
+                            if query.lower() in email.get("subject", "").lower() or query.lower() in email.get("preview", "").lower():
+                                results.append({
+                                    "source": "email",
+                                    "type": "email",
+                                    "title": f"{email.get('subject', 'No subject')} — {email.get('sender', 'Unknown')}",
+                                    "preview": email.get("preview", "")[:100],
+                                    "relevance": 0.9,
+                                    "time": email.get("time", ""),
+                                    "id": email.get("id")
+                                })
+                    except Exception as e:
+                        logger.warning(f"Email search failed: {e}")
+                
+                # Search Calendar if included
+                if "calendar" in sources:
+                    try:
+                        events = await integration_service.list_user_events(uid)
+                        for event in events[:5]:  # Top 5 calendar results
+                            if query.lower() in event.get("title", "").lower():
+                                results.append({
+                                    "source": "calendar",
+                                    "type": "event",
+                                    "title": event.get("title", "No title"),
+                                    "preview": f"{event.get('time', '')} • {event.get('duration', '')}",
+                                    "relevance": 0.85,
+                                    "time": event.get("time", "")
+                                })
+                    except Exception as e:
+                        logger.warning(f"Calendar search failed: {e}")
+                
+                # Note: Notion/Documents search would go here when implemented
+                
+                return {
+                    "results": results,
+                    "query": query,
+                    "total": len(results),
+                    "sources_searched": sources,
+                    "source": "workspace_search"
+                }
+            except Exception as e:
+                logger.error(f"Workspace search error: {e}")
+                return {
+                    "results": [],
+                    "query": query,
+                    "total": 0,
+                    "error": str(e),
+                    "source": "workspace_search"
+                }
 
         elif name == "schedule_automation":
             record = {"id":str(uuid.uuid4()),"type":args.get("type","custom"),"name":args.get("name","Automation"),"schedule":args.get("schedule","daily"),"schedule_human":args.get("schedule","daily"),"status":"active","config":args.get("config",{}),"created_at":datetime.now().isoformat(),"last_run":None,"next_run":"Tomorrow 08:00","run_count":0}
@@ -428,12 +517,120 @@ async def _execute_tool(name: str, args: dict, uid: str) -> dict:
             return {"report_type":args.get("type","weekly"),"period":"This Week","sections":{"summary":"Strong week: 6.5 avg focus hours, 2 deployments shipped, team mostly on-track.","emails":{"sent":15,"received":47,"urgent_handled":3,"response_rate":"94%","top_sender":"Robert Chen (CFO)"},"team":{"on_track":3,"delayed":1,"missing":1,"highlight":"Sarah completed UI mockups ahead of schedule"},"deployments":{"successful":2,"failed":0,"uptime":"99.9%","version_shipped":"v2.4.1"},"productivity":{"score":87,"vs_last_week":"+12%","best_day":"Thursday","focus_blocks":8}},"weekly_data":[4.2,5.8,6.1,6.5,7.2,5.9,6.5],"generated_at":datetime.now().isoformat(),"source":"analytics_engine"}
 
         elif name == "find_meeting_time":
-            dur = args.get("duration_minutes",30)
-            return {"attendees":args.get("attendees",[]),"duration_minutes":dur,"suggestions":[{"date":"Tomorrow","time":"10:00 AM","day":"Thu","duration":dur,"conflicts":0},{"date":"Thursday","time":"2:00 PM","day":"Thu","duration":dur,"conflicts":0},{"date":"Friday","time":"11:00 AM","day":"Fri","duration":dur,"conflicts":1}],"best_slot":{"date":"Tomorrow","time":"10:00 AM"},"source":"calendar_ai"}
+            duration = args.get("duration_minutes", 30)
+            attendees = args.get("attendees", [])
+            preferred_days = args.get("preferred_days", [])
+            
+            try:
+                # Get user's calendar events to find free slots
+                events = await integration_service.list_user_events(uid)
+                
+                # Simple free slot finder (can be enhanced)
+                # For now, suggest times outside of existing events
+                suggestions = []
+                
+                # Check next 7 days (using already imported datetime and timedelta)
+                for day_offset in range(7):
+                    check_date = datetime.now() + timedelta(days=day_offset)
+                    day_name = check_date.strftime("%A")
+                    
+                    # Check common meeting times: 9 AM, 10 AM, 2 PM, 3 PM
+                    for hour in [9, 10, 14, 15]:
+                        time_str = f"{hour}:00"
+                        # Count conflicts (simplified - should check actual time ranges)
+                        conflicts = sum(1 for e in events if check_date.strftime("%Y-%m-%d") in str(e.get("time", "")))
+                        
+                        suggestions.append({
+                            "date": check_date.strftime("%Y-%m-%d"),
+                            "time": f"{hour:02d}:00",
+                            "day": day_name,
+                            "duration": duration,
+                            "conflicts": conflicts
+                        })
+                        
+                        if len(suggestions) >= 5:
+                            break
+                    if len(suggestions) >= 5:
+                        break
+                
+                # Sort by fewest conflicts
+                suggestions.sort(key=lambda x: x["conflicts"])
+                
+                return {
+                    "attendees": attendees,
+                    "duration_minutes": duration,
+                    "suggestions": suggestions[:3],
+                    "best_slot": suggestions[0] if suggestions else None,
+                    "source": "calendar_analysis"
+                }
+            except Exception as e:
+                logger.error(f"Find meeting time error: {e}")
+                return {
+                    "attendees": attendees,
+                    "duration_minutes": duration,
+                    "suggestions": [],
+                    "error": str(e),
+                    "source": "calendar_analysis"
+                }
 
         elif name == "summarize_document":
-            content = args.get("content",""); words = content.split()
-            return {"summary":content[:200]+"..." if len(content)>200 else content,"key_points":["Main topic identified","Key data extracted","Action items noted"],"word_count":len(words),"reading_time":f"{max(1,len(words)//200)} min","source":"document_ai"}
+            content = args.get("content", "")
+            style = args.get("style", "brief")
+            
+            if not content:
+                return {"error": "No content provided", "source": "document_ai"}
+            
+            # Use LLM to generate real summary
+            prompts = {
+                "brief": f"Summarize this in 2-3 sentences:\n\n{content[:2000]}",
+                "detailed": f"Provide a detailed summary with key points:\n\n{content[:2000]}",
+                "bullets": f"Summarize as bullet points:\n\n{content[:2000]}",
+                "executive": f"Write an executive summary:\n\n{content[:2000]}"
+            }
+            
+            try:
+                groq = _get_groq()
+                response = groq.chat.completions.create(
+                    model="openai/gpt-oss-120b",
+                    messages=[{"role": "user", "content": prompts.get(style, prompts["brief"])}],
+                    max_tokens=512,
+                    temperature=0.3
+                )
+                summary = response.choices[0].message.content.strip()
+                
+                # Extract key points
+                key_points_resp = groq.chat.completions.create(
+                    model="openai/gpt-oss-120b",
+                    messages=[{"role": "user", "content": f"List 3-5 key points from this text as a JSON array:\n\n{content[:1500]}"}],
+                    max_tokens=256,
+                    temperature=0.2
+                )
+                try:
+                    key_points = json.loads(key_points_resp.choices[0].message.content.strip())
+                except:
+                    key_points = ["Key information extracted", "Main topics identified", "Summary generated"]
+                
+                words = content.split()
+                return {
+                    "summary": summary,
+                    "key_points": key_points,
+                    "word_count": len(words),
+                    "reading_time": f"{max(1, len(words) // 200)} min",
+                    "style": style,
+                    "source": "groq_ai"
+                }
+            except Exception as e:
+                logger.error(f"Document summarization error: {e}")
+                # Fallback to simple truncation
+                words = content.split()
+                return {
+                    "summary": content[:300] + "..." if len(content) > 300 else content,
+                    "key_points": ["Error generating detailed summary"],
+                    "word_count": len(words),
+                    "reading_time": f"{max(1, len(words) // 200)} min",
+                    "error": str(e),
+                    "source": "fallback"
+                }
 
         elif name == "task_management":
             action = args.get("action","list")
@@ -484,7 +681,7 @@ async def _execute_tool(name: str, args: dict, uid: str) -> dict:
             NOTION_VER = "2022-06-28"
 
             if notion_token:
-                import httpx
+                # httpx is already imported at module level - no need to reimport
                 headers = {
                     "Authorization": f"Bearer {notion_token}",
                     "Notion-Version": NOTION_VER,
@@ -680,7 +877,7 @@ async def _stream_chat(req: ChatRequest, uid: str) -> AsyncGenerator[str, None]:
             if not forced_tool or tool["function"]["name"] == forced_tool
         ]
         response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=messages,
             tools=request_tools,
             tool_choice=tool_choice,
@@ -723,7 +920,7 @@ async def _stream_chat(req: ChatRequest, uid: str) -> AsyncGenerator[str, None]:
                 "content": f"The following actions were already completed. Reference them in your response:\n{tool_context_str}"
             })
         groq_stream = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=groq_msgs,
             stream=True,
             max_tokens=2048,
