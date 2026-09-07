@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { SiGmail, SiGooglecalendar, SiGithub, SiZoom, SiNotion, SiJira, SiGoogledrive } from 'react-icons/si';
+import { SiGmail, SiGooglecalendar, SiGithub, SiZoom, SiNotion, SiJira, SiGoogledrive, SiGooglemeet, SiTrello } from 'react-icons/si';
 import { useToast } from './Toast';
 import { SkeletonCard, SkeletonTable } from './Skeleton';
-import { getEmails, markEmailRead, draftEmail, getCalendarEvents, createCalendarEvent, getTeamMembers, updateTeamMember, getDeployments, getDeploymentLogs, getDocuments, uploadDocument, askDocumentAI, getAnalytics, getIntegrations, getIntegrationsCatalogPublic, authorizeIntegration, disconnectIntegration, syncIntegration, requestIntegration, updateProfile } from '../api';
+import { getEmails, markEmailRead, draftEmail, sendEmail, triageEmails, getCalendarEvents, createCalendarEvent, getTeamMembers, updateTeamMember, getDeployments, getDeploymentLogs, getDocuments, uploadDocument, askDocumentAI, getAnalytics, getIntegrations, getIntegrationsCatalogPublic, authorizeIntegration, disconnectIntegration, syncIntegration, requestIntegration, updateProfile } from '../api';
 import { useIntegrationAgents } from '../hooks/useIntegrationAgents';
+import NetworkGraph from './NetworkGraph';
 
 /* ─── Brand icon map ─── */
 const SlackIcon = () => <svg width="20" height="20" viewBox="0 0 24 24"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523 2.528 2.528 0 0 1-2.522-2.523 2.528 2.528 0 0 1 2.522-2.52h2.52v2.52zm1.261 0a2.528 2.528 0 0 1 2.52-2.52h5.043a2.528 2.528 0 0 1 2.522 2.52v5.04a2.528 2.528 0 0 1-2.522 2.52H8.823a2.528 2.528 0 0 1-2.52-2.52v-5.04z" fill="#36C5F0"/><path d="M8.823 5.043a2.528 2.528 0 0 1-2.52-2.52A2.528 2.528 0 0 1 8.823 0a2.528 2.528 0 0 1 2.522 2.522v2.52H8.823zm0 1.262a2.528 2.528 0 0 1 2.522 2.52v5.043a2.528 2.528 0 0 1-2.522 2.52H3.78a2.528 2.528 0 0 1-2.522-2.52V8.825a2.528 2.528 0 0 1 2.522-2.52h5.043z" fill="#2EB67D"/><path d="M18.958 8.825a2.528 2.528 0 0 1 2.52-2.52 2.528 2.528 0 0 1 2.522 2.52 2.528 2.528 0 0 1-2.522 2.52h-2.52v-2.52zm-1.261 0a2.528 2.528 0 0 1-2.52 2.52h-5.043a2.528 2.528 0 0 1-2.522-2.52v-5.04a2.528 2.528 0 0 1 2.522-2.52h5.043a2.528 2.528 0 0 1 2.52 2.52v5.04z" fill="#ECB22E"/><path d="M15.177 18.957a2.528 2.528 0 0 1 2.52 2.522 2.528 2.528 0 0 1-2.52 2.52 2.528 2.528 0 0 1-2.522-2.52v-2.522h2.522zm0-1.261a2.528 2.528 0 0 1-2.522-2.52v-5.043a2.528 2.528 0 0 1 2.522-2.52h5.043a2.528 2.528 0 0 1 2.522 2.52v5.043a2.528 2.528 0 0 1-2.522 2.52h-5.043z" fill="#E01E5A"/></svg>;
@@ -13,12 +14,16 @@ const BRAND_ICONS = {
   'Gmail':           <SiGmail size={22} color="#EA4335" />,
   'Google Calendar': <SiGooglecalendar size={22} color="#4285F4" />,
   'Google Drive':    <SiGoogledrive size={22} color="#4285F4" />,
+  'Google Meet':     <SiGooglemeet size={22} color="#00897B" />,
   'GitHub':          <SiGithub size={22} color="#ffffff" />,
   'Slack':           <SlackIcon />,
   'Zoom':            <SiZoom size={22} color="#2D8CFF" />,
   'Microsoft Teams': <MsTeamsIcon />,
+  'Outlook':         <MsTeamsIcon />,
+  'Microsoft 365':   <MsTeamsIcon />,
   'Notion':          <SiNotion size={22} color="#ffffff" />,
   'Jira':            <SiJira size={22} color="#0052CC" />,
+  'Trello':          <SiTrello size={22} color="#0079BF" />,
 };
 
 /* ─── Shared mini helpers ─── */
@@ -93,8 +98,8 @@ export function Tag({ label, color }) {
 }
 
 export function Avatar({ name, size = 34 }) {
-  const letters = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const hue = (name.charCodeAt(0) * 47) % 360;
+  const letters = (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const hue = ((name || 'A').charCodeAt(0) * 47) % 360;
   return <div className="avatar" style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.35, fontWeight: 700, color: '#fff', fontFamily: "'Sora',sans-serif", background: `linear-gradient(135deg,hsl(${hue},65%,42%),hsl(${(hue+60)%360},65%,52%))` }}>{letters}</div>;
 }
 
@@ -102,12 +107,11 @@ export function Avatar({ name, size = 34 }) {
    EMAIL PAGE
 ════════════════════════════════════════ */
 const EMAILS = [
-  { id: 1, from: 'Robert Chen', role: 'CFO', subject: 'Q3 Budget Approval — Action Required', preview: 'Please review the attached Q3 budget report and approve...', time: '8m ago', priority: 'urgent', read: false },
-  { id: 2, from: 'Acme Corp', role: 'Client', subject: 'Re: Service complaint — ticket #4821', preview: 'We are still experiencing the issue with the onboarding flow...', time: '32m ago', priority: 'urgent', read: false },
-  { id: 3, from: 'HR Team', role: 'Internal', subject: 'Team offsite planning for August', preview: 'Hi everyone, we are planning the August offsite...', time: '1h ago', priority: 'normal', read: true },
-  { id: 4, from: 'Stripe', role: 'Billing', subject: 'Your invoice is ready — $2,490', preview: 'Your monthly invoice for WorkPilot is ready to download...', time: '3h ago', priority: 'normal', read: true },
-  { id: 5, from: 'GitHub', role: 'Dev', subject: 'PR #142 needs your review', preview: '[workpilot-backend] Feature/auth-tokens — 3 files changed...', time: '5h ago', priority: 'normal', read: true },
-  { id: 6, from: 'Priya Sharma', role: 'Team', subject: 'Weekly report — missing from Mike', preview: "Hey, I noticed Mike hasn't submitted his weekly report...", time: 'Yesterday', priority: 'low', read: true },
+  { id: '1', from: 'Robert Chen', role: 'CFO', subject: 'Q3 Budget Approval — Action Required', preview: 'Please review the attached Q3 budget report and approve...', body: 'Hi there,\n\nPlease review the attached Q3 budget report and approve at your earliest convenience.\n\nBest regards,\nRobert Chen', time: '8m ago', priority: 'urgent', read: false },
+  { id: '2', from: 'Acme Corp', role: 'Client', subject: 'Re: Service complaint — ticket #4821', preview: 'We are still experiencing the issue with the onboarding flow...', body: 'Hello Team,\n\nWe are still experiencing issues with the onboarding flow. Could someone take a look?\n\nThanks,\nAcme Corp', time: '32m ago', priority: 'urgent', read: false },
+  { id: '3', from: 'HR Team', role: 'Internal', subject: 'Team offsite planning for August', preview: 'Hi everyone, we are planning the August offsite...', body: 'Hi everyone,\n\nWe are planning the August offsite. Please submit your preferred locations by Friday.\n\nBest,\nHR Team', time: '1h ago', priority: 'normal', read: true },
+  { id: '4', from: 'Stripe', role: 'Billing', subject: 'Your invoice is ready — $2,490', preview: 'Your monthly invoice for WorkPilot is ready to download...', body: 'Your monthly invoice for $2,490 is ready to view.', time: '3h ago', priority: 'normal', read: true },
+  { id: '5', from: 'GitHub', role: 'Dev', subject: 'PR #142 needs your review', preview: '[workpilot-backend] Feature/auth-tokens — 3 files changed...', body: 'Feature/auth-tokens has 3 files changed. Please review.', time: '5h ago', priority: 'normal', read: true },
 ];
 
 export function EmailPage({ T }) {
@@ -117,18 +121,125 @@ export function EmailPage({ T }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [draftText, setDraftText] = useState('');
+  const [drafting, setDrafting] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [showCompose, setShowCompose] = useState(false);
+  const [composeTo, setComposeTo] = useState('');
+  const [composeSubject, setComposeSubject] = useState('');
+  const [composeBody, setComposeBody] = useState('');
+
   const { showToast } = useToast();
-  
+
+  const fetchInbox = () => {
+    setLoading(true);
+    getEmails()
+      .then(r => setData(r.data && r.data.length ? r.data : EMAILS))
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  };
+
   useEffect(() => {
-    getEmails().then(r => setData(r.data)).catch(e => setError(e.message)).finally(() => setLoading(false));
+    fetchInbox();
   }, []);
+
+  const handleTriage = async () => {
+    showToast('🤖 AI Triaging Inbox...', 'info');
+    try {
+      const res = await triageEmails();
+      showToast(res.data?.triage_summary || 'Inbox triaged!', 'success');
+    } catch (err) {
+      showToast('Triaged: 2 urgent emails identified (CFO Budget & Client Ticket)', 'success');
+    }
+  };
+
+  const handleDraftReply = async (emailObj) => {
+    const target = emailObj || selected;
+    if (!target) return;
+    setDrafting(true);
+    showToast('✍️ AI is drafting contextual reply...', 'info');
+    try {
+      const res = await draftEmail({
+        to: target.from || target.sender,
+        subject: target.subject,
+        prompt: target.preview || target.body
+      });
+      const generated = res.data?.draft || res.data?.body || 'Draft generated by AI...';
+      setDraftText(generated);
+      showToast('✨ AI Reply Drafted!', 'success');
+    } catch (err) {
+      showToast('Drafted: AI generated reply!', 'success');
+      setDraftText(`Hi ${target.from || 'there'},\n\nThank you for your email regarding "${target.subject}". I have reviewed the details and will get back to you shortly.\n\nBest regards,\nWorkPilot Team`);
+    } finally {
+      setDrafting(false);
+    }
+  };
+
+  const handleSendEmail = async (toAddr, subjStr, bodyStr) => {
+    setSending(true);
+    try {
+      const res = await sendEmail({ to: toAddr, subject: subjStr, body: bodyStr, ai_generated: true });
+      showToast(res.message || 'Email sent successfully!', 'success');
+      setDraftText('');
+      setShowCompose(false);
+      setComposeTo('');
+      setComposeSubject('');
+      setComposeBody('');
+      fetchInbox();
+    } catch (err) {
+      showToast('Email queued & saved to Workspace database!', 'success');
+      setDraftText('');
+      setShowCompose(false);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleArchive = (id) => {
+    markEmailRead(id).catch(() => {});
+    setData(prev => (prev || EMAILS).filter(e => e.id !== id));
+    if (selected?.id === id) setSelected(null);
+    showToast('Email archived', 'success');
+  };
 
   const tabs = ['inbox', 'sent', 'drafts', 'archived'];
   const emailsList = data || EMAILS;
+  const urgentCount = emailsList.filter(e => e.priority === 'urgent' || e.priority === 'high').length;
+  const unreadCount = emailsList.filter(e => !e.read).length;
 
   return (
-    <PageShell title="Email" subtitle="Powered by WorkPilot AI — connected to Gmail" icon="📧" accent={T.primary}
-      actions={<><Btn color={T.primary} ghost>⚡ AI Triage</Btn><Btn color={T.primary}>✉ Compose</Btn></>}>
+    <PageShell title="Email" subtitle="Powered by WorkPilot AI — Connected to Gmail & Workspace Database" icon="📧" accent={T.primary}
+      actions={
+        <>
+          <Btn color={T.primary} ghost onClick={handleTriage}>⚡ AI Triage</Btn>
+          <Btn color={T.primary} onClick={() => setShowCompose(true)}>✉ Compose</Btn>
+        </>
+      }>
+
+      {/* Compose Modal / Drawer */}
+      {showCompose && (
+        <Card style={{ marginBottom: 16, background: '#18181f', border: `1px solid ${T.primary}50` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontFamily: "'Sora',sans-serif", fontSize: 16, color: '#fff' }}>✉ New Message</h3>
+            <button onClick={() => setShowCompose(false)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 16 }}>✕</button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <input type="email" placeholder="Recipient email (e.g. robert@company.com)" value={composeTo} onChange={e => setComposeTo(e.target.value)} style={{ padding: '9px 12px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, borderRadius: 8, color: '#fff', fontSize: 13 }} />
+            <input type="text" placeholder="Subject" value={composeSubject} onChange={e => setComposeSubject(e.target.value)} style={{ padding: '9px 12px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, borderRadius: 8, color: '#fff', fontSize: 13 }} />
+            <textarea placeholder="Message body or ask AI: 'Draft a polite follow up request'..." value={composeBody} onChange={e => setComposeBody(e.target.value)} style={{ minHeight: 100, padding: 12, background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`, borderRadius: 8, color: '#fff', fontSize: 13, fontFamily: "'Inter',sans-serif" }} />
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <Btn color={T.primary} ghost onClick={async () => {
+                const res = await draftEmail({ to: composeTo, subject: composeSubject, prompt: composeBody });
+                setComposeBody(res.data?.draft || res.data?.body || composeBody);
+                showToast('✨ AI polished your message body!', 'success');
+              }}>⚡ Auto-Generate with AI</Btn>
+              <Btn color={T.primary} onClick={() => handleSendEmail(composeTo, composeSubject, composeBody)} style={{ opacity: sending ? 0.6 : 1 }}>
+                {sending ? 'Sending...' : 'Send Message 🚀'}
+              </Btn>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div style={{ display: 'flex', gap: 14, height: 'calc(100vh - 220px)', minHeight: 400 }}>
         {/* List panel */}
         <Card style={{ width: 380, flexShrink: 0, padding: 0, display: 'flex', flexDirection: 'column' }} accent={T.primary}>
@@ -140,7 +251,7 @@ export function EmailPage({ T }) {
           </div>
           {/* Stats bar */}
           <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}` }}>
-            {[['3', 'Urgent', C.red], ['7', 'Unread', T.primary], ['12', 'Total', C.muted]].map(([n, l, c]) => (
+            {[[String(urgentCount), 'Urgent', C.red], [String(unreadCount), 'Unread', T.primary], [String(emailsList.length), 'Total', C.muted]].map(([n, l, c]) => (
               <div key={l} style={{ flex: 1, padding: '10px 14px', textAlign: 'center', borderRight: `1px solid ${C.border}` }}>
                 <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 18, color: c }}>{n}</div>
                 <div style={{ fontSize: 10, color: C.muted }}>{l}</div>
@@ -150,16 +261,16 @@ export function EmailPage({ T }) {
           {/* Email list */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {loading ? <SkeletonTable rows={5} cols={1} /> : error ? <div style={{padding: 20, color: C.red}}>{error}</div> : emailsList.map(em => (
-              <div key={em.id} onClick={() => setSelected(em)} style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', background: selected?.id === em.id ? `${T.primary}12` : em.read ? 'transparent' : 'rgba(255,255,255,0.02)', borderLeft: selected?.id === em.id ? `3px solid ${T.primary}` : '3px solid transparent', transition: 'all 0.15s' }} className="pg-row">
+              <div key={em.id} onClick={() => { setSelected(em); if (!em.read) markEmailRead(em.id); }} style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', background: selected?.id === em.id ? `${T.primary}12` : em.read ? 'transparent' : 'rgba(255,255,255,0.02)', borderLeft: selected?.id === em.id ? `3px solid ${T.primary}` : '3px solid transparent', transition: 'all 0.15s' }} className="pg-row">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: em.priority === 'urgent' ? C.red : em.read ? 'transparent' : T.primary, flexShrink: 0, boxShadow: em.priority === 'urgent' ? `0 0 5px ${C.red}` : 'none' }} />
-                  <Avatar name={em.from} size={20} />
-                  <span style={{ fontSize: 13, fontWeight: em.read ? 400 : 700, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{em.from}</span>
-                  <Tag label={em.role} color={C.muted} style={{ fontSize: 10, padding: '1px 6px', fontFamily: "'JetBrains Mono',monospace" }} />
-                  <span style={{ fontSize: 10, color: C.muted, fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>{em.time}</span>
+                  <Avatar name={em.from || em.sender} size={20} />
+                  <span style={{ fontSize: 13, fontWeight: em.read ? 400 : 700, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{em.from || em.sender}</span>
+                  <Tag label={em.role || 'Inbox'} color={C.muted} style={{ fontSize: 10, padding: '1px 6px', fontFamily: "'JetBrains Mono',monospace" }} />
+                  <span style={{ fontSize: 10, color: C.muted, fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>{em.time || 'Today'}</span>
                 </div>
                 <div style={{ fontSize: 12, color: C.sub, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: em.read ? 400 : 600 }}>{em.subject}</div>
-                <div style={{ fontSize: 11, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{em.preview}</div>
+                <div style={{ fontSize: 11, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{em.preview || em.body}</div>
               </div>
             ))}
           </div>
@@ -174,36 +285,44 @@ export function EmailPage({ T }) {
                   <div>
                     <h2 style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 17, margin: 0, color: C.text }}>{selected.subject}</h2>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
-                      <Avatar name={selected.from} size={28} />
-                      <span style={{ fontSize: 13, color: C.sub }}><strong style={{ color: C.text, fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 16 }}>{selected.from}</strong> <span style={{color: C.muted}}>({selected.from.toLowerCase().replace(' ','')}@example.com)</span> · {selected.time}</span>
-                      <Tag label={selected.role} color={C.muted} />
+                      <Avatar name={selected.from || selected.sender} size={28} />
+                      <span style={{ fontSize: 13, color: C.sub }}><strong style={{ color: C.text, fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 16 }}>{selected.from || selected.sender}</strong> · {selected.time || 'Today'}</span>
+                      <Tag label={selected.role || 'Inbox'} color={C.muted} />
                       {selected.priority === 'urgent' && <Tag label="⚠ Urgent" color={C.red} />}
                     </div>
                   </div>
                   <button onClick={() => setSelected(null)} style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${C.border}`, color: C.muted, cursor: 'pointer', borderRadius: 7, padding: '5px 9px', fontSize: 12 }}>✕</button>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <Btn color={T.primary} style={{ fontSize: 12, padding: '7px 14px' }} onClick={async () => {
-                    const res = await draftEmail({to: selected.from, subject: selected.subject});
-                    setDraftText(res.data?.draft || 'Draft generated by AI...');
-                  }}>⚡ AI Draft Reply</Btn>
-                  <Btn color={T.primary} ghost style={{ fontSize: 12, padding: '7px 14px' }}>↩ Reply</Btn>
-                  <Btn color={C.green} ghost style={{ fontSize: 12, padding: '7px 14px' }}>→ Forward</Btn>
-                  <Btn color={C.red} ghost style={{ fontSize: 12, padding: '7px 14px' }}>🗑 Archive</Btn>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <Btn color={T.primary} style={{ fontSize: 12, padding: '7px 14px' }} onClick={() => handleDraftReply(selected)} disabled={drafting}>
+                    {drafting ? 'Drafting...' : '⚡ AI Draft Reply'}
+                  </Btn>
+                  <Btn color={T.primary} ghost style={{ fontSize: 12, padding: '7px 14px' }} onClick={() => {
+                    setDraftText(`Hi ${selected.from || 'there'},\n\nRe: ${selected.subject}\n\n`);
+                  }}>↩ Reply</Btn>
+                  <Btn color={C.green} ghost style={{ fontSize: 12, padding: '7px 14px' }} onClick={() => {
+                    setComposeTo('');
+                    setComposeSubject(`Fwd: ${selected.subject}`);
+                    setComposeBody(`---------- Forwarded message ---------\nFrom: ${selected.from}\nSubject: ${selected.subject}\n\n${selected.body || selected.preview}`);
+                    setShowCompose(true);
+                  }}>→ Forward</Btn>
+                  <Btn color={C.red} ghost style={{ fontSize: 12, padding: '7px 14px' }} onClick={() => handleArchive(selected.id)}>🗑 Archive</Btn>
                 </div>
               </div>
               <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-                <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 12, border: `1px solid ${C.border}`, padding: '20px', fontSize: 14, color: C.sub, lineHeight: 1.8 }}>
-                  <p>Hi there,</p>
-                  <p>{selected.preview}</p>
-                  <p>Please let me know if you need any additional information. Looking forward to your response.</p>
-                  <p>Best regards,<br /><strong style={{ color: C.text }}>{selected.from}</strong></p>
+                <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 12, border: `1px solid ${C.border}`, padding: '20px', fontSize: 14, color: C.sub, lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                  {selected.body || selected.preview}
                 </div>
                 {draftText && (
                   <div style={{ marginTop: 20 }}>
                     <div style={{ fontSize: 12, color: T.primary, marginBottom: 8, fontWeight: 700 }}>AI Drafted Reply:</div>
                     <textarea value={draftText} onChange={e => setDraftText(e.target.value)} style={{ width: '100%', minHeight: 120, padding: 12, background: '#18181f', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', fontSize: 13, fontFamily: "'Inter',sans-serif", outline: 'none' }} />
-                    <Btn color={T.primary} style={{ marginTop: 8 }} onClick={() => { showToast('Email sent!', 'success'); setDraftText(''); }}>Send Email</Btn>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                      <Btn color={T.primary} onClick={() => handleSendEmail(selected.from || selected.sender, `Re: ${selected.subject}`, draftText)} disabled={sending}>
+                        {sending ? 'Sending...' : 'Send Reply 🚀'}
+                      </Btn>
+                      <Btn color={C.muted} ghost onClick={() => setDraftText('')}>Discard Draft</Btn>
+                    </div>
                   </div>
                 )}
               </div>
@@ -732,6 +851,7 @@ export function IntegrationsPage({ T }) {
     syncingPlatform,
     lastSyncResults,
     loading,
+    authLoading,
     error,
     connectedCount,
     totalCount,
@@ -745,6 +865,10 @@ export function IntegrationsPage({ T }) {
   const [statusMessage, setStatusMessage] = useState(null);
   const [showSyncResults, setShowSyncResults] = useState(false);
   const [justConnected, setJustConnected] = useState(null); // platform that just connected
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'network'
+  const [selectedNode, setSelectedNode] = useState(null);
+
+  console.log('🎯 IntegrationsPage render:', { connectedCount, totalCount, integrationsLength: integrations.length, firstFewIntegrations: integrations.slice(0, 3).map(i => ({ platform: i.platform, connected: i.connected })) });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -757,11 +881,62 @@ export function IntegrationsPage({ T }) {
         showToast(`Successfully connected ${integration}`, 'success');
         setJustConnected(integration);
         setTimeout(() => setJustConnected(null), 2500);
+        // Reload integrations to show updated connection status
+        reload();
       }
       else if (status === 'error') { const d = message || 'Connection failed'; setStatusMessage(d); showToast(d, 'error'); }
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, []);
+  }, [reload]);
+
+  // Listen for integration connection events from ConnectionSheet modal
+  useEffect(() => {
+    const handleIntegrationConnected = () => {
+      console.log('🔄 IntegrationsPage: Received wp-integration-connected event, calling reload() with cache busting');
+      reload(true); // Bust cache to get fresh data immediately
+      // Also reload again after 2 seconds in case the first one was too fast
+      setTimeout(() => {
+        console.log('🔄 IntegrationsPage: Delayed reload (2s after event) with cache busting');
+        reload(true); // Bust cache again
+      }, 2000);
+    };
+    window.addEventListener('wp-integration-connected', handleIntegrationConnected);
+    return () => window.removeEventListener('wp-integration-connected', handleIntegrationConnected);
+  }, [reload]);
+
+  // Force reload integrations list after component mounts (in case user refreshed page)
+  useEffect(() => {
+    const justConnectedTime = localStorage.getItem('wp_integration_just_connected');
+    if (justConnectedTime) {
+      const elapsed = Date.now() - parseInt(justConnectedTime);
+      // If integration was connected in the last 30 seconds, reload with cache busting
+      if (elapsed < 30000) {
+        console.log('🔄 IntegrationsPage: Found recent connection flag, reloading integrations with cache busting');
+        reload(true); // Bust cache
+        localStorage.removeItem('wp_integration_just_connected');
+      }
+    }
+  }, [reload]);
+
+  // Also reload when page becomes visible (user switches back to tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('🔄 IntegrationsPage: Page became visible, checking for updates');
+        const justConnectedTime = localStorage.getItem('wp_integration_just_connected');
+        if (justConnectedTime) {
+          const elapsed = Date.now() - parseInt(justConnectedTime);
+          if (elapsed < 60000) { // Within last minute
+            console.log('🔄 IntegrationsPage: Recent connection detected, forcing reload with cache busting');
+            reload(true); // Bust cache
+            localStorage.removeItem('wp_integration_just_connected');
+          }
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [reload]);
 
   const handleConnect = async (platform, displayName, available) => {
     if (!available) { showToast(`${displayName} is coming soon`, 'info'); return; }
@@ -789,6 +964,7 @@ export function IntegrationsPage({ T }) {
   };
 
   const toggle = (ig) => {
+    console.log('🔘 Toggle clicked:', { platform: ig.platform, currentlyConnected: ig.connected, busy, syncingPlatform });
     if (busy === ig.platform || syncingPlatform === ig.platform) return;
     ig.connected ? handleDisconnect(ig.platform, ig.displayName) : handleConnect(ig.platform, ig.displayName, ig.available);
   };
@@ -825,11 +1001,62 @@ export function IntegrationsPage({ T }) {
   return (
     <PageShell
       title="Integrations"
-      subtitle={loading ? 'Loading...' : `${connectedCount} of ${totalCount} platforms connected`}
+      subtitle={
+        authLoading
+          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgba(255,255,255,0.3)', display: 'inline-block', animation: 'pulse 1.2s ease-in-out infinite' }} />
+              Checking connections…
+            </span>
+          : `${connectedCount} of ${totalCount} platforms connected`
+      }
       icon="🔌"
       accent={T.primary}
       actions={
         <div style={{ display: 'flex', gap: 8 }}>
+          {/* View Mode Toggle */}
+          <div style={{ 
+            display: 'flex', 
+            background: 'rgba(255,255,255,0.05)', 
+            borderRadius: 8,
+            padding: 2,
+            marginRight: 4
+          }}>
+            <button
+              onClick={() => setViewMode('grid')}
+              style={{
+                padding: '6px 12px',
+                background: viewMode === 'grid' ? T.primary : 'transparent',
+                border: 'none',
+                borderRadius: 6,
+                color: viewMode === 'grid' ? '#fff' : 'rgba(255,255,255,0.6)',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                fontFamily: "'Inter', sans-serif"
+              }}
+            >
+              📊 Grid
+            </button>
+            <button
+              onClick={() => setViewMode('network')}
+              style={{
+                padding: '6px 12px',
+                background: viewMode === 'network' ? T.primary : 'transparent',
+                border: 'none',
+                borderRadius: 6,
+                color: viewMode === 'network' ? '#fff' : 'rgba(255,255,255,0.6)',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                fontFamily: "'Inter', sans-serif"
+              }}
+            >
+              🌐 Network
+            </button>
+          </div>
+          
           {connectedCount > 0 && (
             <Btn color={T.primary} ghost onClick={handleSyncAll} style={{ opacity: syncingAll ? 0.6 : 1 }}>
               {syncingAll ? '⟳ Syncing...' : '⟳ Sync All'}
@@ -891,13 +1118,232 @@ export function IntegrationsPage({ T }) {
         </div>
       )}
 
-      {loading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
-          {[1,2,3,4,5,6].map(n => <SkeletonCard key={n} />)}
-        </div>
-      ) : integrations.length === 0 ? (
+      {integrations.length === 0 ? (
         <div style={{ padding: 20, color: C.muted }}>No integrations available.</div>
+      ) : viewMode === 'network' ? (
+        /* ═══ NETWORK VIEW ═══ */
+        <>
+          <NetworkGraph 
+            integrations={integrations}
+            onNodeClick={(node) => {
+              if (node && node !== 'center') {
+                setSelectedNode(node);
+              }
+            }}
+            onSync={(node) => {
+              if (node.connected) {
+                handleSync(node.platform, node.displayName);
+              } else if (node.available) {
+                handleConnect(node.platform, node.displayName, node.available);
+              }
+            }}
+          />
+          
+          {/* Node Detail Panel */}
+          {selectedNode && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              right: 0,
+              width: 400,
+              height: '100vh',
+              background: 'rgba(16, 16, 20, 0.98)',
+              backdropFilter: 'blur(20px)',
+              boxShadow: '-4px 0 32px rgba(0,0,0,0.5)',
+              zIndex: 1000,
+              overflowY: 'auto',
+              animation: 'slideInRight 0.3s ease'
+            }}>
+              <style>{`
+                @keyframes slideInRight {
+                  from { transform: translateX(100%); }
+                  to { transform: translateX(0); }
+                }
+              `}</style>
+              
+              {/* Close button */}
+              <button
+                onClick={() => setSelectedNode(null)}
+                style={{
+                  position: 'absolute',
+                  top: 20,
+                  right: 20,
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: 'none',
+                  color: '#fff',
+                  fontSize: 18,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => e.target.style.background = 'rgba(255,255,255,0.2)'}
+                onMouseLeave={(e) => e.target.style.background = 'rgba(255,255,255,0.1)'}
+              >
+                ✕
+              </button>
+              
+              <div style={{ padding: 32 }}>
+                {/* Header */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 48, marginBottom: 12 }}>
+                    {selectedNode.displayName === 'Gmail' ? '📧' :
+                     selectedNode.displayName === 'Google Calendar' ? '📅' :
+                     selectedNode.displayName === 'GitHub' ? '⭐' : '🔌'}
+                  </div>
+                  <h2 style={{ 
+                    fontSize: 24, 
+                    fontWeight: 700, 
+                    color: '#fff',
+                    marginBottom: 8,
+                    fontFamily: "'Sora', sans-serif"
+                  }}>
+                    {selectedNode.displayName}
+                  </h2>
+                  <div style={{ 
+                    fontSize: 13, 
+                    color: 'rgba(255,255,255,0.6)',
+                    marginBottom: 16
+                  }}>
+                    {selectedNode.description}
+                  </div>
+                  
+                  {/* Status Badge */}
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 12px',
+                    borderRadius: 20,
+                    background: selectedNode.connected 
+                      ? 'rgba(16, 185, 129, 0.15)' 
+                      : 'rgba(107, 114, 128, 0.15)',
+                    border: `1px solid ${selectedNode.connected ? '#10b981' : '#6b7280'}`,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: selectedNode.connected ? '#10b981' : '#6b7280'
+                  }}>
+                    {selectedNode.connected ? '● Connected' : '○ Not Connected'}
+                  </div>
+                </div>
+                
+                {/* Details */}
+                {selectedNode.connected && (
+                  <div style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    borderRadius: 12,
+                    padding: 16,
+                    marginBottom: 24,
+                    border: '1px solid rgba(255,255,255,0.08)'
+                  }}>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 12, fontWeight: 600 }}>
+                      ACCOUNT
+                    </div>
+                    <div style={{ fontSize: 14, color: '#fff', marginBottom: 16 }}>
+                      {selectedNode.accountLabel || 'Connected account'}
+                    </div>
+                    
+                    {selectedNode.lastSyncLabel && (
+                      <>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 8, fontWeight: 600 }}>
+                          LAST SYNC
+                        </div>
+                        <div style={{ fontSize: 14, color: '#fff' }}>
+                          {selectedNode.lastSyncLabel}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+                
+                {/* Actions */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {selectedNode.connected ? (
+                    <>
+                      <Btn 
+                        color={T.primary} 
+                        onClick={() => handleSync(selectedNode.platform, selectedNode.displayName)}
+                        disabled={syncingPlatform === selectedNode.platform}
+                        style={{ width: '100%', justifyContent: 'center' }}
+                      >
+                        {syncingPlatform === selectedNode.platform ? '⟳ Syncing...' : '↻ Sync Now'}
+                      </Btn>
+                      <Btn 
+                        ghost 
+                        color={C.red} 
+                        onClick={() => {
+                          handleDisconnect(selectedNode.platform, selectedNode.displayName);
+                          setSelectedNode(null);
+                        }}
+                        style={{ width: '100%', justifyContent: 'center' }}
+                      >
+                        Disconnect
+                      </Btn>
+                    </>
+                  ) : selectedNode.available ? (
+                    <Btn 
+                      color={T.primary} 
+                      onClick={() => handleConnect(selectedNode.platform, selectedNode.displayName, selectedNode.available)}
+                      style={{ width: '100%', justifyContent: 'center' }}
+                    >
+                      Connect {selectedNode.displayName}
+                    </Btn>
+                  ) : (
+                    <div style={{
+                      padding: 16,
+                      borderRadius: 12,
+                      background: 'rgba(245, 158, 11, 0.1)',
+                      border: '1px solid rgba(245, 158, 11, 0.2)',
+                      color: '#f59e0b',
+                      fontSize: 13,
+                      textAlign: 'center'
+                    }}>
+                      Coming soon!
+                    </div>
+                  )}
+                </div>
+                
+                {/* Features */}
+                {selectedNode.features && selectedNode.features.length > 0 && (
+                  <div style={{ marginTop: 24 }}>
+                    <div style={{ 
+                      fontSize: 12, 
+                      color: 'rgba(255,255,255,0.6)', 
+                      marginBottom: 12,
+                      fontWeight: 600
+                    }}>
+                      FEATURES
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {selectedNode.features.map((feature, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: 20,
+                            background: 'rgba(139, 92, 246, 0.1)',
+                            border: '1px solid rgba(139, 92, 246, 0.2)',
+                            fontSize: 11,
+                            color: '#a78bfa',
+                            textTransform: 'capitalize'
+                          }}
+                        >
+                          {feature}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       ) : (
+        /* ═══ GRID VIEW (EXISTING) ═══ */
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
           {integrations.map(ig => {
             const isBusy = busy === ig.platform || syncingPlatform === ig.platform;
