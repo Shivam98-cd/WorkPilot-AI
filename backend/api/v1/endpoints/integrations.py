@@ -24,19 +24,46 @@ def _invalidate_cache(uid: str) -> None:
     _CACHE.pop(uid, None)
 
 
+@router.get("/debug")
+async def debug_integrations(current_user: dict = Depends(get_current_user)):
+    """Debug endpoint to see raw integration data"""
+    uid = current_user["uid"]
+    records = await integration_repository.list_for_user(uid)
+    return {
+        "uid": uid,
+        "total_records": len(records),
+        "records": [
+            {
+                "platform": r.platform,
+                "status": r.status,
+                "account_label": r.account_label,
+                "has_access_token": r.access_token_enc is not None,
+                "has_refresh_token": r.refresh_token_enc is not None,
+                "token_expires_at": r.token_expires_at.isoformat() if r.token_expires_at else None,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in records
+        ]
+    }
+
+
 @router.get("")
-async def list_integrations(current_user=Depends(get_current_user)):
+async def list_integrations(current_user=Depends(get_current_user), _t: Optional[str] = Query(None)):
     uid = current_user["uid"]
     now = time.monotonic()
-    # Serve from cache if fresh
-    if uid in _CACHE:
+    # If _t (cache-bust) param is present, always skip cache
+    bust = _t is not None
+    if not bust and uid in _CACHE:
         ts, cached_data = _CACHE[uid]
         if now - ts < _CACHE_TTL:
             return {"success": True, "data": cached_data, "cached": True}
-    # Fresh fetch
+    # Fresh fetch (always when busting)
+    if bust:
+        _invalidate_cache(uid)
     data = await integration_service.list_for_user(uid)
     _CACHE[uid] = (now, data)
     return {"success": True, "data": data}
+
 
 
 @router.get("/catalog/public")
@@ -51,11 +78,11 @@ async def integration_catalog(current_user=Depends(get_current_user)):
 
 
 @router.get("/oauth-url")
-async def get_oauth_url_legacy(platform: str, current_user=Depends(get_current_user)):
+async def get_oauth_url_legacy(platform: str, redirect_origin: str = Query(default=""), current_user=Depends(get_current_user)):
     """Legacy alias — prefer GET /integrations/{platform}/authorize."""
     uid = current_user["uid"]
     try:
-        url = integration_service.build_authorize_url(uid, platform)
+        url = integration_service.build_authorize_url(uid, platform, redirect_origin)
         return {"success": True, "data": {"url": url, "authorizeUrl": url}}
     except AppException as exc:
         raise exc
@@ -64,13 +91,14 @@ async def get_oauth_url_legacy(platform: str, current_user=Depends(get_current_u
 
 
 @router.get("/{platform}/authorize")
-async def authorize_integration(platform: str, current_user=Depends(get_current_user)):
+async def authorize_integration(platform: str, redirect_origin: str = Query(default=""), current_user=Depends(get_current_user)):
     uid = current_user["uid"]
     try:
-        url = integration_service.build_authorize_url(uid, platform)
+        url = integration_service.build_authorize_url(uid, platform, redirect_origin)
         return {"success": True, "data": {"authorizeUrl": url, "platform": platform}}
     except KeyError:
         raise NotFoundException(f"Unknown platform: {platform}")
+
 
 
 @router.get("/{platform}/callback")
@@ -80,7 +108,17 @@ async def oauth_callback(
     state: str = Query(default=""),
     error: str = Query(default=""),
 ):
+    # Resolve the frontend redirect base:
+    # 1. Try to read it from the stored OAuth state (set by the frontend when authorizing).
+    # 2. Fall back to the FRONTEND_OAUTH_REDIRECT env var.
     redirect_base = settings.FRONTEND_OAUTH_REDIRECT.rstrip("/")
+    if state:
+        states_data = __import__('services.integration_service', fromlist=['_load_oauth_states'])._load_oauth_states()
+        pending_state = states_data.get(state, {})
+        origin = pending_state.get("redirect_origin", "")
+        if origin and origin.startswith("http"):
+            redirect_base = origin.rstrip("/") + "/dashboard"
+
     if error:
         return RedirectResponse(
             url=f"{redirect_base}?integrations={platform}&status=error&message={error}"
@@ -101,6 +139,7 @@ async def oauth_callback(
         return RedirectResponse(
             url=f"{redirect_base}?integrations={platform}&status=error&message={str(exc)}"
         )
+
 
 
 @router.delete("/{platform}")

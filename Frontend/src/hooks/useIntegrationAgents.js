@@ -35,14 +35,31 @@ const CATALOG = [
 
 /** Merge authenticated data on top of the base catalog so the grid never disappears. */
 function mergeWithCatalog(authItems) {
-  const byPlatform = Object.fromEntries(authItems.map(i => [i.platform, i]));
-  return CATALOG.map(base => ({
-    ...base,
-    connected: false,
-    status: 'disconnected',
-    ...(byPlatform[base.platform] || {}),  // overlay real data if available
-  }));
+  const byPlatform = {};
+  authItems.forEach(item => {
+    byPlatform[item.platform] = item;
+  });
+
+  return CATALOG.map(base => {
+    const apiData = byPlatform[base.platform];
+    if (apiData) {
+      // Force connected to a strict boolean — handles string 'true', number 1,
+      // or missing field when status='connected'
+      const isConnected =
+        apiData.connected === true ||
+        apiData.connected === 'true' ||
+        apiData.status === 'connected' ||
+        apiData.status === 'active';
+      return {
+        ...base,
+        ...apiData,
+        connected: isConnected,   // always a strict boolean
+      };
+    }
+    return { ...base, connected: false, status: 'disconnected' };
+  });
 }
+
 
 export function useIntegrationAgents() {
   // Start with the static catalog so the grid renders immediately on mount —
@@ -69,21 +86,14 @@ export function useIntegrationAgents() {
     setAuthLoading(true);
     setError(null);
     try {
-      console.log(`📡 loadIntegrations: Calling API... (bustCache=${bustCache})`);
       const res = await getIntegrations(bustCache);
-      console.log(`📥 loadIntegrations: Received response from backend:`, JSON.stringify(res, null, 2));
       if (!mountedRef.current) return;
       if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
-        // Merge real data with catalog so we never lose any platform card
         const merged = mergeWithCatalog(res.data);
-        console.log('🔀 loadIntegrations: Merged with catalog:', JSON.stringify(merged.slice(0, 3), null, 2));
         setIntegrations(merged);
       }
-      // If data is empty, keep the static catalog (all disconnected)
     } catch (e) {
       if (!mountedRef.current) return;
-      // Auth failed / timed out — static catalog is still shown, just mark error
-      // so user knows their connection status may not be accurate.
       if (!e.message?.includes('timed out') && !e.message?.includes('401')) {
         setError(e.message);
       }

@@ -868,7 +868,12 @@ export function IntegrationsPage({ T }) {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'network'
   const [selectedNode, setSelectedNode] = useState(null);
 
-  console.log('🎯 IntegrationsPage render:', { connectedCount, totalCount, integrationsLength: integrations.length, firstFewIntegrations: integrations.slice(0, 3).map(i => ({ platform: i.platform, connected: i.connected })) });
+  console.log('🎯 IntegrationsPage: Connected integrations:', integrations.filter(i => i.connected).map(i => i.platform));
+
+  // FORCE RELOAD on mount with cache bust to ensure fresh data
+  useEffect(() => {
+    reload(true);
+  }, []); // Empty deps = run once on mount
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -881,8 +886,16 @@ export function IntegrationsPage({ T }) {
         showToast(`Successfully connected ${integration}`, 'success');
         setJustConnected(integration);
         setTimeout(() => setJustConnected(null), 2500);
-        // Reload integrations to show updated connection status
-        reload();
+        // Reload integrations with cache busting to show updated connection status immediately
+        console.log('🔄 IntegrationsPage: OAuth success detected, reloading with cache bust');
+        reload(true);  // Bust cache to get fresh connected status
+        // Set localStorage flag for page refresh scenarios
+        localStorage.setItem('wp_integration_just_connected', Date.now().toString());
+        // Also reload again after 1 second to ensure backend has fully saved
+        setTimeout(() => {
+          console.log('🔄 IntegrationsPage: Delayed reload after OAuth (1s)');
+          reload(true);
+        }, 1000);
       }
       else if (status === 'error') { const d = message || 'Connection failed'; setStatusMessage(d); showToast(d, 'error'); }
       window.history.replaceState({}, '', window.location.pathname);
@@ -957,7 +970,7 @@ export function IntegrationsPage({ T }) {
     try {
       await disconnectIntegration(platform);
       showToast(`Disconnected ${displayName}`, 'success');
-      reload();
+      reload(true);  // Bust cache to immediately reflect disconnected status
     } catch (e) {
       showToast(e.message || `Could not disconnect ${displayName}`, 'error');
     } finally { setBusy(null); }

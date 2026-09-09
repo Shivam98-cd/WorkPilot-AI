@@ -1,5 +1,5 @@
 """
-Integration business logic — OAuth, connect/disconnect, listing.
+Integration business logic â€” OAuth, connect/disconnect, listing.
 """
 import json
 import os
@@ -16,7 +16,7 @@ import httpx
 # Fail fast on slow external APIs (Gmail, GitHub, etc.) instead of hanging page loads.
 HTTP_TIMEOUT = httpx.Timeout(8.0, connect=3.0)
 
-# ── Shared persistent HTTP client ──────────────────────────────────────────────
+# â”€â”€ Shared persistent HTTP client â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # A single AsyncClient is created at startup and reused across all requests.
 # This allows httpx to pool TCP/TLS connections so repeated calls to the same
 # host (Gmail, GitHub, Google Calendar) skip the handshake.
@@ -52,7 +52,7 @@ async def shutdown_http_client() -> None:
     _SHARED_CLIENT = None
 
 
-# Legacy context-manager shim — kept so that any code still using
+# Legacy context-manager shim â€” kept so that any code still using
 #   async with _http_client() as client: ...
 # continues to work unchanged.  It returns the shared client without closing it
 # when the context exits.
@@ -61,7 +61,7 @@ class _SharedClientContext:
         return _get_client()
 
     async def __aexit__(self, *_) -> None:
-        pass  # do NOT close — the shared client must stay open
+        pass  # do NOT close â€” the shared client must stay open
 
 
 def _http_client() -> "_SharedClientContext":
@@ -74,7 +74,7 @@ from core.integrations_registry import PLATFORMS, get_platform, list_platforms
 from models.integration import UserIntegration
 from repositories.integration_repository import integration_repository
 
-# File-backed OAuth state store — survives server restarts.
+# File-backed OAuth state store â€” survives server restarts.
 # In production, replace with Redis.
 _STATE_TTL_SECONDS = 600
 _OAUTH_STATE_FILE = os.path.join(os.path.dirname(__file__), "..", "oauth_states.json")
@@ -163,11 +163,13 @@ class IntegrationService:
             for row in records
             if row.status == "connected"
         }
+        
         items = []
         for slug in list_platforms():
             meta = PLATFORMS[slug]
             record = connected.get(slug)
             is_connected = record is not None and record.status == "connected"
+            
             items.append(
                 {
                     "platform": slug,
@@ -187,6 +189,7 @@ class IntegrationService:
                     "scopes": record.scopes if record else meta.get("scopes", []),
                 }
             )
+        
         return items
 
     async def disconnect(self, uid: str, platform: str) -> None:
@@ -382,29 +385,30 @@ class IntegrationService:
             "lastSyncError": updated.last_sync_error,
         }
 
-    def build_authorize_url(self, uid: str, platform: str) -> str:
+    def build_authorize_url(self, uid: str, platform: str, redirect_origin: str = "") -> str:
         meta = get_platform(platform)
         if not meta.get("available"):
             raise ValidationException(f"Integration '{platform}' is not available yet")
 
         provider = meta.get("oauthProvider")
         if provider == "google":
-            return self._google_authorize_url(uid, platform, meta)
+            return self._google_authorize_url(uid, platform, meta, redirect_origin)
         if provider == "github":
-            return self._github_authorize_url(uid, platform, meta)
+            return self._github_authorize_url(uid, platform, meta, redirect_origin)
         if provider == "microsoft":
-            return self._microsoft_authorize_url(uid, platform, meta)
+            return self._microsoft_authorize_url(uid, platform, meta, redirect_origin)
         if provider == "slack":
-            return self._slack_authorize_url(uid, platform, meta)
+            return self._slack_authorize_url(uid, platform, meta, redirect_origin)
         if provider == "zoom":
-            return self._zoom_authorize_url(uid, platform, meta)
+            return self._zoom_authorize_url(uid, platform, meta, redirect_origin)
         if provider == "notion":
-            return self._notion_authorize_url(uid, platform, meta)
+            return self._notion_authorize_url(uid, platform, meta, redirect_origin)
         if provider == "jira":
-            return self._jira_authorize_url(uid, platform, meta)
+            return self._jira_authorize_url(uid, platform, meta, redirect_origin)
         if provider == "trello":
-            return self._trello_authorize_url(uid, platform, meta)
+            return self._trello_authorize_url(uid, platform, meta, redirect_origin)
         raise ValidationException(f"OAuth for '{platform}' is not configured yet")
+
 
     async def handle_oauth_callback(self, platform: str, code: str, state: str) -> UserIntegration:
         _cleanup_oauth_states()
@@ -466,7 +470,7 @@ class IntegrationService:
             print(f"[OAuth ERROR] Failed to save integration: {exc}")
             raise ExternalServiceException("Unable to save integration") from exc
 
-    def _store_oauth_state(self, uid: str, platform: str) -> str:
+    def _store_oauth_state(self, uid: str, platform: str, redirect_origin: str = "") -> str:
         _cleanup_oauth_states()
         state = secrets.token_urlsafe(32)
         states = _load_oauth_states()
@@ -474,24 +478,25 @@ class IntegrationService:
             "uid": uid,
             "platform": platform,
             "createdAt": time.time(),
+            "redirect_origin": redirect_origin,  # frontend origin e.g. http://localhost:5174
         }
         _save_oauth_states(states)
         return state
 
     def _callback_url(self, platform: str) -> str:
-        # Zoom rejects 'localhost' — requires http://127.0.0.1 instead.
+        # Zoom rejects 'localhost' â€” requires http://127.0.0.1 instead.
         # Set ZOOM_REDIRECT_URI in .env to override just for Zoom.
         if platform == "zoom" and getattr(settings, "ZOOM_REDIRECT_URI", None):
             return settings.ZOOM_REDIRECT_URI
         base = settings.BACKEND_PUBLIC_URL.rstrip("/")
         return f"{base}{settings.API_PREFIX}/integrations/{platform}/callback"
 
-    def _google_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _google_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: str = "") -> str:
         if not settings.GOOGLE_CLIENT_ID:
             raise ValidationException("Google OAuth is not configured (GOOGLE_CLIENT_ID missing)")
         if not settings.GOOGLE_CLIENT_SECRET:
             raise ValidationException("Google OAuth is not configured (GOOGLE_CLIENT_SECRET missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin)
         params = {
             "client_id": settings.GOOGLE_CLIENT_ID,
             "redirect_uri": self._callback_url(platform),
@@ -503,12 +508,12 @@ class IntegrationService:
         }
         return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
-    def _github_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _github_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: str = "") -> str:
         if not settings.GITHUB_CLIENT_ID:
             raise ValidationException("GitHub OAuth is not configured (GITHUB_CLIENT_ID missing)")
         if not settings.GITHUB_CLIENT_SECRET:
             raise ValidationException("GitHub OAuth is not configured (GITHUB_CLIENT_SECRET missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin)
         params = {
             "client_id": settings.GITHUB_CLIENT_ID,
             "redirect_uri": self._callback_url(platform),
@@ -517,12 +522,12 @@ class IntegrationService:
         }
         return f"https://github.com/login/oauth/authorize?{urlencode(params)}"
 
-    def _microsoft_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _microsoft_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: str = "") -> str:
         if not settings.MICROSOFT_CLIENT_ID:
             raise ValidationException("Microsoft OAuth is not configured (MICROSOFT_CLIENT_ID missing)")
         if not settings.MICROSOFT_TENANT_ID:
             raise ValidationException("Microsoft OAuth is not configured (MICROSOFT_TENANT_ID missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin)
         params = {
             "client_id": settings.MICROSOFT_CLIENT_ID,
             "redirect_uri": self._callback_url(platform),
@@ -533,10 +538,10 @@ class IntegrationService:
         }
         return f"https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?{urlencode(params)}"
 
-    def _slack_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _slack_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: str = "") -> str:
         if not settings.SLACK_CLIENT_ID:
             raise ValidationException("Slack OAuth is not configured (SLACK_CLIENT_ID missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin)
         params = {
             "client_id": settings.SLACK_CLIENT_ID,
             "scope": ",".join(meta.get("scopes", [])),
@@ -546,10 +551,10 @@ class IntegrationService:
         }
         return f"https://slack.com/oauth/v2/authorize?{urlencode(params)}"
 
-    def _zoom_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _zoom_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: str = "") -> str:
         if not settings.ZOOM_CLIENT_ID:
             raise ValidationException("Zoom OAuth is not configured (ZOOM_CLIENT_ID missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin)
         params = {
             "client_id": settings.ZOOM_CLIENT_ID,
             "response_type": "code",
@@ -559,10 +564,10 @@ class IntegrationService:
         }
         return f"https://zoom.us/oauth/authorize?{urlencode(params)}"
 
-    def _notion_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _notion_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: str = "") -> str:
         if not settings.NOTION_CLIENT_ID:
             raise ValidationException("Notion OAuth is not configured (NOTION_CLIENT_ID missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin)
         params = {
             "client_id": settings.NOTION_CLIENT_ID,
             "redirect_uri": self._callback_url(platform),
@@ -572,10 +577,10 @@ class IntegrationService:
         }
         return f"https://api.notion.com/v1/oauth/authorize?{urlencode(params)}"
 
-    def _jira_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _jira_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: str = "") -> str:
         if not settings.JIRA_CLIENT_ID:
             raise ValidationException("Jira OAuth is not configured (JIRA_CLIENT_ID missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin)
         params = {
             "audience": "api.atlassian.com",
             "client_id": settings.JIRA_CLIENT_ID,
@@ -587,10 +592,10 @@ class IntegrationService:
         }
         return f"https://auth.atlassian.com/authorize?{urlencode(params)}"
 
-    def _trello_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _trello_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: str = "") -> str:
         if not settings.TRELLO_API_KEY:
             raise ValidationException("Trello OAuth is not configured (TRELLO_API_KEY missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin)
         params = {
             "key": settings.TRELLO_API_KEY,
             "name": "WorkPilot AI",
@@ -815,13 +820,13 @@ class IntegrationService:
 
         Strategy
         --------
-        • Request 1  : messages.list — returns IDs + snippet in one call using
+        â€¢ Request 1  : messages.list â€” returns IDs + snippet in one call using
                        the `fields` projection so the list already includes the
                        preview text (snippet).  This avoids a second fetch just
                        for the snippet.
-        • Requests 2–N: messages.get with format=metadata — only Subject and From
+        â€¢ Requests 2â€“N: messages.get with format=metadata â€” only Subject and From
                         headers are requested, keeping payloads tiny.
-        • All N detail fetches run concurrently via asyncio.gather() and share
+        â€¢ All N detail fetches run concurrently via asyncio.gather() and share
           the module-level TLS connection pool (no repeated handshakes).
         """
         auth_headers = {
@@ -953,3 +958,4 @@ class IntegrationService:
 
 
 integration_service = IntegrationService()
+

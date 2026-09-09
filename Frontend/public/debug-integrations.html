@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Integrations API</title>
+    <style>
+        body { 
+            font-family: 'Courier New', monospace; 
+            padding: 20px; 
+            background: #000; 
+            color: #0f0; 
+        }
+        .connected { color: #0f0; font-weight: bold; }
+        .disconnected { color: #f00; }
+        pre { 
+            background: #111; 
+            padding: 15px; 
+            border: 1px solid #333; 
+            overflow-x: auto;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #0f0;
+            border: none;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        button:hover { background: #0f0; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Integration API Debug Tool</h1>
+    
+    <div>
+        <button onclick="testAPI(false)">Test API (No Cache Bust)</button>
+        <button onclick="testAPI(true)">Test API (With Cache Bust)</button>
+        <button onclick="clearOutput()">Clear</button>
+    </div>
+    
+    <div id="output"></div>
+
+    <script>
+        async function testAPI(bustCache = false) {
+            const output = document.getElementById('output');
+            output.innerHTML += '<p>🔄 Loading...</p>';
+            
+            try {
+                // Get token from localStorage
+                const tokens = JSON.parse(localStorage.getItem('wp_tokens') || 'null');
+                if (!tokens?.accessToken) {
+                    output.innerHTML += '<p style="color: red;">❌ No access token found. Please log in at http://localhost:5173 first.</p>';
+                    return;
+                }
+                
+                const url = bustCache 
+                    ? `http://localhost:8000/api/v1/integrations?_t=${Date.now()}`
+                    : 'http://localhost:8000/api/v1/integrations';
+                
+                console.log('Fetching:', url);
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${tokens.accessToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                let html = '<div style="border-top: 2px solid #0f0; margin-top: 20px; padding-top: 20px;">';
+                html += `<h2>📡 API Response (Cache Bust: ${bustCache})</h2>`;
+                html += `<p>Status: ${response.status} ${response.statusText}</p>`;
+                html += `<p>URL: ${url}</p>`;
+                html += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                
+                if (data.data) {
+                    html += '<h2>🎯 Integration Status:</h2><ul>';
+                    data.data.forEach(integration => {
+                        const statusClass = integration.connected ? 'connected' : 'disconnected';
+                        const icon = integration.connected ? '✅' : '❌';
+                        html += `<li class="${statusClass}">
+                            ${icon} <strong>${integration.displayName}</strong> (${integration.platform})<br>
+                            &nbsp;&nbsp;&nbsp;&nbsp;connected: ${integration.connected}<br>
+                            &nbsp;&nbsp;&nbsp;&nbsp;status: ${integration.status}<br>
+                            &nbsp;&nbsp;&nbsp;&nbsp;account: ${integration.accountLabel || 'N/A'}
+                        </li>`;
+                    });
+                    html += '</ul>';
+                    
+                    const connectedCount = data.data.filter(i => i.connected).length;
+                    html += `<p style="font-size: 20px; margin-top: 20px;">
+                        <strong>Total Connected: ${connectedCount} out of ${data.data.length}</strong>
+                    </p>`;
+                }
+                
+                html += '</div>';
+                output.innerHTML += html;
+                
+                // Scroll to bottom
+                window.scrollTo(0, document.body.scrollHeight);
+                
+            } catch (error) {
+                output.innerHTML += `<p style="color: red;">❌ Error: ${error.message}</p>`;
+                console.error('Error:', error);
+            }
+        }
+        
+        function clearOutput() {
+            document.getElementById('output').innerHTML = '';
+        }
+        
+        // Show instructions
+        document.getElementById('output').innerHTML = `
+            <div style="background: #222; padding: 15px; border: 1px solid #0f0; margin-bottom: 20px;">
+                <h3>📋 Instructions:</h3>
+                <ol>
+                    <li>Make sure you're logged in at <a href="http://localhost:5173" style="color: #0ff;">http://localhost:5173</a></li>
+                    <li>Click one of the buttons above to test the API</li>
+                    <li>Check if the API returns <span class="connected">connected: true</span> for your integrations</li>
+                </ol>
+                <p><strong>Expected Result:</strong> Gmail, Google Calendar, GitHub, and Notion should show as <span class="connected">✅ connected: true</span></p>
+            </div>
+        `;
+    </script>
+</body>
+</html>
