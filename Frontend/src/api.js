@@ -1,6 +1,6 @@
 import { auth } from './firebase';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 
 /* ─── Auth helpers ─────────────────────────────── */
@@ -115,7 +115,7 @@ async function apiFetch(url, options = {}) {
     if (err.name === 'AbortError') {
       throw new Error(`Request to ${url} timed out. Is the backend running at ${API_BASE}?`);
     }
-    throw new Error(`Cannot reach the API at ${API_BASE}. Start the backend: cd backend && uvicorn main:app --reload`);
+    throw new Error(`Cannot reach the API at ${API_BASE}. Start the backend: cd backend && uvicorn main:app --reload --port 8000`);
   }
   clearTimeout(timeoutId);
 
