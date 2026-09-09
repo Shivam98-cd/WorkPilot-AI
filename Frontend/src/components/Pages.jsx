@@ -870,9 +870,9 @@ export function IntegrationsPage({ T }) {
 
   console.log('🎯 IntegrationsPage: Connected integrations:', integrations.filter(i => i.connected).map(i => i.platform));
 
-  // FORCE RELOAD on mount with cache bust to ensure fresh data
+  // Reload on mount to ensure fresh data
   useEffect(() => {
-    reload(true);
+    reload(); // No cache parameter needed - always fresh
   }, []); // Empty deps = run once on mount
 
   useEffect(() => {
@@ -886,15 +886,15 @@ export function IntegrationsPage({ T }) {
         showToast(`Successfully connected ${integration}`, 'success');
         setJustConnected(integration);
         setTimeout(() => setJustConnected(null), 2500);
-        // Reload integrations with cache busting to show updated connection status immediately
-        console.log('🔄 IntegrationsPage: OAuth success detected, reloading with cache bust');
-        reload(true);  // Bust cache to get fresh connected status
+        // Reload integrations to show updated connection status immediately
+        console.log('🔄 IntegrationsPage: OAuth success detected, reloading');
+        reload(); // Always fetches fresh data
         // Set localStorage flag for page refresh scenarios
         localStorage.setItem('wp_integration_just_connected', Date.now().toString());
         // Also reload again after 1 second to ensure backend has fully saved
         setTimeout(() => {
           console.log('🔄 IntegrationsPage: Delayed reload after OAuth (1s)');
-          reload(true);
+          reload();
         }, 1000);
       }
       else if (status === 'error') { const d = message || 'Connection failed'; setStatusMessage(d); showToast(d, 'error'); }
@@ -905,12 +905,12 @@ export function IntegrationsPage({ T }) {
   // Listen for integration connection events from ConnectionSheet modal
   useEffect(() => {
     const handleIntegrationConnected = () => {
-      console.log('🔄 IntegrationsPage: Received wp-integration-connected event, calling reload() with cache busting');
-      reload(true); // Bust cache to get fresh data immediately
+      console.log('🔄 IntegrationsPage: Received wp-integration-connected event, calling reload()');
+      reload(); // Always fetches fresh data
       // Also reload again after 2 seconds in case the first one was too fast
       setTimeout(() => {
-        console.log('🔄 IntegrationsPage: Delayed reload (2s after event) with cache busting');
-        reload(true); // Bust cache again
+        console.log('🔄 IntegrationsPage: Delayed reload (2s after event)');
+        reload();
       }, 2000);
     };
     window.addEventListener('wp-integration-connected', handleIntegrationConnected);

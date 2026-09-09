@@ -81,18 +81,22 @@ export function useIntegrationAgents() {
   useEffect(() => { return () => { mountedRef.current = false; }; }, []);
 
   // ─── Load authenticated integrations list (overlay on top of catalog) ─────────
-  const loadIntegrations = useCallback(async (bustCache = false) => {
+  const loadIntegrations = useCallback(async () => {
     if (!mountedRef.current) return;
+    console.log('🔄 useIntegrationAgents: loadIntegrations called (always fresh data)');
     setAuthLoading(true);
     setError(null);
     try {
-      const res = await getIntegrations(bustCache);
+      const res = await getIntegrations(); // Always fetches fresh data
+      console.log('📦 useIntegrationAgents: API response:', res?.data?.slice(0, 3));
       if (!mountedRef.current) return;
       if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
         const merged = mergeWithCatalog(res.data);
+        console.log('✅ useIntegrationAgents: Merged data (first 3):', merged.slice(0, 3).map(i => ({ platform: i.platform, connected: i.connected, status: i.status })));
         setIntegrations(merged);
       }
     } catch (e) {
+      console.error('❌ useIntegrationAgents: loadIntegrations error:', e);
       if (!mountedRef.current) return;
       if (!e.message?.includes('timed out') && !e.message?.includes('401')) {
         setError(e.message);
@@ -189,6 +193,7 @@ export function useIntegrationAgents() {
   // ─── On mount: catalog is already shown; load auth data in background ─────────
   useEffect(() => {
     // Small delay so the page renders the static catalog first, then we try auth
+    // Always fetches fresh data (no caching in frontend)
     const t = setTimeout(() => {
       loadIntegrations().then(() => {
         setTimeout(refreshHealth, 500);

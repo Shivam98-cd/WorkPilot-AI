@@ -213,10 +213,7 @@ export const askDocumentAI = (doc_id, question) => apiFetch('/documents/ask', { 
 export const getAnalytics = () => apiFetch('/analytics/summary');
 
 /* ─── Integrations ──────────────────────────────── */
-export const getIntegrations = (bustCache = false) => {
-  const url = bustCache ? `/integrations?_t=${Date.now()}` : '/integrations';
-  return apiFetch(url);
-};
+export const getIntegrations = () => apiFetch('/integrations'); // Always fetch fresh - no caching
 export const getIntegrationsCatalog = () => apiFetch('/integrations/catalog');
 
 /** Public catalog — no auth required */
