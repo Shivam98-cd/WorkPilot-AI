@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Integrations API</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #000; color: #0f0; }
+        pre { background: #111; padding: 10px; border: 1px solid #333; }
+        .connected { color: #0f0; }
+        .disconnected { color: #f00; }
+    </style>
+</head>
+<body>
+    <h1>Integration API Test</h1>
+    <button onclick="testAPI()">Test API Call</button>
+    <button onclick="testWithCacheBust()">Test with Cache Bust</button>
+    <div id="output"></div>
+
+    <script>
+        async function testAPI(bustCache = false) {
+            const output = document.getElementById('output');
+            output.innerHTML = '<p>Loading...</p>';
+            
+            try {
+                // Get token from localStorage
+                const tokens = JSON.parse(localStorage.getItem('wp_tokens') || 'null');
+                if (!tokens?.accessToken) {
+                    output.innerHTML = '<p style="color: red;">No access token found. Please log in first.</p>';
+                    return;
+                }
+                
+                const url = bustCache 
+                    ? `http://localhost:8000/api/v1/integrations?_t=${Date.now()}`
+                    : 'http://localhost:8000/api/v1/integrations';
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${tokens.accessToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                let html = '<h2>API Response:</h2>';
+                html += `<p>Status: ${response.status}</p>`;
+                html += `<p>Cache Bust: ${bustCache ? 'Yes' : 'No'}</p>`;
+                html += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                
+                if (data.data) {
+                    html += '<h2>Integration Status:</h2><ul>';
+                    data.data.forEach(integration => {
+                        const statusClass = integration.connected ? 'connected' : 'disconnected';
+                        html += `<li class="${statusClass}">
+                            <strong>${integration.displayName}</strong>: 
+                            connected=${integration.connected}, 
+                            status=${integration.status}, 
+                            account=${integration.accountLabel || 'N/A'}
+                        </li>`;
+                    });
+                    html += '</ul>';
+                    
+                    const connectedCount = data.data.filter(i => i.connected).length;
+                    html += `<p><strong>Total Connected: ${connectedCount}</strong></p>`;
+                }
+                
+                output.innerHTML = html;
+            } catch (error) {
+                output.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+        
+        function testWithCacheBust() {
+            testAPI(true);
+        }
+    </script>
+</body>
+</html>

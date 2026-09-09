@@ -2,6 +2,23 @@
 WorkPilot AI - FastAPI Backend
 Enterprise-grade authentication system
 """
+# ── SSL fix (Windows) ──────────────────────────────────────────────────────────
+# Python on Windows often lacks the system CA bundle that Google APIs require.
+# Patching the default SSL context to use certifi's trusted CA bundle BEFORE
+# any other import eliminates the CERTIFICATE_VERIFY_FAILED errors that caused
+# Firebase token verification to hang for 287+ seconds.
+import ssl, os
+try:
+    import certifi
+    _ca = certifi.where()
+    os.environ.setdefault("SSL_CERT_FILE", _ca)
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", _ca)
+    # Patch the default HTTPS context used by httpx, requests, urllib3, grpc
+    ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=_ca)
+except ImportError:
+    pass  # certifi not installed — proceed without patch
+# ──────────────────────────────────────────────────────────────────────────────
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -16,14 +33,23 @@ from api.v1.router import api_router
 from firebase.admin_config import initialize_firebase
 
 
+from services.automation_runner import start_automation_scheduler, stop_automation_scheduler
+from services.integration_service import startup_http_client, shutdown_http_client
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     initialize_firebase()
+    await startup_http_client()          # pre-warm shared HTTP connection pool
+    start_automation_scheduler()
     print(f"{settings.PROJECT_NAME} v{settings.VERSION} started")
     print(f"API Documentation: http://localhost:8000/docs")
     yield
+    stop_automation_scheduler()
+    await shutdown_http_client()         # close shared HTTP client cleanly
     print(f"{settings.PROJECT_NAME} shutting down")
+
 
 
 app = FastAPI(

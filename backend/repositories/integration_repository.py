@@ -19,16 +19,21 @@ class IntegrationRepository:
 
     async def upsert(self, integration: UserIntegration) -> UserIntegration:
         if self._use_memory():
+            print(f"[REPO] WARNING: Using in-memory storage (Firestore unavailable) for {integration.platform}")
             _memory_store[integration.uid][integration.platform] = integration
             return integration
 
+        print(f"[REPO] Saving to Firestore: uid={integration.uid}, platform={integration.platform}, status={integration.status}")
         doc_id = UserIntegration.doc_id(integration.uid, integration.platform)
         existing = await self.get(integration.uid, integration.platform)
         payload = integration.to_dict()
         if existing:
+            print(f"[REPO] Updating existing document: {doc_id}")
             await firestore_service.update_document(self.COLLECTION, doc_id, payload)
         else:
+            print(f"[REPO] Creating new document: {doc_id}")
             await firestore_service.create_document(self.COLLECTION, doc_id, payload)
+        print(f"[REPO] Successfully saved {integration.platform} to Firestore")
         return await self.get(integration.uid, integration.platform)
 
     async def get(self, uid: str, platform: str) -> Optional[UserIntegration]:
@@ -43,13 +48,17 @@ class IntegrationRepository:
 
     async def list_for_user(self, uid: str) -> List[UserIntegration]:
         if self._use_memory():
-            return list(_memory_store.get(uid, {}).values())
+            results = list(_memory_store.get(uid, {}).values())
+            print(f"[REPO] Loaded {len(results)} integrations from memory for user {uid}")
+            return results
 
         rows = await firestore_service.query_documents(
             self.COLLECTION,
             filters=[("uid", "==", uid)],
         )
-        return [UserIntegration.from_dict(row) for row in rows]
+        results = [UserIntegration.from_dict(row) for row in rows]
+        print(f"[REPO] Loaded {len(results)} integrations from Firestore for user {uid}: {[r.platform for r in results]}")
+        return results
 
     async def delete(self, uid: str, platform: str) -> bool:
         if self._use_memory():

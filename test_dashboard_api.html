@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard API Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #0c0c0f; color: #fff; }
+        button { padding: 10px 20px; margin: 10px; cursor: pointer; background: #3b82f6; color: white; border: none; border-radius: 5px; }
+        button:hover { background: #2563eb; }
+        pre { background: #1a1a1f; padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid #333; }
+        .section { margin: 20px 0; }
+        .label { color: #6366f1; font-weight: bold; margin-bottom: 10px; }
+        .count { background: #10b981; color: white; padding: 2px 8px; border-radius: 4px; margin-left: 10px; }
+        .error { background: #ef4444; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .success { background: #10b981; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Dashboard API Data Test</h1>
+    <p>This tool tests the <code>/api/v1/dashboard/summary</code> endpoint to verify real data is being returned.</p>
+    
+    <button onclick="testDashboard()">Test Dashboard API</button>
+    <button onclick="invalidateCache()">Invalidate Cache</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="status"></div>
+    <div id="results"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+        
+        async function getAuthToken() {
+            const tokens = JSON.parse(localStorage.getItem('wp_tokens') || 'null');
+            if (tokens?.accessToken) {
+                return tokens.accessToken;
+            }
+            
+            // Try to get Firebase token from auth state
+            const auth = window.auth;
+            if (auth && auth.currentUser) {
+                return await auth.currentUser.getIdToken();
+            }
+            
+            return null;
+        }
+        
+        async function invalidateCache() {
+            const status = document.getElementById('status');
+            status.innerHTML = '<div style="color: #fbbf24;">⏳ Invalidating cache...</div>';
+            
+            try {
+                const token = await getAuthToken();
+                if (!token) {
+                    status.innerHTML = '<div class="error">❌ Not logged in. Please log in at http://localhost:5173 first.</div>';
+                    return;
+                }
+                
+                const response = await fetch(`${API_BASE}/dashboard/invalidate-cache`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    status.innerHTML = '<div class="success">✅ Cache invalidated! Now click "Test Dashboard API" to see fresh data.</div>';
+                } else {
+                    status.innerHTML = '<div class="error">❌ Failed to invalidate cache</div>';
+                }
+            } catch (error) {
+                status.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function testDashboard() {
+            const status = document.getElementById('status');
+            const results = document.getElementById('results');
+            
+            status.innerHTML = '<div style="color: #fbbf24;">⏳ Loading dashboard data...</div>';
+            results.innerHTML = '';
+            
+            try {
+                const token = await getAuthToken();
+                if (!token) {
+                    status.innerHTML = '<div class="error">❌ Not logged in. Please log in at http://localhost:5173 first.</div>';
+                    return;
+                }
+                
+                const response = await fetch(`${API_BASE}/dashboard/summary`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // Cache headers
+                const cacheStatus = response.headers.get('X-Cache') || 'N/A';
+                const cacheAge = response.headers.get('X-Cache-Age') || 'N/A';
+                const perfTotal = response.headers.get('X-Perf-Total') || 'N/A';
+                
+                status.innerHTML = `<div class="success">✅ Dashboard API Success | Cache: ${cacheStatus} | Age: ${cacheAge}s | Perf: ${perfTotal}</div>`;
+                
+                if (!data.success || !data.data) {
+                    results.innerHTML = '<div class="error">❌ API returned success=false or missing data</div>';
+                    return;
+                }
+                
+                const d = data.data;
+                
+                let html = '<div class="section">';
+                html += '<div class="label">📊 COUNTS</div>';
+                html += `<pre>${JSON.stringify(d.counts, null, 2)}</pre>`;
+                html += '</div>';
+                
+                html += '<div class="section">';
+                html += '<div class="label">🚨 ALERTS</div>';
+                html += `<pre>${JSON.stringify(d.alerts, null, 2)}</pre>`;
+                html += '</div>';
+                
+                html += '<div class="section">';
+                html += `<div class="label">📧 EMAILS <span class="count">${d.email?.length || 0}</span></div>`;
+                if (d.email && d.email.length > 0) {
+                    html += `<pre>${JSON.stringify(d.email, null, 2)}</pre>`;
+                } else {
+                    html += '<p style="color: #666;">No emails found. Connect Gmail to see real inbox data.</p>';
+                }
+                html += '</div>';
+                
+                html += '<div class="section">';
+                html += `<div class="label">📅 CALENDAR <span class="count">${d.calendar?.length || 0}</span></div>`;
+                if (d.calendar && d.calendar.length > 0) {
+                    html += `<pre>${JSON.stringify(d.calendar, null, 2)}</pre>`;
+                } else {
+                    html += '<p style="color: #666;">No calendar events found. Connect Google Calendar to see real events.</p>';
+                }
+                html += '</div>';
+                
+                html += '<div class="section">';
+                html += `<div class="label">👥 TEAM <span class="count">${d.team?.length || 0}</span></div>`;
+                if (d.team && d.team.length > 0) {
+                    html += `<pre>${JSON.stringify(d.team, null, 2)}</pre>`;
+                } else {
+                    html += '<p style="color: #666;">No team members found.</p>';
+                }
+                html += '</div>';
+                
+                html += '<div class="section">';
+                html += `<div class="label">🚀 DEPLOYMENTS <span class="count">${d.deployments?.length || 0}</span></div>`;
+                if (d.deployments && d.deployments.length > 0) {
+                    html += `<pre>${JSON.stringify(d.deployments, null, 2)}</pre>`;
+                } else {
+                    html += '<p style="color: #666;">No deployments found. Connect GitHub to see real repos.</p>';
+                }
+                html += '</div>';
+                
+                html += '<div class="section">';
+                html += '<div class="label">📈 ANALYTICS</div>';
+                html += `<pre>${JSON.stringify(d.analytics, null, 2)}</pre>`;
+                html += '</div>';
+                
+                html += '<div class="section">';
+                html += `<div class="label">🤖 AI ACTIONS <span class="count">${d.aiActions?.length || 0}</span></div>`;
+                if (d.aiActions && d.aiActions.length > 0) {
+                    html += `<pre>${JSON.stringify(d.aiActions, null, 2)}</pre>`;
+                } else {
+                    html += '<p style="color: #666;">No AI actions recorded yet.</p>';
+                }
+                html += '</div>';
+                
+                results.innerHTML = html;
+                
+            } catch (error) {
+                status.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+                results.innerHTML = '<p>Make sure:</p><ul><li>Backend is running at http://localhost:8000</li><li>You are logged in at http://localhost:5173</li><li>Your auth token is valid</li></ul>';
+            }
+        }
+        
+        function clearResults() {
+            document.getElementById('status').innerHTML = '';
+            document.getElementById('results').innerHTML = '';
+        }
+    </script>
+</body>
+</html>

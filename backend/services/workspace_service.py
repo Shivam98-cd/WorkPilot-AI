@@ -89,10 +89,25 @@ class WorkspaceService:
     async def analytics_summary(self, uid: str) -> Dict[str, Any]:
         actions = await self.list_records(self.AI_ACTIONS, uid)
         team = await self.list_records(self.TEAM, uid)
+        return self.analytics_summary_from_data(team, actions)
+
+    @staticmethod
+    def analytics_summary_from_data(
+        team: List[Dict[str, Any]],
+        ai_actions: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """
+        Compute analytics from already-fetched data lists.
+        Called by the dashboard endpoint to avoid re-querying Firestore for data
+        that has already been retrieved in the same request.
+        Output structure is identical to analytics_summary() so the frontend
+        contract is unchanged.
+        """
         return {
-            "focus_hours": 0, "emails_handled": 0,
-            "tasks_completed": sum(1 for member in team if member.get("status") == "done"),
-            "ai_time_saved": round(len(actions) * 0.1, 1),
+            "focus_hours": 0,
+            "emails_handled": 0,
+            "tasks_completed": sum(1 for m in team if m.get("status") == "done"),
+            "ai_time_saved": round(len(ai_actions) * 0.1, 1),
             "weekly_data": [0, 0, 0, 0],
             "time_breakdown": {"Coding": 0, "Meetings": 0, "Review": 0, "Other": 0},
         }

@@ -1407,15 +1407,25 @@ export function IntegrationsPage({ T }) {
 /* ════════════════════════════════════════
    SETTINGS PAGE
 ════════════════════════════════════════ */
-export function SettingsPage({ T, user, onSignOut }) {
+export function SettingsPage({ T, user, onSignOut, themes = {}, themeKey = 'midnight', onThemeChange }) {
   const [notifEmail, setNotifEmail] = useState(true);
   const [notifSlack, setNotifSlack] = useState(false);
   const [aiMode, setAiMode] = useState('suggest');
-  const [tab, setTab] = useState('profile');
+  const [tab, setTab] = useState('appearance');
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
 
-  const SETTINGS_TABS = ['profile', 'notifications', 'ai', 'security', 'billing'];
+  const SETTINGS_TABS = ['appearance', 'profile', 'notifications', 'ai', 'security', 'billing'];
+  const TAB_ICONS = { appearance: '🎨', profile: '👤', notifications: '🔔', ai: '⚡', security: '🔒', billing: '💳' };
+
+  // Group themes by category for the Appearance tab
+  const THEME_GROUPS = [
+    { key: 'dark',    label: '🌑 Dark',    emoji: '🌑' },
+    { key: 'neutral', label: '☁️ Neutral', emoji: '☁️' },
+    { key: 'light',   label: '☀️ Light',   emoji: '☀️' },
+    { key: 'premium', label: '✨ Premium', emoji: '✨' },
+  ];
+
 
   const handleSaveProfile = () => {
     setSaving(true);
@@ -1450,7 +1460,7 @@ export function SettingsPage({ T, user, onSignOut }) {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {SETTINGS_TABS.map(t => (
                 <button key={t} onClick={() => setTab(t)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', background: 'none', border: 'none', borderLeft: tab === t ? `3px solid ${T.primary}` : '3px solid transparent', color: tab === t ? T.primary : C.muted, fontSize: 13, fontWeight: tab === t ? 600 : 400, cursor: 'pointer', textTransform: 'capitalize', textAlign: 'left', fontFamily: "'Inter',sans-serif", transition: 'all 0.15s' }}>
-                  {{ profile: '👤', notifications: '🔔', ai: '⚡', security: '🔒', billing: '💳' }[t]} {t}
+                  {TAB_ICONS[t]} {t}
                 </button>
               ))}
             </div>
@@ -1459,7 +1469,92 @@ export function SettingsPage({ T, user, onSignOut }) {
 
         {/* Tab content */}
         <Card style={{ flex: 1 }} accent={T.secondary}>
+
+          {/* ── APPEARANCE TAB ── */}
+          {tab === 'appearance' && (
+            <div>
+              <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Appearance</div>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 24 }}>Choose a theme that matches your style. Changes apply instantly.</div>
+
+              {THEME_GROUPS.map(group => {
+                const groupThemes = Object.entries(themes).filter(([, v]) => v.category === group.key);
+                if (!groupThemes.length) return null;
+                return (
+                  <div key={group.key} style={{ marginBottom: 28 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>
+                      {group.label}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
+                      {groupThemes.map(([key, th]) => {
+                        const isActive = themeKey === key;
+                        const isLight = th.category === 'light';
+                        return (
+                          <button
+                            key={key}
+                            onClick={() => { onThemeChange && onThemeChange(key); showToast(`Theme changed to ${th.name}`, 'success'); }}
+                            style={{
+                              all: 'unset', cursor: 'pointer', borderRadius: 12,
+                              border: isActive ? `2px solid ${T.primary}` : `2px solid ${C.border}`,
+                              overflow: 'hidden', transition: 'all 0.2s',
+                              boxShadow: isActive ? `0 0 0 3px ${T.glow}` : 'none',
+                              transform: isActive ? 'scale(1.03)' : 'scale(1)',
+                            }}
+                          >
+                            {/* Mini theme preview */}
+                            <div style={{ display: 'flex', height: 72, background: th.bg.startsWith('linear') ? th.bg : th.bg }}>
+                              {/* Sidebar strip */}
+                              <div style={{ width: 28, background: th.bgSidebar.startsWith('rgba') ? th.bgSidebar : th.bgSidebar, display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 5px' }}>
+                                {[1,2,3,4].map(i => (
+                                  <div key={i} style={{ height: 3, borderRadius: 2, background: i === 1 ? th.primary : `${isLight ? '#000' : '#fff'}${i === 2 ? '30' : '15'}` }} />
+                                ))}
+                              </div>
+                              {/* Content area */}
+                              <div style={{ flex: 1, padding: '8px 6px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <div style={{ height: 10, borderRadius: 3, background: th.surface, border: `1px solid ${th.border}` }} />
+                                <div style={{ display: 'flex', gap: 3 }}>
+                                  <div style={{ flex: 1, height: 20, borderRadius: 4, background: th.surface, border: `1px solid ${th.border}` }} />
+                                  <div style={{ flex: 1, height: 20, borderRadius: 4, background: th.primary + '40' }} />
+                                </div>
+                                <div style={{ height: 6, width: '60%', borderRadius: 3, background: th.primary + '60' }} />
+                              </div>
+                            </div>
+                            {/* Label */}
+                            <div style={{
+                              padding: '7px 10px', background: th.surface.startsWith('rgba') ? 'rgba(0,0,0,0.4)' : th.surface,
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              borderTop: `1px solid ${th.border}`,
+                            }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: th.text, fontFamily: "'Inter',sans-serif" }}>{th.name}</span>
+                              {isActive && (
+                                <div style={{ width: 12, height: 12, borderRadius: '50%', background: T.primary, boxShadow: `0 0 6px ${T.primary}` }} />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Accent color quick-pick */}
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 20, marginTop: 4 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>
+                  Current Accent
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: T.primary, boxShadow: `0 0 12px ${T.glow}` }} />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{T.primary}</div>
+                    <div style={{ fontSize: 11, color: C.muted }}>Change theme to update accent color</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {tab === 'profile' && (
+
             <div>
               <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 15, marginBottom: 20 }}>Profile</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, padding: '16px', background: 'rgba(255,255,255,0.025)', borderRadius: 12, border: `1px solid ${C.border}` }}>

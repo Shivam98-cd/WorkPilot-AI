@@ -284,21 +284,24 @@ class AuthService:
         return {"user": user, "tokens": tokens, "session": session}
     
     async def refresh_tokens(self, refresh_token: str) -> Dict[str, Any]:
-        """Refresh access token using refresh token"""
+        """Refresh access token using refresh token.
+
+        The refresh token already carries uid, email, and provider as claims
+        (set by _generate_tokens at login time), so there is NO need to hit
+        Firestore.  Previously the user_repository.get_by_uid() call was
+        causing 287-second hangs when the Firestore gRPC TLS handshake failed.
+        """
         try:
             payload = verify_token(refresh_token, token_type="refresh")
-            uid = payload.get('uid')
-            email = payload.get('email')
-            
-            # Retrieve provider for the user to include in token claim
-            user_obj = await user_repository.get_by_uid(uid)
-            provider = user_obj.provider if user_obj else None
+            uid      = payload.get('uid')
+            email    = payload.get('email')
+            # provider is embedded in the JWT — no Firestore round-trip needed
+            provider = payload.get('provider')
             tokens = self._generate_tokens(uid, email, provider)
-            
             return {"tokens": tokens}
-        except Exception as e:
+        except Exception:
             raise AuthenticationException("Invalid or expired refresh token")
-    
+
     async def logout(self, uid: str, session_id: str = None):
         """Logout user and revoke session"""
         if session_id:

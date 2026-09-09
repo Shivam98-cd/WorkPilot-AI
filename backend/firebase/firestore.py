@@ -1,6 +1,5 @@
-"""
-Firestore Database Wrapper
-"""
+"""Firestore Database Wrapper."""
+import asyncio
 from typing import Optional, Dict, Any, List
 from firebase.admin_config import get_firestore_client
 from datetime import datetime
@@ -24,7 +23,7 @@ class FirestoreService:
             doc_ref = self.db.collection(collection).document(document_id)
             data['createdAt'] = datetime.utcnow()
             data['updatedAt'] = datetime.utcnow()
-            doc_ref.set(data)
+            await asyncio.to_thread(doc_ref.set, data)
             return data
         except Exception as e:
             raise ValidationException(f"Failed to create document: {str(e)}")
@@ -37,7 +36,7 @@ class FirestoreService:
         """Get a document by ID"""
         try:
             doc_ref = self.db.collection(collection).document(document_id)
-            doc = doc_ref.get()
+            doc = await asyncio.to_thread(doc_ref.get)
             
             if doc.exists:
                 data = doc.to_dict()
@@ -57,7 +56,7 @@ class FirestoreService:
         try:
             doc_ref = self.db.collection(collection).document(document_id)
             data['updatedAt'] = datetime.utcnow()
-            doc_ref.update(data)
+            await asyncio.to_thread(doc_ref.update, data)
             return data
         except Exception as e:
             raise ValidationException(f"Failed to update document: {str(e)}")
@@ -66,7 +65,7 @@ class FirestoreService:
         """Delete a document"""
         try:
             doc_ref = self.db.collection(collection).document(document_id)
-            doc_ref.delete()
+            await asyncio.to_thread(doc_ref.delete)
             return True
         except Exception as e:
             raise ValidationException(f"Failed to delete document: {str(e)}")
@@ -92,7 +91,7 @@ class FirestoreService:
             if limit:
                 query = query.limit(limit)
             
-            docs = query.stream()
+            docs = await asyncio.to_thread(lambda: list(query.stream()))
             results = []
             
             for doc in docs:

@@ -76,7 +76,9 @@ class SuperBrainOrchestrator:
         self.critic  = CriticAgent()
         # Per-user conversation history:  uid:conv_id → deque of {role, content}
         self._convs: dict = defaultdict(lambda: deque(maxlen=20))
-        self._model  = "openai/gpt-oss-120b"
+        self._model  = "openai/gpt-oss-120b"   # confirmed on this Groq account
+        self._model_fallbacks = ["openai/gpt-oss-20b", "groq/compound", "groq/compound-mini"]
+
 
     # ── System Prompt ──────────────────────────────────────────────────────────
     def _build_system_prompt(self, memory_ctx: str, now: str, intent: dict) -> str:

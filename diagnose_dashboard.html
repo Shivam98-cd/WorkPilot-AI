@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard Diagnostic</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #0c0c0f; color: #fff; }
+        button { padding: 10px 20px; margin: 10px; cursor: pointer; background: #3b82f6; color: white; border: none; border-radius: 5px; }
+        pre { background: #1a1a1f; padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid #333; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto; }
+        .error { background: #ef4444; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .success { background: #10b981; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .warning { background: #f59e0b; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .section { margin: 20px 0; padding: 15px; background: #1a1a1f; border-radius: 8px; border: 1px solid #333; }
+        h3 { color: #3b82f6; margin-top: 0; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Dashboard Data Diagnostic</h1>
+    <p>Run this while logged in at http://localhost:5173</p>
+    
+    <button onclick="runDiagnostic()">Run Full Diagnostic</button>
+    
+    <div id="results"></div>
+
+    <script>
+        async function runDiagnostic() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<div style="color: #fbbf24;">⏳ Running diagnostic...</div>';
+            
+            let html = '';
+            
+            try {
+                // Check auth token
+                const tokens = JSON.parse(localStorage.getItem('wp_tokens') || 'null');
+                if (!tokens?.accessToken) {
+                    results.innerHTML = '<div class="error">❌ Not logged in! Please log in at http://localhost:5173 first.</div>';
+                    return;
+                }
+                
+                html += '<div class="section"><h3>✅ Auth Token Found</h3><p>Token exists: ' + (tokens.accessToken ? 'Yes (length: ' + tokens.accessToken.length + ')' : 'No') + '</p></div>';
+                
+                // Test Dashboard Summary
+                html += '<div class="section"><h3>📊 Dashboard Summary API</h3>';
+                try {
+                    const dashRes = await fetch('http://localhost:8000/api/v1/dashboard/summary', {
+                        headers: {
+                            'Authorization': `Bearer ${tokens.accessToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    const dashData = await dashRes.json();
+                    
+                    if (dashData.success && dashData.data) {
+                        html += '<div class="success">✅ API Success</div>';
+                        html += '<p><strong>Email count:</strong> ' + (dashData.data.email?.length || 0) + '</p>';
+                        html += '<p><strong>Calendar count:</strong> ' + (dashData.data.calendar?.length || 0) + '</p>';
+                        html += '<p><strong>Team count:</strong> ' + (dashData.data.team?.length || 0) + '</p>';
+                        html += '<p><strong>Urgent emails:</strong> ' + (dashData.data.counts?.urgentEmails || 0) + '</p>';
+                        
+                        if (dashData.data.email && dashData.data.email.length > 0) {
+                            html += '<p><strong>Email data:</strong></p>';
+                            html += '<pre>' + JSON.stringify(dashData.data.email, null, 2) + '</pre>';
+                        } else {
+                            html += '<div class="warning">⚠️ Email array is empty!</div>';
+                        }
+                        
+                        if (dashData.data.calendar && dashData.data.calendar.length > 0) {
+                            html += '<p><strong>Calendar data:</strong></p>';
+                            html += '<pre>' + JSON.stringify(dashData.data.calendar.slice(0, 2), null, 2) + '</pre>';
+                        }
+                    } else {
+                        html += '<div class="error">❌ API returned success=false</div>';
+                        html += '<pre>' + JSON.stringify(dashData, null, 2) + '</pre>';
+                    }
+                } catch (err) {
+                    html += '<div class="error">❌ Dashboard API Error: ' + err.message + '</div>';
+                }
+                html += '</div>';
+                
+                // Test Gmail API directly
+                html += '<div class="section"><h3>📧 Gmail API Direct Test</h3>';
+                try {
+                    const gmailRes = await fetch('http://localhost:8000/api/v1/emails', {
+                        headers: {
+                            'Authorization': `Bearer ${tokens.accessToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    const gmailData = await gmailRes.json();
+                    
+                    if (gmailData.success) {
+                        html += '<div class="success">✅ Gmail API Success</div>';
+                        html += '<p><strong>Source:</strong> ' + (gmailData.source || 'unknown') + '</p>';
+                        html += '<p><strong>Count:</strong> ' + (gmailData.count || 0) + '</p>';
+                        if (gmailData.note) {
+                            html += '<p><strong>Note:</strong> ' + gmailData.note + '</p>';
+                        }
+                        
+                        if (gmailData.data && gmailData.data.length > 0) {
+                            html += '<p><strong>Sample emails:</strong></p>';
+                            html += '<pre>' + JSON.stringify(gmailData.data.slice(0, 3), null, 2) + '</pre>';
+                        } else {
+                            html += '<div class="warning">⚠️ No emails returned from Gmail API</div>';
+                        }
+                    } else {
+                        html += '<div class="error">❌ Gmail API returned success=false</div>';
+                        html += '<pre>' + JSON.stringify(gmailData, null, 2) + '</pre>';
+                    }
+                } catch (err) {
+                    html += '<div class="error">❌ Gmail API Error: ' + err.message + '</div>';
+                }
+                html += '</div>';
+                
+                // Test integrations status
+                html += '<div class="section"><h3>🔌 Integrations Status</h3>';
+                try {
+                    const intgRes = await fetch('http://localhost:8000/api/v1/integrations', {
+                        headers: {
+                            'Authorization': `Bearer ${tokens.accessToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    const intgData = await intgRes.json();
+                    
+                    if (intgData.success && intgData.data) {
+                        const gmail = intgData.data.find(i => i.platform === 'gmail');
+                        const calendar = intgData.data.find(i => i.platform === 'google_calendar');
+                        
+                        html += '<p><strong>Gmail:</strong> ' + (gmail?.connected ? '✅ Connected (' + gmail.accountLabel + ')' : '❌ Not connected') + '</p>';
+                        if (gmail?.connected) {
+                            html += '<p style="margin-left: 20px;">Last sync: ' + (gmail.lastSyncLabel || 'Never') + '</p>';
+                            html += '<p style="margin-left: 20px;">Status: ' + (gmail.lastSyncStatus || 'Unknown') + '</p>';
+                        }
+                        
+                        html += '<p><strong>Google Calendar:</strong> ' + (calendar?.connected ? '✅ Connected (' + calendar.accountLabel + ')' : '❌ Not connected') + '</p>';
+                        if (calendar?.connected) {
+                            html += '<p style="margin-left: 20px;">Last sync: ' + (calendar.lastSyncLabel || 'Never') + '</p>';
+                            html += '<p style="margin-left: 20px;">Status: ' + (calendar.lastSyncStatus || 'Unknown') + '</p>';
+                        }
+                    }
+                } catch (err) {
+                    html += '<div class="error">❌ Integrations API Error: ' + err.message + '</div>';
+                }
+                html += '</div>';
+                
+                html += '<div class="success">✅ Diagnostic Complete</div>';
+                results.innerHTML = html;
+                
+            } catch (error) {
+                results.innerHTML = `<div class="error">❌ Diagnostic Error: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 import { auth } from './firebase';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1';
+
 
 /* ─── Auth helpers ─────────────────────────────── */
 
@@ -246,7 +247,11 @@ const FALLBACK_INTEGRATIONS = [
 ];
 
 export const getOAuthUrl = (platform) => apiFetch(`/integrations/oauth-url?platform=${platform}`);
-export const authorizeIntegration = (platform) => apiFetch(`/integrations/${platform}/authorize`);
+export const authorizeIntegration = (platform) => {
+  const origin = encodeURIComponent(window.location.origin);
+  return apiFetch(`/integrations/${platform}/authorize?redirect_origin=${origin}`);
+};
+
 export const disconnectIntegration = (platform) => apiFetch(`/integrations/${platform}`, { method: 'DELETE' });
 export const syncIntegration = (platform) => apiFetch(`/integrations/${platform}/sync`, { method: 'POST' });
 export const requestIntegration = (body) => apiFetch('/integrations/request', { method: 'POST', body: JSON.stringify(body) });
@@ -270,7 +275,8 @@ export const getPlatformData = (platform, dataType, limit = 20) =>
   apiFetch(`/integrations/${platform}/data?data_type=${dataType}&limit=${limit}`);
 
 /* ─── Misc ──────────────────────────────────────── */
-export const getDashboardSummary = () => apiFetch('/dashboard/summary');
+export const getDashboardSummary = () => apiFetch(`/dashboard/summary?_t=${Date.now()}`); // Cache bust
+export const invalidateDashboardCache = () => apiFetch('/dashboard/invalidate-cache');
 export const getBrief = () => apiFetch('/brief');
 export const updateProfile = (data) => apiFetch('/users/profile', { method: 'PUT', body: JSON.stringify(data) });
 

@@ -54,9 +54,11 @@ The integration flow allows users to:
 4. Name: `WorkPilot AI Web Client`
 5. Add **Authorized redirect URIs**:
    ```
-   http://localhost:8000/api/v1/integrations/gmail/callback
-   http://localhost:8000/api/v1/integrations/google_calendar/callback
+   http://127.0.0.1:8000/api/v1/integrations/gmail/callback
+   http://127.0.0.1:8000/api/v1/integrations/google_calendar/callback
+   http://127.0.0.1:8000/api/v1/integrations/google_meet/callback
    ```
+   These values must match the browser request exactly. Do not substitute `localhost` for `127.0.0.1`.
    (For production, add your production domain)
 6. Click **Create**
 7. **Copy the Client ID and Client Secret** that appear
@@ -138,8 +140,12 @@ All integrations follow the same OAuth pattern:
 - **Fix**: Add credentials to `backend/.env`
 
 ### "Invalid redirect URI" Error
-- **Cause**: Redirect URI not in Google Console
-- **Fix**: Add `http://localhost:8000/api/v1/integrations/gmail/callback` to authorized URIs
+- **Cause**: The callback URI is missing or differs by hostname, port, path, or trailing slash.
+- **Fix**: In Google Cloud Console → **APIs & Services** → **Credentials** → your OAuth client, add:
+   - `http://127.0.0.1:8000/api/v1/integrations/gmail/callback`
+   - `http://127.0.0.1:8000/api/v1/integrations/google_calendar/callback`
+   - `http://127.0.0.1:8000/api/v1/integrations/google_meet/callback`
+- Restart the backend after changing `backend/.env`, then retry from `http://127.0.0.1:5174/`.
 
 ### User sees "This app isn't verified"
 - **Expected**: Your app is in testing mode

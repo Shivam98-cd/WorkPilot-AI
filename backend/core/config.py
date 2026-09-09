@@ -2,8 +2,10 @@
 Application Configuration using Pydantic Settings
 """
 from pydantic_settings import BaseSettings
-from typing import List
+from pathlib import Path
+from typing import List, Optional
 import os
+
 
 
 class Settings(BaseSettings):
@@ -96,6 +98,7 @@ class Settings(BaseSettings):
     SYNC_INTERVAL_MINUTES: int = 15
     MAX_CONCURRENT_SYNCS: int = 5
     AGENT_TIMEOUT_SECONDS: int = 30
+    EXTERNAL_REQUEST_TIMEOUT_SECONDS: float = 10.0
     RETRY_ATTEMPTS: int = 3
     RETRY_BACKOFF_SECONDS: int = 5
 
@@ -116,9 +119,15 @@ class Settings(BaseSettings):
             return [host.strip() for host in self.ALLOWED_HOSTS.split(",")]
         return self.ALLOWED_HOSTS
     
+    # AI LLM Provider keys
+    GEMINI_API_KEY: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None
+
     class Config:
-        env_file = ".env"
+        env_file = Path(__file__).resolve().parent.parent / ".env"
         case_sensitive = True
+        extra = "ignore"
 
 
 settings = Settings()
+

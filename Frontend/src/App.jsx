@@ -61,16 +61,115 @@ function AppContent() {
   const [authLoading, setAuthLoading] = useState(true); // true until Firebase confirms
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [view, setView]               = useState('dashboard');
+  const [cockpitPrompt, setCockpitPrompt] = useState('');
   const [connectionSheet, setConnectionSheet] = useState(null);
   const [dashboardNav, setDashboardNav]   = useState(null);
 
+  // ── 10 Professional Themes ──────────────────────────────────────────────────
   const THEMES = {
-    blue:   { primary: '#3b82f6', secondary: '#6366f1', accent: '#06b6d4', glow: 'rgba(59,130,246,0.3)' },
-    purple: { primary: '#8b5cf6', secondary: '#ec4899', accent: '#a78bfa', glow: 'rgba(139,92,246,0.3)' },
-    green:  { primary: '#10b981', secondary: '#06b6d4', accent: '#34d399', glow: 'rgba(16,185,129,0.3)' },
+    // 🌑 Dark
+    midnight: {
+      name: 'Midnight', label: '🌑 Midnight', category: 'dark',
+      bg: '#08080b', bgSidebar: '#0d0d12', surface: '#111118', surfaceHover: '#16161e',
+      border: 'rgba(255,255,255,0.07)', text: '#ffffff', textMuted: 'rgba(255,255,255,0.45)',
+      input: '#18181f', inputBorder: 'rgba(255,255,255,0.1)',
+      primary: '#3b82f6', secondary: '#6366f1', accent: '#06b6d4', glow: 'rgba(59,130,246,0.25)',
+    },
+    obsidian: {
+      name: 'Obsidian', label: '🪨 Obsidian', category: 'dark',
+      bg: '#0d0d0d', bgSidebar: '#111111', surface: '#161616', surfaceHover: '#1c1c1c',
+      border: 'rgba(255,255,255,0.06)', text: '#f0f0f0', textMuted: 'rgba(255,255,255,0.4)',
+      input: '#1a1a1a', inputBorder: 'rgba(255,255,255,0.09)',
+      primary: '#7c3aed', secondary: '#a78bfa', accent: '#c084fc', glow: 'rgba(124,58,237,0.25)',
+    },
+    charcoal: {
+      name: 'Charcoal', label: '🌫️ Charcoal', category: 'dark',
+      bg: '#1a1a1a', bgSidebar: '#1f1f1f', surface: '#252525', surfaceHover: '#2a2a2a',
+      border: 'rgba(255,255,255,0.08)', text: '#f5f5f5', textMuted: 'rgba(255,255,255,0.42)',
+      input: '#2c2c2c', inputBorder: 'rgba(255,255,255,0.1)',
+      primary: '#10b981', secondary: '#06b6d4', accent: '#34d399', glow: 'rgba(16,185,129,0.25)',
+    },
+    navy: {
+      name: 'Navy', label: '🌊 Navy', category: 'dark',
+      bg: '#0a0f1e', bgSidebar: '#0f1729', surface: '#131d33', surfaceHover: '#182240',
+      border: 'rgba(100,150,255,0.12)', text: '#e8f0ff', textMuted: 'rgba(180,200,255,0.5)',
+      input: '#1a2540', inputBorder: 'rgba(100,150,255,0.15)',
+      primary: '#06b6d4', secondary: '#3b82f6', accent: '#38bdf8', glow: 'rgba(6,182,212,0.25)',
+    },
+    // ☁️ Neutral
+    slate: {
+      name: 'Slate', label: '🔷 Slate', category: 'neutral',
+      bg: '#1e2130', bgSidebar: '#222640', surface: '#272c42', surfaceHover: '#2d3350',
+      border: 'rgba(148,163,184,0.12)', text: '#e2e8f0', textMuted: 'rgba(148,163,184,0.6)',
+      input: '#2d3350', inputBorder: 'rgba(148,163,184,0.15)',
+      primary: '#60a5fa', secondary: '#818cf8', accent: '#38bdf8', glow: 'rgba(96,165,250,0.22)',
+    },
+    stone: {
+      name: 'Stone', label: '🟤 Stone', category: 'neutral',
+      bg: '#1c1c1e', bgSidebar: '#212121', surface: '#2a2a2a', surfaceHover: '#303030',
+      border: 'rgba(255,220,150,0.08)', text: '#f5f0eb', textMuted: 'rgba(245,240,235,0.45)',
+      input: '#2f2f2f', inputBorder: 'rgba(255,220,150,0.1)',
+      primary: '#f59e0b', secondary: '#f97316', accent: '#fbbf24', glow: 'rgba(245,158,11,0.25)',
+    },
+    // ☀️ Light
+    cloud: {
+      name: 'Cloud', label: '☁️ Cloud', category: 'light',
+      bg: '#f0f4ff', bgSidebar: '#e8eeff', surface: '#ffffff', surfaceHover: '#f5f8ff',
+      border: 'rgba(59,130,246,0.12)', text: '#1e293b', textMuted: 'rgba(30,41,59,0.5)',
+      input: '#ffffff', inputBorder: 'rgba(59,130,246,0.2)',
+      primary: '#3b82f6', secondary: '#6366f1', accent: '#06b6d4', glow: 'rgba(59,130,246,0.15)',
+    },
+    pearl: {
+      name: 'Pearl', label: '🤍 Pearl', category: 'light',
+      bg: '#fafafa', bgSidebar: '#f3f3f5', surface: '#ffffff', surfaceHover: '#f8f8fc',
+      border: 'rgba(139,92,246,0.1)', text: '#18181b', textMuted: 'rgba(24,24,27,0.5)',
+      input: '#ffffff', inputBorder: 'rgba(139,92,246,0.15)',
+      primary: '#8b5cf6', secondary: '#ec4899', accent: '#a78bfa', glow: 'rgba(139,92,246,0.15)',
+    },
+    // ✨ Premium
+    aurora: {
+      name: 'Aurora', label: '✨ Aurora', category: 'premium',
+      bg: 'linear-gradient(135deg,#0d0d1a 0%,#1a0d2e 50%,#0d1a1a 100%)',
+      bgSidebar: 'rgba(20,10,40,0.95)', surface: 'rgba(255,255,255,0.06)', surfaceHover: 'rgba(255,255,255,0.09)',
+      border: 'rgba(236,72,153,0.15)', text: '#f0e8ff', textMuted: 'rgba(240,232,255,0.5)',
+      input: 'rgba(255,255,255,0.06)', inputBorder: 'rgba(236,72,153,0.2)',
+      primary: '#ec4899', secondary: '#8b5cf6', accent: '#f472b6', glow: 'rgba(236,72,153,0.3)',
+    },
+    frosted: {
+      name: 'Frosted', label: '🧊 Frosted', category: 'premium',
+      bg: '#10141a', bgSidebar: 'rgba(16,20,26,0.85)', surface: 'rgba(255,255,255,0.05)', surfaceHover: 'rgba(255,255,255,0.08)',
+      border: 'rgba(20,184,166,0.15)', text: '#e0f2fe', textMuted: 'rgba(224,242,254,0.5)',
+      input: 'rgba(255,255,255,0.06)', inputBorder: 'rgba(20,184,166,0.2)',
+      primary: '#14b8a6', secondary: '#0ea5e9', accent: '#2dd4bf', glow: 'rgba(20,184,166,0.3)',
+    },
   };
-  const [themeKey, setThemeKey] = useState(localStorage.getItem('wp_theme') || 'blue');
-  const activeTheme = THEMES[themeKey];
+
+  const [themeKey, setThemeKey] = useState(localStorage.getItem('wp_theme') || 'midnight');
+  const activeTheme = THEMES[themeKey] || THEMES.midnight;
+
+  // ── Apply theme as CSS variables on <body> — instant, zero re-render cost ──
+  useEffect(() => {
+    const T = activeTheme;
+    const root = document.documentElement;
+    root.style.setProperty('--wp-bg',           T.bg);
+    root.style.setProperty('--wp-bg-sidebar',   T.bgSidebar);
+    root.style.setProperty('--wp-surface',      T.surface);
+    root.style.setProperty('--wp-surface-hover',T.surfaceHover);
+    root.style.setProperty('--wp-border',       T.border);
+    root.style.setProperty('--wp-text',         T.text);
+    root.style.setProperty('--wp-text-muted',   T.textMuted);
+    root.style.setProperty('--wp-input',        T.input);
+    root.style.setProperty('--wp-input-border', T.inputBorder);
+    root.style.setProperty('--wp-primary',      T.primary);
+    root.style.setProperty('--wp-secondary',    T.secondary);
+    root.style.setProperty('--wp-accent',       T.accent);
+    root.style.setProperty('--wp-glow',         T.glow);
+    // Light/dark body class for descendant CSS selectors
+    document.body.classList.toggle('wp-light', T.category === 'light');
+    localStorage.setItem('wp_theme', themeKey);
+  }, [themeKey, activeTheme]);
+
+
 
   // ── OAuth result via router state (no full page reload, no flash) ─────────────
   useEffect(() => {
@@ -170,10 +269,10 @@ function AppContent() {
         <Route path="/" element={
           user && user.emailVerified ? (
             view === 'cockpit'
-              ? <AICockpit user={user} theme={activeTheme} onBack={() => setView('dashboard')} />
+                ? <AICockpit user={user} theme={activeTheme} initialPrompt={cockpitPrompt} onBack={() => setView('dashboard')} onOpenIntegrations={() => { setDashboardNav('integrations'); setView('dashboard'); }} />
               : <Dashboard
                   user={user}
-                  onOpenCockpit={() => setView('cockpit')}
+                  onOpenCockpit={(prompt) => { setCockpitPrompt(prompt || ''); setView('cockpit'); }}
                   themeKey={themeKey}
                   onThemeChange={setThemeKey}
                   initialNav={dashboardNav}
@@ -212,8 +311,27 @@ function AppContent() {
       {connectionSheet && (
         <ConnectionSheet
           result={connectionSheet}
-          onClose={() => setConnectionSheet(null)}
-          onNavigate={(nav) => { setConnectionSheet(null); setDashboardNav(nav); }}
+          onClose={() => {
+            setConnectionSheet(null);
+            // Set flag so Integrations page knows to reload
+            if (connectionSheet.status === 'connected') {
+              console.log('✅ App.jsx: Integration connected, setting localStorage flag and firing event');
+              localStorage.setItem('wp_integration_just_connected', Date.now().toString());
+            }
+            // Trigger integrations reload by firing a custom event
+            window.dispatchEvent(new CustomEvent('wp-integration-connected'));
+          }}
+          onNavigate={(nav) => { 
+            setConnectionSheet(null); 
+            setDashboardNav(nav);
+            // Set flag so Integrations page knows to reload
+            if (connectionSheet.status === 'connected') {
+              console.log('✅ App.jsx: Integration connected (via navigate), setting localStorage flag and firing event');
+              localStorage.setItem('wp_integration_just_connected', Date.now().toString());
+            }
+            // Trigger integrations reload
+            window.dispatchEvent(new CustomEvent('wp-integration-connected'));
+          }}
         />
       )}
     </>

@@ -1,0 +1,141 @@
+╔══════════════════════════════════════════════════════════════╗
+║           WORKPILOT AI - QUICK TEST PROMPTS                  ║
+║          Copy & Paste These into AI Cockpit                  ║
+╚══════════════════════════════════════════════════════════════╝
+
+✅ YOUR CONNECTED INTEGRATIONS:
+   • Gmail
+   • Google Calendar
+   • Notion
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📧 GMAIL TESTS (Copy one at a time)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Show me all emails from today
+
+What unread emails do I have?
+
+Show me urgent emails
+
+Draft a professional reply to the most recent email
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📅 GOOGLE CALENDAR TESTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+What's on my calendar today?
+
+Show me my schedule for the next 7 days
+
+Create a meeting tomorrow at 2 PM titled "Team Sync" for 30 minutes
+
+Find the best time for a 1-hour meeting this week
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📓 NOTION TESTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Show me my Notion databases
+
+Read my Notion project database
+
+Search Notion for meeting notes
+
+Create a new Notion page titled "AI Test Page" with content "Testing WorkPilot AI"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔄 MULTI-INTEGRATION TESTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Give me my morning briefing
+
+Show me all my connected integrations
+
+Search for "budget" across my emails, calendar, and Notion
+
+Generate a weekly productivity report
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ QUICK VALIDATION (Run these 5 in order)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Show me all my connected integrations
+2. Show me all emails from today
+3. What's on my calendar today?
+4. Show me my Notion databases
+5. Give me my morning briefing
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ WHAT TO EXPECT:
+
+Gmail:
+  → Should show real emails with sender, subject, preview
+  → "No emails" is OK if inbox is empty for that filter
+
+Calendar:
+  → Should show real events with time, title, attendees
+  → "No events" is OK if calendar is empty
+
+Notion:
+  → Should list your actual Notion databases
+  → Should be able to create and search pages
+
+Morning Briefing:
+  → Should combine data from ALL 3 platforms
+  → Should show summary of emails, events, and tasks
+
+Integrations Status:
+  → Should show Gmail, Calendar, Notion as "Connected"
+  → Should display green checkmarks/status indicators
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🐛 IF SOMETHING FAILS:
+
+1. Check browser console (F12)
+2. Check backend terminal for errors
+3. Verify toggle buttons are still green
+4. Try disconnecting and reconnecting the integration
+5. Check token expiration in backend logs
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 NOTE: Replace placeholder emails with real ones when testing
+email composition or meeting invitations.
+
+Example:
+  Send an email to YOUR_REAL_EMAIL@gmail.com with subject "Test"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For full test suite with 26 prompts, see:
+  AI_COCKPIT_INTEGRATION_TESTS.md
+
+For testing guide and troubleshooting:
+  INTEGRATION_TESTING_GUIDE.mdi 
+
+╚══════════════════════════════════════════════════════════════╝
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ TEST RESULTS LOG
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[2026-09-06 19:45] Meeting Creation with Attendees
+Prompt: Create a meeting called "Team Review" tomorrow at 3 PM with 
+        shivamyadavwork985798@gmail.com and hariom985798@gmail.com
+Result: ✅ PASSED
+  - Event ID: s3c21n6ald6h64qcj7sc4u0ehg
+  - Meet Link: https://meet.google.com/iyz-cpfi-iov
+  - Emails sent successfully (Message ID: 1a076ff44c23b3b0)
+  - Beautiful markdown table rendering
+  - No import scoping errors
+
+[NEXT TEST]: Run the 5 Quick Validation tests above

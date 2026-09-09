@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gmail Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #0c0c0f; color: #fff; }
+        button { padding: 10px 20px; margin: 10px; cursor: pointer; background: #3b82f6; color: white; border: none; border-radius: 5px; }
+        pre { background: #1a1a1f; padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid #333; }
+        .error { background: #ef4444; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .success { background: #10b981; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Gmail API Test</h1>
+    
+    <button onclick="testGmail()">Test Gmail Emails</button>
+    <button onclick="testDashboard()">Test Dashboard Summary</button>
+    
+    <div id="results"></div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+        
+        async function getAuthToken() {
+            const tokens = JSON.parse(localStorage.getItem('wp_tokens') || 'null');
+            return tokens?.accessToken || null;
+        }
+        
+        async function testGmail() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<div style="color: #fbbf24;">⏳ Testing Gmail...</div>';
+            
+            try {
+                const token = await getAuthToken();
+                if (!token) {
+                    results.innerHTML = '<div class="error">❌ Not logged in. Please log in at http://localhost:5173 first.</div>';
+                    return;
+                }
+                
+                const response = await fetch(`${API_BASE}/emails`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                let html = '<div class="success">✅ Gmail API Response:</div>';
+                html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                
+                if (data.success && data.data) {
+                    html += `<p><strong>Email Count:</strong> ${data.data.length}</p>`;
+                    html += `<p><strong>Source:</strong> ${data.source}</p>`;
+                    if (data.note) {
+                        html += `<p><strong>Note:</strong> ${data.note}</p>`;
+                    }
+                }
+                
+                results.innerHTML = html;
+                
+            } catch (error) {
+                results.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function testDashboard() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<div style="color: #fbbf24;">⏳ Testing Dashboard...</div>';
+            
+            try {
+                const token = await getAuthToken();
+                if (!token) {
+                    results.innerHTML = '<div class="error">❌ Not logged in. Please log in at http://localhost:5173 first.</div>';
+                    return;
+                }
+                
+                const response = await fetch(`${API_BASE}/dashboard/summary`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                let html = '<div class="success">✅ Dashboard API Response:</div>';
+                
+                if (data.success && data.data) {
+                    html += '<h3>Email Section:</h3>';
+                    html += `<p><strong>Email Count:</strong> ${data.data.email?.length || 0}</p>`;
+                    html += `<pre>${JSON.stringify(data.data.email || [], null, 2)}</pre>`;
+                    
+                    html += '<h3>Calendar Section:</h3>';
+                    html += `<p><strong>Event Count:</strong> ${data.data.calendar?.length || 0}</p>`;
+                    html += `<pre>${JSON.stringify(data.data.calendar || [], null, 2)}</pre>`;
+                    
+                    html += '<h3>Counts:</h3>';
+                    html += `<pre>${JSON.stringify(data.data.counts || {}, null, 2)}</pre>`;
+                } else {
+                    html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                }
+                
+                results.innerHTML = html;
+                
+            } catch (error) {
+                results.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

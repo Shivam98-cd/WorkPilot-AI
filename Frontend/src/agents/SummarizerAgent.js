@@ -16,9 +16,12 @@ const SummarizerAgent = ({ setState, getState }) => {
       };
 
       // Call backend summarization endpoint
-      const res = await fetch('/ai/summary', {
+      const res = await fetch('http://localhost:8000/api/v1/ai_chat/summary', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${JSON.parse(localStorage.getItem('wp_tokens') || '{}').access}`
+        },
         body: JSON.stringify(payload)
       });
       if (!res.ok) throw new Error('Summary generation failed');
