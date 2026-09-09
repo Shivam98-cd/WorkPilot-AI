@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Toggle State Debug</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #0c0c0f; color: #fff; }
+        button { padding: 10px 20px; margin: 10px; cursor: pointer; background: #3b82f6; color: white; border: none; border-radius: 5px; }
+        pre { background: #1a1a1f; padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid #333; white-space: pre-wrap; word-wrap: break-word; }
+        .error { background: #ef4444; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .success { background: #10b981; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .section { margin: 20px 0; padding: 15px; background: #1a1a1f; border-radius: 8px; border: 1px solid #333; }
+        .toggle { display: inline-block; width: 40px; height: 20px; border-radius: 10px; margin-left: 10px; }
+        .toggle.on { background: #10b981; }
+        .toggle.off { background: #4b5563; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Toggle State Debug Tool</h1>
+    <p>This will show exactly what the API returns and how toggles should appear</p>
+    
+    <button onclick="testIntegrations()">Test Integration Toggles</button>
+    
+    <div id="results"></div>
+
+    <script>
+        async function testIntegrations() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<div style="color: #fbbf24;">⏳ Testing...</div>';
+            
+            try {
+                const tokens = JSON.parse(localStorage.getItem('wp_tokens') || 'null');
+                if (!tokens?.accessToken) {
+                    results.innerHTML = '<div class="error">❌ Not logged in. Please log in at http://localhost:5173 first.</div>';
+                    return;
+                }
+                
+                // Fetch integrations
+                const response = await fetch('http://localhost:8000/api/v1/integrations', {
+                    headers: {
+                        'Authorization': `Bearer ${tokens.accessToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (!data.success || !data.data) {
+                    results.innerHTML = '<div class="error">❌ API returned error</div><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                    return;
+                }
+                
+                let html = '<div class="success">✅ API Success</div>';
+                
+                html += '<div class="section">';
+                html += '<h3>API Response (Raw)</h3>';
+                html += '<pre>' + JSON.stringify(data.data.slice(0, 5), null, 2) + '</pre>';
+                html += '</div>';
+                
+                html += '<div class="section">';
+                html += '<h3>Toggle States (What Should Show)</h3>';
+                html += '<table style="width: 100%; border-collapse: collapse;">';
+                html += '<tr style="border-bottom: 1px solid #333;"><th style="text-align: left; padding: 10px;">Platform</th><th style="text-align: left; padding: 10px;">API connected</th><th style="text-align: left; padding: 10px;">API status</th><th style="text-align: left; padding: 10px;">Toggle Should Be</th></tr>';
+                
+                data.data.forEach(integration => {
+                    const isConnected = 
+                        integration.connected === true ||
+                        integration.connected === 'true' ||
+                        integration.status === 'connected' ||
+                        integration.status === 'active';
+                    
+                    const toggleClass = isConnected ? 'on' : 'off';
+                    const toggleText = isConnected ? 'GREEN (ON)' : 'GRAY (OFF)';
+                    const bgColor = isConnected ? '#10b981' : '#1f2937';
+                    
+                    html += '<tr style="border-bottom: 1px solid #333; background: ' + bgColor + '22;">';
+                    html += '<td style="padding: 10px;"><strong>' + integration.displayName + '</strong></td>';
+                    html += '<td style="padding: 10px;">' + JSON.stringify(integration.connected) + '</td>';
+                    html += '<td style="padding: 10px;">' + integration.status + '</td>';
+                    html += '<td style="padding: 10px;"><div class="toggle ' + toggleClass + '"></div> ' + toggleText + '</td>';
+                    html += '</tr>';
+                });
+                
+                html += '</table>';
+                html += '</div>';
+                
+                const connectedCount = data.data.filter(i => 
+                    i.connected === true || 
+                    i.connected === 'true' || 
+                    i.status === 'connected' || 
+                    i.status === 'active'
+                ).length;
+                
+                html += '<div class="section">';
+                html += '<h3>Summary</h3>';
+                html += '<p><strong>Total Integrations:</strong> ' + data.data.length + '</p>';
+                html += '<p><strong>Connected (should show GREEN):</strong> ' + connectedCount + '</p>';
+                html += '<p><strong>Disconnected (should show GRAY):</strong> ' + (data.data.length - connectedCount) + '</p>';
+                html += '</div>';
+                
+                html += '<div class="section">';
+                html += '<h3>Expected Connected Integrations (GREEN toggles)</h3>';
+                html += '<ul>';
+                data.data.forEach(i => {
+                    const isConnected = 
+                        i.connected === true ||
+                        i.connected === 'true' ||
+                        i.status === 'connected' ||
+                        i.status === 'active';
+                    if (isConnected) {
+                        html += '<li style="color: #10b981;">✅ <strong>' + i.displayName + '</strong> (' + i.accountLabel + ')</li>';
+                    }
+                });
+                html += '</ul>';
+                html += '</div>';
+                
+                results.innerHTML = html;
+                
+            } catch (error) {
+                results.innerHTML = '<div class="error">❌ Error: ' + error.message + '</div>';
+            }
+        }
+    </script>
+</body>
+</html>

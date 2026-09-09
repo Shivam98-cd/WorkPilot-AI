@@ -869,6 +869,15 @@ export function IntegrationsPage({ T }) {
   const [selectedNode, setSelectedNode] = useState(null);
 
   console.log('🎯 IntegrationsPage: Connected integrations:', integrations.filter(i => i.connected).map(i => i.platform));
+  
+  // DEBUG: Log full integration data to understand toggle state
+  console.log('🔍 IntegrationsPage: Full integration data:', integrations.map(i => ({
+    platform: i.platform,
+    displayName: i.displayName,
+    connected: i.connected,
+    status: i.status,
+    accountLabel: i.accountLabel
+  })));
 
   // Reload on mount to ensure fresh data
   useEffect(() => {
@@ -1114,6 +1123,44 @@ export function IntegrationsPage({ T }) {
           <Btn ghost color={C.red} onClick={reload} style={{ padding: '4px 10px', fontSize: 11 }}>Retry</Btn>
         </div>
       )}
+
+      {/* 🔍 DEBUG PANEL - Shows actual integration state */}
+      <div style={{ 
+        background: 'rgba(236,72,153,0.08)', 
+        border: '1px solid rgba(236,72,153,0.25)', 
+        borderRadius: '12px', 
+        padding: '16px', 
+        marginBottom: '20px',
+        fontFamily: 'monospace',
+        fontSize: '11px'
+      }}>
+        <div style={{ fontWeight: 'bold', marginBottom: '12px', color: '#ec4899', fontSize: '13px' }}>
+          🔍 DEBUG STATE (delete this panel after fixing)
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
+          {integrations.map(i => (
+            <div key={i.platform} style={{ 
+              background: i.connected ? 'rgba(16,185,129,0.1)' : 'rgba(75,85,99,0.05)',
+              border: i.connected ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(75,85,99,0.2)',
+              borderRadius: '6px',
+              padding: '8px',
+              fontSize: '10px'
+            }}>
+              <div style={{ fontWeight: 'bold', color: i.connected ? '#10b981' : '#9ca3af', marginBottom: '4px' }}>
+                {i.connected ? '✅' : '❌'} {i.displayName}
+              </div>
+              <div style={{ color: '#6b7280' }}>
+                connected: <span style={{ color: i.connected ? '#10b981' : '#ef4444' }}>{JSON.stringify(i.connected)}</span><br/>
+                status: <span style={{ color: i.status === 'connected' ? '#10b981' : '#6b7280' }}>{i.status}</span>
+                {i.accountLabel && <><br/>account: {i.accountLabel}</>}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: '12px', color: '#6b7280', fontSize: '10px' }}>
+          Total: {integrations.length} | Connected: {connectedCount} | Auth loading: {authLoading.toString()} | Loading: {loading.toString()}
+        </div>
+      </div>
 
       {!loading && integrations.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>

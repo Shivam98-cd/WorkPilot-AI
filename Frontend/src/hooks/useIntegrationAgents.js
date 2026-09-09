@@ -43,13 +43,19 @@ function mergeWithCatalog(authItems) {
   return CATALOG.map(base => {
     const apiData = byPlatform[base.platform];
     if (apiData) {
-      // Force connected to a strict boolean — handles string 'true', number 1,
-      // or missing field when status='connected'
-      const isConnected =
-        apiData.connected === true ||
-        apiData.connected === 'true' ||
-        apiData.status === 'connected' ||
-        apiData.status === 'active';
+      // ROBUST connected field detection - handles all backend response formats
+      const isConnected = Boolean(
+        apiData.connected === true ||           // strict boolean true
+        apiData.connected === 'true' ||         // string 'true'
+        apiData.connected === 1 ||              // number 1
+        apiData.status === 'connected' ||       // status field
+        apiData.status === 'active' ||          // alternate status
+        (apiData.accountLabel && apiData.accountLabel.length > 0)  // has account = connected
+      );
+      
+      // Log for debugging
+      console.log(`🔍 mergeWithCatalog: ${base.platform} -> connected=${isConnected} (from api: connected=${apiData.connected}, status=${apiData.status})`);
+      
       return {
         ...base,
         ...apiData,
@@ -78,6 +84,8 @@ export function useIntegrationAgents() {
   const [authLoading, setAuthLoading]   = useState(true);
 
   const mountedRef = useRef(true);
+  const [updateCounter, setUpdateCounter] = useState(0); // Force re-render counter
+
   useEffect(() => { return () => { mountedRef.current = false; }; }, []);
 
   // ─── Load authenticated integrations list (overlay on top of catalog) ─────────
@@ -88,12 +96,24 @@ export function useIntegrationAgents() {
     setError(null);
     try {
       const res = await getIntegrations(); // Always fetches fresh data
-      console.log('📦 useIntegrationAgents: API response:', res?.data?.slice(0, 3));
+      console.log('📦 useIntegrationAgents: RAW API RESPONSE:', res);
+      console.log('📦 useIntegrationAgents: API data array:', res?.data);
       if (!mountedRef.current) return;
       if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+        console.log('✅ useIntegrationAgents: About to merge, data length:', res.data.length);
         const merged = mergeWithCatalog(res.data);
-        console.log('✅ useIntegrationAgents: Merged data (first 3):', merged.slice(0, 3).map(i => ({ platform: i.platform, connected: i.connected, status: i.status })));
-        setIntegrations(merged);
+        console.log('✅ useIntegrationAgents: Merged result (first 5):', merged.slice(0, 5).map(i => ({ 
+          platform: i.platform, 
+          connected: i.connected, 
+          status: i.status,
+          accountLabel: i.accountLabel 
+        })));
+        // Force update with new array reference + counter to trigger re-render
+        setIntegrations([...merged]);
+        setUpdateCounter(prev => prev + 1);
+        console.log('✅ setIntegrations called with', merged.filter(i => i.connected).length, 'connected');
+      } else {
+        console.warn('⚠️ useIntegrationAgents: API returned empty or invalid data:', res);
       }
     } catch (e) {
       console.error('❌ useIntegrationAgents: loadIntegrations error:', e);
@@ -102,7 +122,10 @@ export function useIntegrationAgents() {
         setError(e.message);
       }
     } finally {
-      if (mountedRef.current) setAuthLoading(false);
+      if (mountedRef.current) {
+        console.log('✅ useIntegrationAgents: setAuthLoading(false)');
+        setAuthLoading(false);
+      }
     }
   }, []);
 
