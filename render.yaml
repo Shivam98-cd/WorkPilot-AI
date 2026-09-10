@@ -6,7 +6,7 @@ services:
     plan: free
     branch: main
     dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    # No dockerContext - build from root, Dockerfile handles paths
     envVars:
       - key: PORT
         value: 10000
