@@ -43,8 +43,25 @@ async def lifespan(app: FastAPI):
     initialize_firebase()
     await startup_http_client()          # pre-warm shared HTTP connection pool
     start_automation_scheduler()
+    
+    # Production security warnings
+    if not settings.DEBUG:
+        if "*" in settings.ALLOWED_ORIGINS:
+            print("⚠️  WARNING: CORS wildcard (*) detected in production mode!")
+            print("   Set ALLOWED_ORIGINS to specific domains for security.")
+        if "*" in settings.allowed_hosts_list:
+            print("⚠️  WARNING: ALLOWED_HOSTS wildcard (*) detected in production mode!")
+            print("   Set ALLOWED_HOSTS to specific domains for security.")
+    
+    # Determine port for logging (Render uses PORT env var)
+    port = int(os.getenv("PORT", settings.PORT))
+    
     print(f"{settings.PROJECT_NAME} v{settings.VERSION} started")
-    print(f"API Documentation: http://localhost:8000/docs")
+    print(f"Environment: {'Production' if not settings.DEBUG else 'Development'}")
+    print(f"Port: {port}")
+    print(f"API Documentation: http://localhost:{port}/docs" if settings.DEBUG else f"API: {settings.BACKEND_PUBLIC_URL}")
+    print(f"CORS Origins: {', '.join(settings.allowed_origins_list)}")
+    print(f"Debug Mode: {settings.DEBUG}")
     yield
     stop_automation_scheduler()
     await shutdown_http_client()         # close shared HTTP client cleanly
@@ -63,6 +80,8 @@ app = FastAPI(
 )
 
 # CORS Middleware
+# Production: ALLOWED_ORIGINS should be set to specific domains
+# Example: "https://your-app.vercel.app,http://localhost:5173"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
@@ -122,10 +141,16 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+    
+    # Use PORT from environment (Render) or settings (local development)
+    # Render provides PORT env var; this ensures compatibility
+    port = int(os.getenv("PORT", settings.PORT))
+    
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=port,
         reload=settings.DEBUG,
         log_level="info",
     )

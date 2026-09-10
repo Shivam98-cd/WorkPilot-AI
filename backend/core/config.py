@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     API_PREFIX: str = "/api/v1"
     DEBUG: bool = True
+    PORT: int = 8000  # Can be overridden by environment variable
     
     # Firebase (default placeholder values for testing)
     FIREBASE_PROJECT_ID: str = "test-project"
@@ -35,7 +36,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     # CORS
-    ALLOWED_ORIGINS: str = "http://localhost:3000"
+    ALLOWED_ORIGINS: str = "http://localhost:5173"
     ALLOWED_HOSTS: str = "*"
     
     # Redis (optional)

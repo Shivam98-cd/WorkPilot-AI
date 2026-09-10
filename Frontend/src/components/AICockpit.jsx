@@ -1241,7 +1241,7 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
         deploy: 'Production v2.4.1 is live (99.9% uptime). Staging v2.4.2 is at 67% — auth conflict detected.',
       };
       const key = Object.keys(fallbacks).find(k => userText.toLowerCase().includes(k));
-      const fallbackText = fallbacks[key] || 'I encountered a connection issue. Please make sure the backend is running at localhost:8000.';
+      const fallbackText = fallbacks[key] || 'I encountered a connection issue. Please make sure the backend is running and accessible.';
       const msgId = Date.now() + 1;
       setMsgs(p => [...p, { id: msgId, r: 'ai', text: fallbackText, card: key || null, streaming: false, done: true }]);
       setStatsCount(p => ({ ...p, handled: p.handled + 1 }));
