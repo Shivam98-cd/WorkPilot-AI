@@ -3,8 +3,14 @@
 
 set -o errexit  # Exit on error
 
-# Upgrade pip to latest version
+echo "🔧 Starting build process..."
+echo "📦 Python version:"
+python --version
+
+echo "📦 Upgrading pip..."
 pip install --upgrade pip
 
-# Install dependencies using only binary wheels (no compilation)
-pip install --only-binary=:all: -r requirements.txt
+echo "📦 Installing dependencies..."
+pip install -r requirements.txt
+
+echo "✅ Build complete!"
