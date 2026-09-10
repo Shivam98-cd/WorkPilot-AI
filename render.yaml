@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: workpilot-backend
+    runtime: docker
+    region: oregon
+    plan: free
+    branch: main
+    dockerfilePath: ./backend/Dockerfile
+    envVars:
+      - key: PORT
+        value: 10000
+      # All other env vars should be added via Render Dashboard
