@@ -42,7 +42,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     initialize_firebase()
     await startup_http_client()          # pre-warm shared HTTP connection pool
-    start_automation_scheduler()
+    try:
+        start_automation_scheduler()
+    except Exception as e:
+        import logging
+        logging.getLogger("main").error(f"Failed to start automation scheduler: {e}")
     
     # Production security warnings
     if not settings.DEBUG:

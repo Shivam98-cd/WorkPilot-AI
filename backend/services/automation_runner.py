@@ -8,6 +8,8 @@ Features:
 """
 import logging
 from datetime import datetime, timezone
+
+logger = logging.getLogger("workpilot.automation_runner")
 try:
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.cron import CronTrigger
@@ -129,7 +131,7 @@ def start_automation_scheduler():
         scheduler.start()
         _SCHEDULER_STARTED = True
         logger.info("[CRON RUNNER] APScheduler started successfully with 8:00 AM Cron & 5-min Interval jobs.")
-        print("⏰ [CRON RUNNER] Background Automation Worker started (8:00 AM Daily Briefing & 5-min Automation Ticks)")
+        print("[CRON RUNNER] Background Automation Worker started (8:00 AM Daily Briefing & 5-min Automation Ticks)")
     except Exception as exc:
         logger.error(f"[CRON RUNNER] Failed to start APScheduler: {exc}")
 
