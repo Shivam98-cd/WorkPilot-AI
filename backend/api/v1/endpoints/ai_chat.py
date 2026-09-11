@@ -10,7 +10,10 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from groq import Groq
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None  # type: ignore
 from core.config import settings
 from middleware.auth import get_current_user
 from repositories.chat_repository import chat_repository
@@ -166,7 +169,9 @@ def _get_suggestions(last_tool):
     }
     return MAP.get(last_tool or "", ["Show my morning briefing","Check all integrations","Generate this week report"])
 
-def _get_groq() -> Groq:
+def _get_groq():
+    if Groq is None:
+        raise HTTPException(status_code=503, detail="Groq library is not installed. Please install groq.")
     key = settings.GROQ_API_KEY
     if not key: raise HTTPException(status_code=503, detail="GROQ_API_KEY not configured")
     return Groq(api_key=key)

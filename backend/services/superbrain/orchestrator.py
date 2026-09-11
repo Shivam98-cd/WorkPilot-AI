@@ -12,7 +12,10 @@ from datetime import datetime, timezone
 from typing import AsyncGenerator
 from collections import defaultdict, deque
 
-from groq import Groq
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None  # type: ignore
 from core.config import settings
 from services.superbrain.memory import MemoryManager
 from services.superbrain.intent_classifier import classify_intent, get_forced_tool, get_smart_suggestions

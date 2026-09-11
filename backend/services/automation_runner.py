@@ -8,13 +8,16 @@ Features:
 """
 import logging
 from datetime import datetime, timezone
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
-
-logger = logging.getLogger("workpilot.automation_runner")
-
-scheduler = AsyncIOScheduler()
+try:
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.interval import IntervalTrigger
+    scheduler = AsyncIOScheduler()
+except ImportError:
+    AsyncIOScheduler = None  # type: ignore
+    CronTrigger = None  # type: ignore
+    IntervalTrigger = None  # type: ignore
+    scheduler = None
 _SCHEDULER_STARTED = False
 
 
@@ -100,6 +103,9 @@ def start_automation_scheduler():
     global _SCHEDULER_STARTED
     if _SCHEDULER_STARTED:
         return
+    if not scheduler:
+        logger.warning("[CRON RUNNER] APScheduler not installed. Background automation scheduler disabled.")
+        return
 
     try:
         # Job 1: Daily 8:00 AM Morning Briefing Cron
@@ -131,6 +137,8 @@ def start_automation_scheduler():
 def stop_automation_scheduler():
     """Stop the background APScheduler worker gracefully."""
     global _SCHEDULER_STARTED
+    if not scheduler:
+        return
     if _SCHEDULER_STARTED and scheduler.running:
         scheduler.shutdown(wait=False)
         _SCHEDULER_STARTED = False
@@ -140,7 +148,7 @@ def stop_automation_scheduler():
 def get_scheduler_status():
     """Return live status of the background cron scheduler."""
     jobs = []
-    if _SCHEDULER_STARTED and scheduler.running:
+    if scheduler and _SCHEDULER_STARTED and scheduler.running:
         for j in scheduler.get_jobs():
             jobs.append({
                 "id": j.id,
@@ -148,7 +156,7 @@ def get_scheduler_status():
                 "next_run_time": j.next_run_time.isoformat() if j.next_run_time else None
             })
     return {
-        "active": _SCHEDULER_STARTED and scheduler.running,
+        "active": bool(scheduler and _SCHEDULER_STARTED and scheduler.running),
         "job_count": len(jobs),
         "jobs": jobs
     }
