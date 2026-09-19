@@ -41,3 +41,5 @@ dist-ssr/
 backend/confidential data/
 backend/confidential data/*.json
 
+
+.vercel

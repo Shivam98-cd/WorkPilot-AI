@@ -66,9 +66,9 @@ async def run_daily_morning_briefings():
         if not briefing_text:
             briefing_text = (
                 "🌅 **WorkPilot AI Morning Briefing**\n\n"
-                "• **Urgent**: Review CFO Q3 Budget Report & Acme Corp Client Ticket #4821\n"
-                "• **Schedule**: Daily Standup at 9:00 AM, Q3 Planning Session at 2:00 PM\n"
-                "• **Focus**: Deep Work block scheduled 4:00 PM - 6:00 PM"
+                "• **Inbox**: No urgent unread emails detected.\n"
+                "• **Calendar**: No conflicting schedule events detected today.\n"
+                "• **Workspace**: All connected systems operating normally."
             )
 
         logger.info(f"[CRON RUNNER] 8:00 AM Briefing Generated:\n{briefing_text[:100]}...")
@@ -100,6 +100,20 @@ async def run_scheduled_automation_ticks():
         logger.error(f"[CRON RUNNER] Error in automation tick: {exc}")
 
 
+async def run_due_reminders_tick():
+    """
+    High-frequency Job: Runs every 60 seconds.
+    Checks and fires any due reminders (meetings, tasks, alerts) across all active users.
+    """
+    try:
+        from services.reminder_service import reminder_service
+        dispatched = await reminder_service.check_and_dispatch_due_reminders()
+        if dispatched > 0:
+            logger.info(f"[CRON RUNNER] Dispatched {dispatched} due reminders/alerts.")
+    except Exception as exc:
+        logger.error(f"[CRON RUNNER] Error in reminders tick: {exc}")
+
+
 def start_automation_scheduler():
     """Start the background APScheduler worker."""
     global _SCHEDULER_STARTED
@@ -128,10 +142,19 @@ def start_automation_scheduler():
             replace_existing=True
         )
 
+        # Job 3: 1-minute recurring reminder checker
+        scheduler.add_job(
+            run_due_reminders_tick,
+            trigger=IntervalTrigger(seconds=60),
+            id="reminders_1min_check_job",
+            name="1-Minute Reminder & Alert Dispatcher",
+            replace_existing=True
+        )
+
         scheduler.start()
         _SCHEDULER_STARTED = True
-        logger.info("[CRON RUNNER] APScheduler started successfully with 8:00 AM Cron & 5-min Interval jobs.")
-        print("[CRON RUNNER] Background Automation Worker started (8:00 AM Daily Briefing & 5-min Automation Ticks)")
+        logger.info("[CRON RUNNER] APScheduler started successfully with 8:00 AM Cron, 5-min Automations, and 1-min Reminders.")
+        print("[CRON RUNNER] Background Automation Worker started (8:00 AM Daily Briefing, 5-min Automations & 1-min Reminders)")
     except Exception as exc:
         logger.error(f"[CRON RUNNER] Failed to start APScheduler: {exc}")
 

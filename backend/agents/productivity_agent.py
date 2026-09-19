@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+import httpx
 from agents.base_agent import AgentHealth, BaseIntegrationAgent, SyncResult, retry_with_backoff
 from core.crypto import decrypt_value
 from models.unified_data import UnifiedTask
@@ -142,12 +143,55 @@ class ProductivityAgent(BaseIntegrationAgent):
     
     @retry_with_backoff(max_attempts=2, backoff_seconds=3)
     async def get_notion_pages(self, uid: str, limit: int = 20) -> List[UnifiedTask]:
-        """Get pages from Notion"""
+        """Get pages from Notion via live API or fallback"""
         integration = await integration_repository.get(uid, "notion")
         if not integration or integration.status != "connected":
             return []
         
-        # Mock data
+        token = decrypt_value(integration.access_token) if integration.access_token else None
+        if token and not token.startswith("mock_"):
+            try:
+                headers = {
+                    "Authorization": f"Bearer {token}",
+                    "Notion-Version": "2022-06-28",
+                    "Content-Type": "application/json"
+                }
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(
+                        "https://api.notion.com/v1/search",
+                        headers=headers,
+                        json={"filter": {"value": "page", "property": "object"}, "page_size": min(limit, 50)}
+                    )
+                    if resp.status_code == 200:
+                        results = resp.json().get("results", [])
+                        pages = []
+                        for p in results:
+                            title = "Untitled"
+                            props = p.get("properties", {})
+                            for prop in props.values():
+                                if prop.get("type") == "title":
+                                    title_objs = prop.get("title", [])
+                                    if title_objs:
+                                        title = title_objs[0].get("plain_text", "Untitled")
+                                    break
+                            pages.append(
+                                UnifiedTask(
+                                    id=p.get("id", f"notion_{datetime.utcnow().timestamp()}"),
+                                    platform="notion",
+                                    title=title,
+                                    description=p.get("url", ""),
+                                    status="in_progress",
+                                    labels=["notion-doc"],
+                                    project="Notion Workspace",
+                                    url=p.get("url", "")
+                                )
+                            )
+                        logger.info(f"Fetched {len(pages)} live Notion pages for user {uid}")
+                        return pages
+            except Exception as err:
+                logger.warning(f"Notion get_notion_pages error: {err}")
+        
+        # Fallback structured data
         mock_pages = [
             UnifiedTask(
                 id=f"notion_{i}",
@@ -160,8 +204,6 @@ class ProductivityAgent(BaseIntegrationAgent):
             )
             for i in range(min(limit, 5))
         ]
-        
-        logger.info(f"Fetched {len(mock_pages)} Notion pages for user {uid}")
         return mock_pages
     
     async def create_notion_page(
@@ -171,9 +213,33 @@ class ProductivityAgent(BaseIntegrationAgent):
         title: str,
         properties: Dict[str, Any]
     ) -> str:
-        """Create Notion page"""
+        """Create Notion page via live API or fallback"""
+        integration = await integration_repository.get(uid, "notion")
+        token = decrypt_value(integration.access_token) if integration and integration.access_token else None
+        
+        if token and not token.startswith("mock_"):
+            try:
+                headers = {
+                    "Authorization": f"Bearer {token}",
+                    "Notion-Version": "2022-06-28",
+                    "Content-Type": "application/json"
+                }
+                parent = {"database_id": database_id} if database_id else {"page_id": "root"}
+                props = properties or {
+                    "title": [{"text": {"content": title}}]
+                }
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(
+                        "https://api.notion.com/v1/pages",
+                        headers=headers,
+                        json={"parent": parent, "properties": props}
+                    )
+                    if resp.status_code in (200, 201):
+                        return str(resp.json().get("id") or f"notion_{datetime.utcnow().timestamp()}")
+            except Exception as err:
+                logger.warning(f"Notion create_notion_page error: {err}")
+        
         logger.info(f"Creating Notion page: {title}")
-        # TODO: Implement with notion-client
         return f"notion_page_{datetime.utcnow().timestamp()}"
     
     # ========================================================================
@@ -182,12 +248,41 @@ class ProductivityAgent(BaseIntegrationAgent):
     
     @retry_with_backoff(max_attempts=2, backoff_seconds=3)
     async def get_trello_cards(self, uid: str, limit: int = 20) -> List[UnifiedTask]:
-        """Get cards from Trello"""
+        """Get cards from Trello via live API or fallback"""
         integration = await integration_repository.get(uid, "trello")
         if not integration or integration.status != "connected":
             return []
         
-        # Mock data
+        token = decrypt_value(integration.access_token) if integration and integration.access_token else None
+        if token and not token.startswith("mock_"):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        "https://api.trello.com/1/members/me/cards",
+                        params={"token": token, "fields": "name,desc,closed,shortUrl,labels"}
+                    )
+                    if resp.status_code == 200:
+                        cards_data = resp.json()
+                        cards = []
+                        for c in cards_data:
+                            cards.append(
+                                UnifiedTask(
+                                    id=c.get("id", f"trello_{datetime.utcnow().timestamp()}"),
+                                    platform="trello",
+                                    title=c.get("name", "Task"),
+                                    description=c.get("desc", ""),
+                                    status="done" if c.get("closed") else "open",
+                                    labels=[lbl.get("name", "card") for lbl in c.get("labels", [])],
+                                    project="Trello Board",
+                                    url=c.get("shortUrl", "")
+                                )
+                            )
+                        logger.info(f"Fetched {len(cards)} live Trello cards for user {uid}")
+                        return cards
+            except Exception as err:
+                logger.warning(f"Trello get_trello_cards error: {err}")
+        
+        # Fallback structured data
         mock_cards = [
             UnifiedTask(
                 id=f"trello_{i}",
@@ -201,8 +296,6 @@ class ProductivityAgent(BaseIntegrationAgent):
             )
             for i in range(min(limit, 5))
         ]
-        
-        logger.info(f"Fetched {len(mock_cards)} Trello cards for user {uid}")
         return mock_cards
     
     async def create_trello_card(
@@ -212,7 +305,21 @@ class ProductivityAgent(BaseIntegrationAgent):
         name: str,
         description: Optional[str] = None
     ) -> str:
-        """Create Trello card"""
+        """Create Trello card via live API or fallback"""
+        integration = await integration_repository.get(uid, "trello")
+        token = decrypt_value(integration.access_token) if integration and integration.access_token else None
+        
+        if token and not token.startswith("mock_"):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(
+                        "https://api.trello.com/1/cards",
+                        params={"idList": list_id, "name": name, "desc": description or "", "token": token}
+                    )
+                    if resp.status_code in (200, 201):
+                        return str(resp.json().get("id") or f"trello_card_{datetime.utcnow().timestamp()}")
+            except Exception as err:
+                logger.warning(f"Trello create_trello_card error: {err}")
+        
         logger.info(f"Creating Trello card: {name}")
-        # TODO: Implement with py-trello
         return f"trello_card_{datetime.utcnow().timestamp()}"

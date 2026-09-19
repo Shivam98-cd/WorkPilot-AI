@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { SiGmail, SiGooglecalendar, SiGoogledrive, SiGithub, SiZoom, SiNotion, SiJira, SiTrello } from 'react-icons/si';
+import { SiGmail, SiGooglecalendar, SiGoogledrive, SiGithub, SiZoom, SiNotion, SiJira, SiTrello, SiGooglemeet, SiDuckduckgo } from 'react-icons/si';
+import { SlackIcon } from './BrandIcons';
 import ComposeEmailCard from './ComposeEmailCard';
+import InteractiveMeetingCard from './InteractiveMeetingCard';
+import VisualSlotPickerCard from './VisualSlotPickerCard';
+import SafeguardApprovalCard from './SafeguardApprovalCard';
+import InteractiveAnalyticsCard from './InteractiveAnalyticsCard';
+import InteractiveOptionsCard from './InteractiveOptionsCard';
+import PersonalMemoryModal from './PersonalMemoryModal';
+import Logo from './Logo';
 import { getChatConversations, getChatConversation, deleteChatConversation, uploadDocument, updateAutomation, deleteAutomation, getIntegrations } from '../api';
 
 /* ══════════════════════════════════════
@@ -54,10 +62,10 @@ const MODES = {
 ══════════════════════════════════════ */
 const DEFAULT_PINS = [
   { id: 1, label: 'Morning briefing', prompt: 'Give me my morning briefing with top priorities' },
-  { id: 2, label: 'Draft CFO reply', prompt: 'Draft a reply to the CFO budget email' },
-  { id: 3, label: 'Team standup', prompt: 'Generate team standup report' },
-  { id: 4, label: 'Deploy status', prompt: 'What is the current deployment status?' },
-  { id: 5, label: 'Email summary', prompt: 'Summarize my unread emails' },
+  { id: 2, label: 'Draft an email', prompt: 'Help me draft a professional email' },
+  { id: 3, label: 'Schedule meeting', prompt: 'Schedule a team sync meeting for tomorrow' },
+  { id: 4, label: 'Check integrations', prompt: 'What is the status of my connected integrations?' },
+  { id: 5, label: 'Workspace search', prompt: 'Search my workspace for recent updates' },
 ];
 
 /* ══════════════════════════════════════
@@ -75,28 +83,30 @@ const THINKING_MSGS = [
    RICH CARD TEMPLATES
 ══════════════════════════════════════ */
 
-function EmailCard({ T, onSend, onDiscard }) {
+function EmailCard({ T, data, onSend, onDiscard }) {
   const [editing, setEditing] = useState(false);
-  const [body, setBody] = useState('Hi Robert,\n\nThank you for sending over the Q3 budget proposal. I\'ve reviewed the figures and would like to schedule a 30-minute call to discuss a few line items before final approval.\n\nAre you available this Thursday at 2:00 PM? Please let me know if another time works better.\n\nBest regards,\nAlex');
+  const [body, setBody] = useState(data?.body || '');
+  const to = data?.to || 'Recipient';
+  const subject = data?.subject || 'No subject';
   return (
     <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 14, overflow: 'hidden', marginTop: 8 }}>
       <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid rgba(59,130,246,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6' }}>{Ic.mail}</div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace" }}>EMAIL DRAFT</div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>To: Robert Chen (CFO)</div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>Subject: Re: Q3 Budget Approval</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>To: {to}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>Subject: {subject}</div>
         </div>
       </div>
       <div style={{ padding: '12px 14px' }}>
         {editing ? (
-          <textarea value={body} onChange={e => setBody(e.target.value)} style={{ width: '100%', minHeight: 120, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', fontSize: 12, lineHeight: 1.7, padding: '10px', outline: 'none', resize: 'vertical', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box' }} />
+          <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Type email draft..." style={{ width: '100%', minHeight: 120, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', fontSize: 12, lineHeight: 1.7, padding: '10px', outline: 'none', resize: 'vertical', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box' }} />
         ) : (
-          <pre style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap', fontFamily: "'Inter',sans-serif" }}>{body}</pre>
+          <pre style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap', fontFamily: "'Inter',sans-serif" }}>{body || 'No draft body provided.'}</pre>
         )}
       </div>
       <div style={{ padding: '10px 14px', borderTop: '1px solid rgba(59,130,246,0.1)', display: 'flex', gap: 7 }}>
-        <button onClick={onSend} style={{ padding: '7px 14px', borderRadius: 8, background: `linear-gradient(135deg,${T.primary},${T.secondary})`, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, boxShadow: `0 2px 10px ${T.glow}` }}>✉ Send Now</button>
+        <button onClick={() => onSend && onSend({ to, subject, body })} style={{ padding: '7px 14px', borderRadius: 8, background: `linear-gradient(135deg,${T.primary},${T.secondary})`, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, boxShadow: `0 2px 10px ${T.glow}` }}>✉ Send Now</button>
         <button onClick={() => setEditing(v => !v)} style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer' }}>✏ {editing ? 'Done' : 'Edit'}</button>
         <button onClick={onDiscard} style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', fontSize: 12, cursor: 'pointer' }}>🗑 Discard</button>
       </div>
@@ -204,43 +214,55 @@ function LiveDataNotice({ source, message, T, onOpenIntegrations }) {
   );
 }
 
-function CalendarCard({ T, onConfirm, onDiscard }) {
+function CalendarCard({ T, data, onConfirm, onDiscard }) {
+  const event = data || {};
   return (
     <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 14, overflow: 'hidden', marginTop: 8 }}>
       <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid rgba(16,185,129,0.12)', display: 'flex', gap: 8 }}>
         <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(16,185,129,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>{Ic.cal}</div>
         <div>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace" }}>CALENDAR EVENT</div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Team Weekly Sync</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{event.title || 'Scheduled Meeting'}</div>
         </div>
       </div>
       <div style={{ padding: '12px 14px', display: 'flex', gap: 16 }}>
-        {[['📅', 'Wed, Jul 23'], ['⏰', '3:00 PM — 4:00 PM'], ['👥', '5 attendees'], ['📍', 'Google Meet']].map(([e, v]) => (
-          <div key={v} style={{ flex: 1 }}>
+        {[['📅', event.date || 'Upcoming'], ['⏰', event.time || 'TBD'], ['👥', `${(event.attendees || []).length || 0} attendees`], ['📍', event.platform || 'Google Meet']].map(([e, v]) => (
+          <div key={e} style={{ flex: 1 }}>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{e}</div>
             <div style={{ fontSize: 12, color: '#fff', fontWeight: 500, marginTop: 2 }}>{v}</div>
           </div>
         ))}
       </div>
       <div style={{ padding: '10px 14px', borderTop: '1px solid rgba(16,185,129,0.1)', display: 'flex', gap: 7 }}>
-        <button onClick={onConfirm} style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(16,185,129,0.2)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✓ Confirm & Invite</button>
-        <button onClick={onDiscard} style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer' }}>Edit Time</button>
+        <button onClick={onConfirm} style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(16,185,129,0.2)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✓ Confirm</button>
+        <button onClick={onDiscard} style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
       </div>
     </div>
   );
 }
 
-function DeployCard({ T, data }) {
-  // Use real pipelines if available, else show mock
-  const pipelines = data?.pipelines?.length
-    ? data.pipelines.slice(0, 3)
-    : [
-        { name: 'Production', version: 'v2.4.1', status: 'live', progress: 100, risk: 'low', uptime: '99.9%' },
-        { name: 'Staging', version: 'v2.4.2', status: 'in_progress', progress: 67, risk: 'medium', uptime: '' },
-        { name: 'Dev', version: 'v2.5.0-beta', status: 'pending', progress: 20, risk: 'low', uptime: '' },
-      ];
+function DeployCard({ T, data, onOpenIntegrations }) {
+  const pipelines = data?.pipelines || [];
   const statusColor = { live: '#10b981', in_progress: '#6366f1', failed: '#ef4444', pending: '#f59e0b' };
   const riskColor = { low: '#10b981', medium: '#f59e0b', high: '#ef4444' };
+
+  if (!pipelines.length) {
+    return (
+      <div style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 14, padding: '16px', marginTop: 8, textAlign: 'center' }}>
+        <div style={{ fontSize: 20, marginBottom: 6 }}>🚀</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>No Active Deployments</div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 4, marginBottom: onOpenIntegrations ? 10 : 0 }}>
+          {data?.note || 'Connect your GitHub repository in Integrations to monitor CI/CD pipelines.'}
+        </div>
+        {onOpenIntegrations && (
+          <button onClick={onOpenIntegrations} style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', color: '#a5b4fc', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+            Connect GitHub
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 14, overflow: 'hidden', marginTop: 8 }}>
       <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -278,15 +300,21 @@ function DeployCard({ T, data }) {
 
 function TeamCard({ data }) {
   const STATUS_COLOR = { done: '#10b981', 'on-track': '#3b82f6', delayed: '#f59e0b', missing: '#ef4444' };
-  const members = data?.members?.length
-    ? data.members
-    : [
-        { name: 'Sarah Chen', status: 'done', task: 'UI mockups complete ✓' },
-        { name: 'John Smith', status: 'on-track', task: 'API integration 65% done' },
-        { name: 'Mike Chen', status: 'delayed', task: '⚠ Backend testing — 2 days late' },
-        { name: 'Priya Sharma', status: 'missing', task: '🔴 No update today' },
-      ];
+  const members = data?.members || [];
   const delayed = members.filter(m => m.status === 'delayed' || m.status === 'missing');
+
+  if (!members.length) {
+    return (
+      <div style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 14, padding: '16px', marginTop: 8, textAlign: 'center' }}>
+        <div style={{ fontSize: 20, marginBottom: 6 }}>👥</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>No Team Members Configured</div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
+          {data?.note || 'Configure team members in Workspace Settings to view standups and task status.'}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 14, overflow: 'hidden', marginTop: 8 }}>
       <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(245,158,11,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -347,13 +375,57 @@ function IntegrationsStatusCard({ data, T, onDismiss }) {
   );
 }
 
+function WorkPilotAvatar({ isThinking = false, isStreaming = false, size = 32, glowColor = '#00d2ff', T }) {
+  const isPulsing = isThinking || isStreaming;
+  return (
+    <div
+      className={`wp-ai-avatar ${isPulsing ? 'wp-avatar-pulse' : ''}`}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 10,
+        background: 'radial-gradient(circle at 35% 35%, rgba(15, 23, 42, 0.95), rgba(7, 10, 18, 0.98))',
+        border: `1px solid ${isPulsing ? 'rgba(0, 210, 255, 0.5)' : 'rgba(255, 255, 255, 0.12)'}`,
+        boxShadow: isPulsing
+          ? '0 0 16px rgba(0, 210, 255, 0.45), inset 0 0 8px rgba(139, 92, 246, 0.3)'
+          : '0 2px 10px rgba(0, 0, 0, 0.5), inset 0 0 6px rgba(0, 210, 255, 0.12)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        position: 'relative',
+        transition: 'all 0.3s ease',
+        marginTop: 2,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Animated rotating accent halo when active/thinking */}
+      {isPulsing && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: -6,
+            background: 'conic-gradient(from 0deg, transparent 0deg, rgba(0, 210, 255, 0.45) 90deg, transparent 180deg, rgba(139, 92, 246, 0.45) 270deg, transparent 360deg)',
+            animation: 'wpSpin 3.5s linear infinite',
+            zIndex: 0,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Logo height={Math.round(size * 0.76)} showText={false} glowColor={isPulsing ? '#00d2ff' : glowColor} />
+      </div>
+    </div>
+  );
+}
+
 function AnalyticsCard({ data, T, onDismiss }) {
   const d = data || {};
   const stats = [
-    { label: 'Focus Hours', value: d.focus_hours ?? '6.5', unit: 'hrs', color: T?.primary || '#3b82f6' },
-    { label: 'Emails Handled', value: d.emails_handled ?? 23, unit: '', color: '#10b981' },
-    { label: 'Tasks Done', value: d.tasks_completed ?? 8, unit: '', color: '#f59e0b' },
-    { label: 'AI Time Saved', value: d.ai_time_saved ?? '2.3', unit: 'hrs', color: T?.secondary || '#7c3aed' },
+    { label: 'Focus Hours', value: d.focus_hours ?? '0.0', unit: 'hrs', color: T?.primary || '#3b82f6' },
+    { label: 'Emails Handled', value: d.emails_handled ?? 0, unit: '', color: '#10b981' },
+    { label: 'Tasks Done', value: d.tasks_completed ?? 0, unit: '', color: '#f59e0b' },
+    { label: 'AI Time Saved', value: d.ai_time_saved ?? '0.0', unit: 'hrs', color: T?.secondary || '#7c3aed' },
   ];
   return (
     <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 14, overflow: 'hidden', marginTop: 8 }}>
@@ -376,11 +448,49 @@ function AnalyticsCard({ data, T, onDismiss }) {
   );
 }
 
-/** Enhanced markdown renderer: tables, headers, lists, code blocks, links, quotes */
-function MdText({ text }) {
+
+/** Enhanced markdown renderer: tables, headers, lists, code blocks, links, quotes, and Generative UI cards */
+function normalizeArtifactTags(str) {
+  if (!str || typeof str !== 'string' || !str.includes('<artifact:')) return str;
+  const pattern = /<artifact:([a-zA-Z0-9_:-]+)\s*([\s\S]*?)(?:\/>|<\/artifact:\1>)/g;
+  return str.replace(pattern, (match, tag, attrs) => {
+    try {
+      const titleMatch = attrs.match(/title=["']([^"']+)["']/);
+      const descMatch = attrs.match(/description=["']([^"']+)["']/);
+      const submitMatch = attrs.match(/submit_label=["']([^"']+)["']/);
+      const optMatch = attrs.match(/options=\{?(\[[\s\S]*?\])\}?/);
+      const slotsMatch = attrs.match(/slots=\{?(\[[\s\S]*?\])\}?/);
+      
+      const payload = {
+        title: titleMatch ? titleMatch[1] : undefined,
+        description: descMatch ? descMatch[1] : undefined,
+        submit_label: submitMatch ? submitMatch[1] : undefined,
+      };
+
+      if (optMatch) {
+        try { payload.options = JSON.parse(optMatch[1]); } catch {}
+      }
+      if (slotsMatch) {
+        try { payload.slots = JSON.parse(slotsMatch[1]); } catch {}
+      }
+
+      let resolvedTag = tag;
+      if (tag === 'slot_picker' && payload.options && (!payload.slots || payload.slots.length === 0)) {
+        resolvedTag = 'options';
+      }
+
+      return `\n\`\`\`artifact:${resolvedTag}\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
+    } catch (e) {
+      return match;
+    }
+  });
+}
+
+function MdText({ text, onSelectOption }) {
   if (!text) return null;
   
-  const lines = text.split('\n');
+  const cleanText = normalizeArtifactTags(text);
+  const lines = cleanText.split('\n');
   const elements = [];
   let inTable = false;
   let tableRows = [];
@@ -389,7 +499,7 @@ function MdText({ text }) {
   let codeLang = '';
   
   // Helper: Parse inline markdown (bold, italic, code, links)
-  const parseInline = (str) => {
+  const parseInline = (str, isTableCell = false) => {
     // Regex for: **bold**, *italic*, `code`, [link](url)
     const parts = str.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
     return parts.map((part, pi) => {
@@ -400,15 +510,45 @@ function MdText({ text }) {
       if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**'))
         return <em key={pi} style={{ color: 'rgba(255,255,255,0.85)', fontStyle: 'italic' }}>{part.slice(1, -1)}</em>;
       // Inline code
-      if (part.startsWith('`') && part.endsWith('`'))
-        return <code key={pi} style={{ 
-          background: 'rgba(255,255,255,0.1)', 
-          padding: '2px 6px', 
-          borderRadius: '4px', 
-          fontSize: '12px',
-          fontFamily: "'JetBrains Mono', monospace",
-          color: '#10b981'
-        }}>{part.slice(1, -1)}</code>;
+      if (part.startsWith('`') && part.endsWith('`')) {
+        const val = part.slice(1, -1);
+        const isClickable = isTableCell && (val.includes('/') || val.includes('-') || val.length > 5);
+        return (
+          <code
+            key={pi}
+            onClick={() => {
+              if (onSelectOption && isClickable) {
+                onSelectOption(val);
+              } else {
+                navigator.clipboard?.writeText?.(val);
+              }
+            }}
+            title={isClickable ? `Click to select ${val}` : 'Click to copy'}
+            style={{ 
+              background: isClickable ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.08)', 
+              border: isClickable ? '1px solid rgba(99,102,241,0.3)' : '1px solid rgba(255,255,255,0.08)',
+              padding: '2px 7px', 
+              borderRadius: '5px', 
+              fontSize: '12px',
+              fontFamily: "'JetBrains Mono', monospace",
+              color: isClickable ? '#a5b4fc' : '#10b981',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              display: 'inline-block',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(99,102,241,0.25)';
+              e.currentTarget.style.borderColor = '#818cf8';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = isClickable ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.08)';
+              e.currentTarget.style.borderColor = isClickable ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.08)';
+            }}
+          >
+            {val}
+          </code>
+        );
+      }
       // Links: [text](url)
       const linkMatch = part.match(/\[([^\]]+)\]\(([^)]+)\)/);
       if (linkMatch) {
@@ -433,33 +573,69 @@ function MdText({ text }) {
         codeLines = [];
       } else {
         // End of code block
-        elements.push(
-          <div key={`code-${li}`} style={{
-            background: 'rgba(0,0,0,0.3)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '8px',
-            padding: '12px',
-            margin: '12px 0',
-            overflow: 'auto'
-          }}>
-            <div style={{
-              fontSize: '10px',
-              color: 'rgba(255,255,255,0.4)',
-              marginBottom: '8px',
-              fontFamily: "'JetBrains Mono', monospace",
-              textTransform: 'uppercase'
-            }}>{codeLang}</div>
-            <pre style={{
-              margin: 0,
-              fontSize: '12px',
-              fontFamily: "'JetBrains Mono', monospace",
-              color: '#10b981',
-              lineHeight: 1.6,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word'
-            }}>{codeLines.join('\n')}</pre>
-          </div>
-        );
+        if (codeLang.startsWith('artifact:')) {
+          try {
+            const rawJson = codeLines.join('\n').trim();
+            const artifactData = JSON.parse(rawJson);
+            if (codeLang === 'artifact:meeting') {
+              elements.push(<InteractiveMeetingCard key={`artifact-${li}`} data={artifactData} />);
+            } else if (codeLang === 'artifact:options' || codeLang === 'artifact:choice_picker' || codeLang === 'artifact:repository_picker') {
+              elements.push(<InteractiveOptionsCard key={`artifact-${li}`} data={artifactData} onSelectOption={onSelectOption} />);
+            } else if (codeLang === 'artifact:slot_picker') {
+              if (artifactData.options && (!artifactData.slots || artifactData.slots.length === 0)) {
+                elements.push(<InteractiveOptionsCard key={`artifact-${li}`} data={artifactData} onSelectOption={onSelectOption} />);
+              } else {
+                elements.push(<VisualSlotPickerCard key={`artifact-${li}`} data={artifactData} onSlotSelected={(slot) => onSelectOption && onSelectOption(`${slot.date} at ${slot.time}`)} />);
+              }
+            } else if (codeLang === 'artifact:safeguard') {
+              elements.push(<SafeguardApprovalCard key={`artifact-${li}`} data={artifactData} />);
+            } else if (codeLang === 'artifact:analytics') {
+              elements.push(<InteractiveAnalyticsCard key={`artifact-${li}`} data={artifactData} />);
+            } else {
+              elements.push(
+                <div key={`code-${li}`} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px', margin: '12px 0', overflow: 'auto' }}>
+                  <pre style={{ margin: 0, fontSize: '12px', color: '#10b981', whiteSpace: 'pre-wrap' }}>{rawJson}</pre>
+                </div>
+              );
+            }
+          } catch (e) {
+            elements.push(
+              <div key={`code-${li}`} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px', margin: '12px 0', overflow: 'auto' }}>
+                <pre style={{ margin: 0, fontSize: '12px', color: '#10b981', whiteSpace: 'pre-wrap' }}>{codeLines.join('\n')}</pre>
+              </div>
+            );
+          }
+        } else {
+          elements.push(
+            <div key={`code-${li}`} style={{
+              background: 'rgba(15,23,42,0.6)',
+              border: '1px solid rgba(255,255,255,0.09)',
+              borderRadius: '10px',
+              padding: '12px 14px',
+              margin: '12px 0',
+              overflow: 'auto',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
+            }}>
+              <div style={{
+                fontSize: '10px',
+                color: 'rgba(255,255,255,0.4)',
+                marginBottom: '8px',
+                fontFamily: "'JetBrains Mono', monospace",
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>{codeLang}</div>
+              <pre style={{
+                margin: 0,
+                fontSize: '12px',
+                fontFamily: "'JetBrains Mono', monospace",
+                color: '#34d399',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word'
+              }}>{codeLines.join('\n')}</pre>
+            </div>
+          );
+        }
         inCodeBlock = false;
         codeLines = [];
         codeLang = '';
@@ -484,52 +660,65 @@ function MdText({ text }) {
       if (li === lines.length - 1 || !lines[li + 1]?.trim().startsWith('|')) {
         // Render table
         elements.push(
-          <table key={`table-${li}`} style={{
-            width: '100%',
-            borderCollapse: 'collapse',
+          <div key={`table-wrap-${li}`} style={{
             margin: '14px 0',
-            fontSize: '13px',
-            background: 'rgba(255,255,255,0.02)',
-            borderRadius: '10px',
+            borderRadius: '12px',
             overflow: 'hidden',
-            border: '1px solid rgba(255,255,255,0.08)'
+            border: '1px solid rgba(255,255,255,0.1)',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.25)'
           }}>
-            <tbody>
-              {tableRows.map((row, ri) => {
-                const cells = row.split('|').filter(c => c.trim());
-                const isHeader = ri === 0;
-                const isSeparator = ri === 1 && row.includes('---');
-                
-                if (isSeparator) return null; // Skip separator row
-                
-                return (
-                  <tr key={ri} style={{
-                    borderBottom: isHeader ? '2px solid rgba(255,255,255,0.15)' : '1px solid rgba(255,255,255,0.04)',
-                    transition: 'background 0.2s',
-                  }}>
-                    {cells.map((cell, ci) => {
-                      const Tag = isHeader ? 'th' : 'td';
-                      const content = parseInline(cell.trim());
-                      
-                      return (
-                        <Tag key={ci} style={{
-                          padding: '12px 14px',
-                          textAlign: 'left',
-                          fontWeight: isHeader ? 700 : 400,
-                          color: isHeader ? '#fff' : 'rgba(255,255,255,0.87)',
-                          background: isHeader ? 'rgba(255,255,255,0.06)' : 'transparent',
-                          fontSize: isHeader ? '13px' : '13px',
-                          letterSpacing: isHeader ? '0.3px' : '0'
-                        }}>
-                          {content}
-                        </Tag>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+            <table style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              fontSize: '13px'
+            }}>
+              <tbody>
+                {tableRows.map((row, ri) => {
+                  const cells = row.split('|').filter(c => c.trim());
+                  const isHeader = ri === 0;
+                  const isSeparator = ri === 1 && row.includes('---');
+                  
+                  if (isSeparator) return null; // Skip separator row
+                  
+                  return (
+                    <tr
+                      key={ri}
+                      style={{
+                        borderBottom: isHeader ? '2px solid rgba(255,255,255,0.12)' : '1px solid rgba(255,255,255,0.04)',
+                        background: isHeader ? 'rgba(255,255,255,0.05)' : (ri % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)'),
+                        transition: 'background 0.18s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isHeader) e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isHeader) e.currentTarget.style.background = (ri % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)');
+                      }}
+                    >
+                      {cells.map((cell, ci) => {
+                        const Tag = isHeader ? 'th' : 'td';
+                        const content = parseInline(cell.trim(), true);
+                        
+                        return (
+                          <Tag key={ci} style={{
+                            padding: '11px 14px',
+                            textAlign: 'left',
+                            fontWeight: isHeader ? 600 : 400,
+                            color: isHeader ? '#f1f5f9' : 'rgba(255,255,255,0.88)',
+                            fontSize: '13px',
+                            letterSpacing: isHeader ? '0.2px' : '0',
+                          }}>
+                            {content}
+                          </Tag>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         );
         inTable = false;
         tableRows = [];
@@ -541,13 +730,15 @@ function MdText({ text }) {
     if (line.trim().startsWith('> ')) {
       elements.push(
         <div key={li} style={{
-          borderLeft: '3px solid rgba(59,130,246,0.5)',
-          paddingLeft: '12px',
-          marginLeft: '4px',
+          borderLeft: '3px solid #6366f1',
+          background: 'rgba(99, 102, 241, 0.06)',
+          borderRadius: '0 8px 8px 0',
+          padding: '8px 14px',
+          marginLeft: '2px',
           marginTop: '8px',
           marginBottom: '8px',
-          color: 'rgba(255,255,255,0.7)',
-          fontStyle: 'italic'
+          color: 'rgba(255,255,255,0.85)',
+          fontSize: '13px',
         }}>
           {parseInline(line.trim().slice(2))}
         </div>
@@ -573,9 +764,12 @@ function MdText({ text }) {
         <h4 key={li} style={{ 
           fontSize: '14px', 
           fontWeight: 600, 
-          color: '#fff', 
+          color: '#f8fafc', 
           margin: '14px 0 6px 0',
-          letterSpacing: '0.3px'
+          letterSpacing: '0.2px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px'
         }}>
           {parseInline(line.replace(/^###\s*/, ''))}
         </h4>
@@ -585,11 +779,13 @@ function MdText({ text }) {
     if (line.startsWith('##')) {
       elements.push(
         <h3 key={li} style={{ 
-          fontSize: '16px', 
+          fontSize: '15px', 
           fontWeight: 700, 
           color: '#fff', 
           margin: '16px 0 8px 0',
-          letterSpacing: '0.3px'
+          letterSpacing: '0.3px',
+          paddingLeft: '8px',
+          borderLeft: '3px solid #6366f1',
         }}>
           {parseInline(line.replace(/^##\s*/, ''))}
         </h3>
@@ -599,11 +795,13 @@ function MdText({ text }) {
     if (line.startsWith('#')) {
       elements.push(
         <h2 key={li} style={{ 
-          fontSize: '18px', 
+          fontSize: '17px', 
           fontWeight: 800, 
           color: '#fff', 
           margin: '18px 0 10px 0',
-          letterSpacing: '0.5px'
+          letterSpacing: '0.4px',
+          paddingLeft: '10px',
+          borderLeft: '4px solid #818cf8',
         }}>
           {parseInline(line.replace(/^#\s*/, ''))}
         </h2>
@@ -619,17 +817,25 @@ function MdText({ text }) {
         <div key={li} style={{ 
           display: 'flex', 
           gap: '10px', 
-          marginLeft: '4px', 
-          marginTop: '4px',
+          marginLeft: '2px', 
+          marginTop: '6px',
           alignItems: 'flex-start'
         }}>
           <span style={{ 
-            color: 'rgba(255,255,255,0.5)', 
+            background: 'rgba(99, 102, 241, 0.2)',
+            color: '#a5b4fc',
             minWidth: '20px',
-            fontWeight: 600,
-            fontSize: '12px'
-          }}>{num}.</span>
-          <span style={{ flex: 1 }}>{parseInline(content)}</span>
+            height: '20px',
+            borderRadius: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 700,
+            fontSize: '11px',
+            flexShrink: 0,
+            marginTop: '2px'
+          }}>{num}</span>
+          <span style={{ flex: 1, fontSize: '13.5px' }}>{parseInline(content)}</span>
         </div>
       );
       continue;
@@ -646,8 +852,8 @@ function MdText({ text }) {
           marginTop: '4px',
           alignItems: 'flex-start'
         }}>
-          <span style={{ color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>•</span>
-          <span style={{ flex: 1 }}>{parseInline(content)}</span>
+          <span style={{ color: '#818cf8', marginTop: '2px', fontSize: '14px' }}>•</span>
+          <span style={{ flex: 1, fontSize: '13.5px' }}>{parseInline(content)}</span>
         </div>
       );
       continue;
@@ -658,8 +864,10 @@ function MdText({ text }) {
     
     elements.push(
       <div key={li} style={{ 
-        marginTop: line.trim() === '' ? '10px' : '2px',
-        lineHeight: '1.6'
+        marginTop: line.trim() === '' ? '10px' : '3px',
+        lineHeight: '1.65',
+        fontSize: '13.5px',
+        color: 'rgba(255,255,255,0.92)'
       }}>
         {inline}
       </div>
@@ -690,27 +898,101 @@ function StreamText({ text, onDone, speed = 18 }) {
    TOOL STATUS BADGE
 ══════════════════════════════════════ */
 function ToolStatusBadge({ label }) {
-  const icons = {
-    'Reading your emails': '📧',
-    'Checking your calendar': '📅',
-    'Checking integrations': '🔗',
-    'Loading analytics': '📊',
-    'Fetching team status': '👥',
-    'Checking deployments': '🚀',
-    'Syncing': '🔄',
+  const getBrandIcon = (text) => {
+    if (!text) return '🤖';
+    const lower = text.toLowerCase();
+    if (lower.includes('email') || lower.includes('gmail')) {
+      return (
+        <span style={{ width: 16, height: 16, borderRadius: 4, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}>
+          <SiGmail size={11} color="#EA4335" />
+        </span>
+      );
+    }
+    if (lower.includes('calendar') || lower.includes('schedule') || lower.includes('event')) {
+      return (
+        <span style={{ width: 16, height: 16, borderRadius: 4, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}>
+          <SiGooglecalendar size={11} color="#4285F4" />
+        </span>
+      );
+    }
+    if (lower.includes('meet')) {
+      return (
+        <span style={{ width: 16, height: 16, borderRadius: 4, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}>
+          <SiGooglemeet size={11} color="#00AC47" />
+        </span>
+      );
+    }
+    if (lower.includes('notion')) {
+      return (
+        <span style={{ width: 16, height: 16, borderRadius: 4, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}>
+          <SiNotion size={11} color="#000000" />
+        </span>
+      );
+    }
+    if (lower.includes('github')) {
+      return (
+        <span style={{ width: 16, height: 16, borderRadius: 4, background: '#181717', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}>
+          <SiGithub size={11} color="#ffffff" />
+        </span>
+      );
+    }
+    if (lower.includes('jira')) {
+      return (
+        <span style={{ width: 16, height: 16, borderRadius: 4, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}>
+          <SiJira size={11} color="#0052CC" />
+        </span>
+      );
+    }
+    if (lower.includes('slack')) {
+      return (
+        <span style={{ width: 16, height: 16, borderRadius: 4, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}>
+          <SlackIcon size={11} />
+        </span>
+      );
+    }
+    if (lower.includes('zoom')) {
+      return (
+        <span style={{ width: 16, height: 16, borderRadius: 4, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}>
+          <SiZoom size={11} color="#2D8CFF" />
+        </span>
+      );
+    }
+    if (lower.includes('search')) {
+      return (
+        <span style={{ width: 16, height: 16, borderRadius: 4, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 2 }}>
+          <SiDuckduckgo size={11} color="#DE5833" />
+        </span>
+      );
+    }
+    if (lower.includes('briefing') || lower.includes('triage') || lower.includes('cross-search')) {
+      return (
+        <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 1.5 }}>
+            <SiGooglecalendar size={10} color="#4285F4" />
+          </span>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 1.5 }}>
+            <SiGmail size={10} color="#EA4335" />
+          </span>
+        </span>
+      );
+    }
+    if (lower.includes('team')) return '👥';
+    if (lower.includes('deploy')) return '🚀';
+    if (lower.includes('analytics')) return '📊';
+    return <Logo height={12} showText={false} glowColor="#00d2ff" />;
   };
-  const icon = Object.keys(icons).find(k => label?.startsWith(k));
+
   return (
     <div style={{
       display: 'inline-flex', alignItems: 'center', gap: 7,
       padding: '5px 12px', borderRadius: 20, marginTop: 8,
       background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)',
-      fontSize: 12, color: 'rgba(255,255,255,0.7)',
+      fontSize: 12, color: 'rgba(255,255,255,0.85)',
       animation: 'fadeIn 0.3s ease'
     }}>
-      <span style={{ fontSize: 14 }}>{icon ? icons[icon] : '🤖'}</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center' }}>{getBrandIcon(label)}</span>
       <span>{label}</span>
-      <span style={{ display: 'flex', gap: 3 }}>
+      <span style={{ display: 'flex', gap: 3, marginLeft: 2 }}>
         {[0,1,2].map(i => (
           <span key={i} style={{
             width: 4, height: 4, borderRadius: '50%',
@@ -725,31 +1007,407 @@ function ToolStatusBadge({ label }) {
 
 
 /* ══════════════════════════════════════
+   AUTONOMOUS WORKFLOW PROGRESS ACCORDION
+══════════════════════════════════════ */
+function formatStepTitle(title) {
+  if (!title) return '';
+  const friendlyMap = {
+    get_emails: 'Gmail Inbox',
+    get_calendar_events: 'Google Calendar',
+    create_calendar_event: 'Google Calendar Event',
+    create_meet_and_email: 'Google Meet',
+    compose_email: 'Gmail Draft',
+    notion_tool: 'Notion Workspace',
+    github_tool: 'GitHub',
+    jira_tool: 'Jira Backlog',
+    slack_tool: 'Slack',
+    zoom_tool: 'Zoom',
+    web_search: 'Web Search',
+    prepare_meeting_briefing: 'Meeting Briefing',
+    inbox_triage_workflow: 'Inbox Triage & Schedule',
+    workspace_cross_search: '360° Workspace Cross-Search',
+    get_team_members: 'Team Roster',
+    get_deployments: 'Deployments',
+    get_analytics: 'Analytics',
+    get_integrations_status: 'Integrations',
+    improve_text: 'Text Polish',
+    schedule_automation: 'Automation',
+    generate_report: 'Report Generation',
+    find_meeting_time: 'Availability Check',
+    task_management: 'Task Manager',
+    diagnose_issue: 'Diagnostics',
+    set_reminder: 'Reminder',
+  };
+
+  let formatted = title;
+  for (const [key, label] of Object.entries(friendlyMap)) {
+    formatted = formatted.replace(new RegExp(`\\b${key}\\b`, 'g'), label);
+  }
+  return formatted;
+}
+
+function WorkflowProgressAccordion({ steps = [], done = false, T }) {
+  const [isExpanded, setIsExpanded] = useState(!done);
+
+  const toolLabels = {
+    get_emails: {
+      icon: <SiGmail size={12} color="#EA4335" />,
+      iconBg: '#ffffff',
+      name: 'Gmail Inbox',
+      brandBg: 'rgba(234, 67, 53, 0.1)',
+      brandBorder: 'rgba(234, 67, 53, 0.3)',
+      brandColor: '#fca5a5'
+    },
+    get_calendar_events: {
+      icon: <SiGooglecalendar size={12} color="#4285F4" />,
+      iconBg: '#ffffff',
+      name: 'Google Calendar',
+      brandBg: 'rgba(66, 133, 244, 0.1)',
+      brandBorder: 'rgba(66, 133, 244, 0.3)',
+      brandColor: '#93c5fd'
+    },
+    compose_email: {
+      icon: <SiGmail size={12} color="#EA4335" />,
+      iconBg: '#ffffff',
+      name: 'Gmail Draft',
+      brandBg: 'rgba(234, 67, 53, 0.1)',
+      brandBorder: 'rgba(234, 67, 53, 0.3)',
+      brandColor: '#fca5a5'
+    },
+    create_calendar_event: {
+      icon: <SiGooglecalendar size={12} color="#4285F4" />,
+      iconBg: '#ffffff',
+      name: 'Google Calendar Event',
+      brandBg: 'rgba(66, 133, 244, 0.1)',
+      brandBorder: 'rgba(66, 133, 244, 0.3)',
+      brandColor: '#93c5fd'
+    },
+    create_meet_and_email: {
+      icon: <SiGooglemeet size={12} color="#00AC47" />,
+      iconBg: '#ffffff',
+      name: 'Google Meet',
+      brandBg: 'rgba(0, 172, 71, 0.1)',
+      brandBorder: 'rgba(0, 172, 71, 0.3)',
+      brandColor: '#86efac'
+    },
+    notion_tool: {
+      icon: <SiNotion size={12} color="#000000" />,
+      iconBg: '#ffffff',
+      name: 'Notion Workspace',
+      brandBg: 'rgba(255, 255, 255, 0.08)',
+      brandBorder: 'rgba(255, 255, 255, 0.22)',
+      brandColor: '#ffffff'
+    },
+    github_tool: {
+      icon: <SiGithub size={12} color="#ffffff" />,
+      iconBg: '#181717',
+      name: 'GitHub',
+      brandBg: 'rgba(255, 255, 255, 0.08)',
+      brandBorder: 'rgba(255, 255, 255, 0.22)',
+      brandColor: '#ffffff'
+    },
+    jira_tool: {
+      icon: <SiJira size={12} color="#0052CC" />,
+      iconBg: '#ffffff',
+      name: 'Jira Backlog',
+      brandBg: 'rgba(0, 82, 204, 0.12)',
+      brandBorder: 'rgba(0, 82, 204, 0.3)',
+      brandColor: '#93c5fd'
+    },
+    slack_tool: {
+      icon: <SlackIcon size={12} />,
+      iconBg: '#ffffff',
+      name: 'Slack',
+      brandBg: 'rgba(224, 30, 90, 0.1)',
+      brandBorder: 'rgba(224, 30, 90, 0.28)',
+      brandColor: '#f9a8d4'
+    },
+    zoom_tool: {
+      icon: <SiZoom size={12} color="#2D8CFF" />,
+      iconBg: '#ffffff',
+      name: 'Zoom Video',
+      brandBg: 'rgba(45, 140, 255, 0.1)',
+      brandBorder: 'rgba(45, 140, 255, 0.28)',
+      brandColor: '#93c5fd'
+    },
+    web_search: {
+      icon: <SiDuckduckgo size={12} color="#DE5833" />,
+      iconBg: '#ffffff',
+      name: 'DuckDuckGo Search',
+      brandBg: 'rgba(222, 88, 51, 0.1)',
+      brandBorder: 'rgba(222, 88, 51, 0.28)',
+      brandColor: '#fdba74'
+    },
+    prepare_meeting_briefing: {
+      icon: (
+        <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 1.5 }}>
+            <SiGooglecalendar size={10} color="#4285F4" />
+          </span>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 1.5 }}>
+            <SiGmail size={10} color="#EA4335" />
+          </span>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 1.5 }}>
+            <SiNotion size={10} color="#000000" />
+          </span>
+        </span>
+      ),
+      name: 'Briefing Dossier',
+      brandBg: 'rgba(99, 102, 241, 0.12)',
+      brandBorder: 'rgba(99, 102, 241, 0.3)',
+      brandColor: '#c7d2fe'
+    },
+    inbox_triage_workflow: {
+      icon: (
+        <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 1.5 }}>
+            <SiGmail size={10} color="#EA4335" />
+          </span>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 1.5 }}>
+            <SiGooglecalendar size={10} color="#4285F4" />
+          </span>
+        </span>
+      ),
+      name: 'Inbox Triage & Schedule',
+      brandBg: 'rgba(234, 67, 53, 0.1)',
+      brandBorder: 'rgba(234, 67, 53, 0.28)',
+      brandColor: '#fca5a5'
+    },
+    workspace_cross_search: {
+      icon: (
+        <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 1.5 }}>
+            <SiGmail size={10} color="#EA4335" />
+          </span>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 1.5 }}>
+            <SiGooglecalendar size={10} color="#4285F4" />
+          </span>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: '#181717', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 1.5 }}>
+            <SiGithub size={10} color="#ffffff" />
+          </span>
+        </span>
+      ),
+      name: '360° Cross-Search',
+      brandBg: 'rgba(99, 102, 241, 0.12)',
+      brandBorder: 'rgba(99, 102, 241, 0.3)',
+      brandColor: '#c7d2fe'
+    },
+    get_team_members: { icon: '👥', name: 'Team Roster' },
+    get_deployments: { icon: '🚀', name: 'Deployments' },
+    get_analytics: { icon: '📊', name: 'Productivity Analytics' },
+    get_integrations_status: { icon: '🔗', name: 'Connected Platforms' },
+    improve_text: { icon: '✨', name: 'AI Copy Editor' },
+    schedule_automation: { icon: <Logo height={12} showText={false} glowColor="#00d2ff" />, name: 'Automations Engine' },
+    generate_report: { icon: '📋', name: 'Executive Report' },
+    find_meeting_time: { icon: '🕐', name: 'Calendar Availability' },
+    task_management: { icon: '✅', name: 'Task Manager' },
+    diagnose_issue: { icon: '🔬', name: 'System Diagnostics' },
+    set_reminder: { icon: '⏰', name: 'Smart Reminders' },
+  };
+
+  if (!steps || steps.length === 0) return null;
+
+  const completedCount = steps.filter(s => s.status === 'completed' || done).length;
+
+  return (
+    <div style={{
+      marginTop: 10,
+      marginBottom: 6,
+      borderRadius: 12,
+      background: 'rgba(99, 102, 241, 0.07)',
+      border: '1px solid rgba(99, 102, 241, 0.22)',
+      overflow: 'hidden',
+      transition: 'all 0.2s ease',
+      width: '100%',
+    }}>
+      {/* Header */}
+      <div
+        onClick={() => setIsExpanded(p => !p)}
+        style={{
+          padding: '8px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+          background: 'rgba(99, 102, 241, 0.1)',
+          userSelect: 'none',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 20,
+            height: 20,
+            borderRadius: 6,
+            background: 'rgba(0, 210, 255, 0.15)',
+            border: '1px solid rgba(0, 210, 255, 0.3)',
+          }}>
+            <Logo height={13} showText={false} glowColor="#00d2ff" />
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#e0e7ff', letterSpacing: '0.02em' }}>
+            Autonomous Multi-Hop Workflow
+          </span>
+          <span style={{
+            fontSize: 10,
+            padding: '2px 7px',
+            borderRadius: 10,
+            background: done || completedCount === steps.length ? 'rgba(16, 185, 129, 0.2)' : 'rgba(99, 102, 241, 0.25)',
+            color: done || completedCount === steps.length ? '#6ee7b7' : '#c7d2fe',
+            fontWeight: 600,
+            fontFamily: "'JetBrains Mono', monospace",
+          }}>
+            {done || completedCount === steps.length ? `✓ ${steps.length} hops completed` : `${completedCount}/${steps.length} hops`}
+          </span>
+        </div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span>{isExpanded ? 'Hide' : 'Details'}</span>
+          <span style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▼</span>
+        </div>
+      </div>
+
+      {/* Expanded Step Timeline */}
+      {isExpanded && (
+        <div style={{ padding: '10px 14px 12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {steps.map((step, idx) => {
+            const isLast = idx === steps.length - 1;
+            const isCompleted = step.status === 'completed' || done;
+            return (
+              <div key={step.hop || idx} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', position: 'relative' }}>
+                {/* Connector line */}
+                {!isLast && (
+                  <div style={{
+                    position: 'absolute',
+                    top: 18,
+                    left: 9,
+                    width: 2,
+                    height: 'calc(100% + 6px)',
+                    background: isCompleted ? 'rgba(16, 185, 129, 0.35)' : 'rgba(255, 255, 255, 0.12)',
+                    zIndex: 0,
+                  }} />
+                )}
+
+                {/* Status Dot */}
+                <div style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: '50%',
+                  background: isCompleted
+                    ? 'rgba(16, 185, 129, 0.2)'
+                    : 'rgba(99, 102, 241, 0.25)',
+                  border: `1.5px solid ${isCompleted ? '#10b981' : '#818cf8'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: isCompleted ? '#34d399' : '#c7d2fe',
+                  flexShrink: 0,
+                  zIndex: 1,
+                  boxShadow: !isCompleted ? '0 0 8px rgba(129, 140, 248, 0.5)' : 'none',
+                }}>
+                  {isCompleted ? '✓' : step.hop || idx + 1}
+                </div>
+
+                {/* Step Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#f3f4f6' }}>
+                      {formatStepTitle(step.title) || `Hop ${step.hop}`}
+                    </span>
+                    {step.time && (
+                      <span style={{ fontSize: 10, color: 'rgba(255, 255, 255, 0.35)', fontFamily: "'JetBrains Mono', monospace" }}>
+                        {step.time}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Chained tools tags with REAL brand logos */}
+                  {step.tools && step.tools.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
+                      {step.tools.map((tname) => {
+                        const meta = toolLabels[tname] || { icon: '⚙️', name: tname };
+                        return (
+                          <span
+                            key={tname}
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 600,
+                              padding: '3px 9px',
+                              borderRadius: 8,
+                              background: meta.brandBg || 'rgba(255, 255, 255, 0.05)',
+                              border: `1px solid ${meta.brandBorder || 'rgba(255, 255, 255, 0.12)'}`,
+                              color: meta.brandColor || '#f3f4f6',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.25)',
+                            }}
+                          >
+                            {meta.iconBg ? (
+                              <span style={{
+                                width: 17,
+                                height: 17,
+                                borderRadius: 4,
+                                background: meta.iconBg,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: 2,
+                                flexShrink: 0,
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
+                              }}>
+                                {meta.icon}
+                              </span>
+                            ) : (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {meta.icon}
+                              </span>
+                            )}
+                            <span>{meta.name}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+/* ══════════════════════════════════════
    AI MESSAGE RESPONSES
 ══════════════════════════════════════ */
 const AI_RESPONSES = {
   default: (q) => ({
-    text: `I've analyzed your request: "${q.slice(0, 60)}". I'm processing this now and will have a response ready shortly. Here's what I found based on your current workspace data:`,
+    text: `I've analyzed your request: "${q.slice(0, 60)}". Checking your connected workspace integrations now.`,
     card: null,
   }),
   morning: {
-    text: "Good morning! Here's your daily briefing: You have 3 urgent emails (CFO budget reply due 5pm is most critical), Mike Chen's task is 2 days overdue, and deployment v2.4.2 is in staging. I recommend starting with the CFO email — I've drafted a reply for you below.",
-    card: 'email',
+    text: "Good morning! I've checked your workspace status. All integrations and automations are actively monitored. What would you like to prioritize today?",
+    card: null,
   },
   email: {
-    text: "I've reviewed Robert Chen's Q3 Budget email. The key ask is approval by EOD. I've drafted a professional reply that buys you time for a deeper review while showing responsiveness:",
-    card: 'email',
+    text: "I can help you draft or send an email. Please specify the recipient email, subject, and any notes to include.",
+    card: 'compose',
   },
   deploy: {
-    text: "Here's the current deployment status. v2.4.1 is live in production with 99.9% uptime. v2.4.2 is in staging at 67% completion with medium risk — there's a dependency conflict in the auth module you should be aware of:",
+    text: "Here is your deployment status across connected repositories:",
     card: 'deploy',
   },
   team: {
-    text: "I've compiled the team standup report from all 4 members' activity data. Here's where things stand today:",
+    text: "Here is your team activity and progress overview:",
     card: 'team',
   },
   meeting: {
-    text: "I've found the best time slot based on everyone's calendars. Wednesday at 3pm works for all 5 attendees. I've pre-filled the invite with the agenda from your last meeting:",
+    text: "I can schedule a meeting on your Google Calendar. What time, date, and attendees would you like to invite?",
     card: 'calendar',
   },
 };
@@ -757,9 +1415,9 @@ const AI_RESPONSES = {
 function getAIResponse(input) {
   const q = input.toLowerCase();
   if (q.includes('morning') || q.includes('brief')) return AI_RESPONSES.morning;
-  if (q.includes('email') || q.includes('cfo') || q.includes('draft')) return AI_RESPONSES.email;
+  if (q.includes('email') || q.includes('draft')) return AI_RESPONSES.email;
   if (q.includes('deploy') || q.includes('staging')) return AI_RESPONSES.deploy;
-  if (q.includes('team') || q.includes('standup') || q.includes('mike')) return AI_RESPONSES.team;
+  if (q.includes('team') || q.includes('standup')) return AI_RESPONSES.team;
   if (q.includes('meeting') || q.includes('schedule') || q.includes('calendar')) return AI_RESPONSES.meeting;
   return AI_RESPONSES.default(input);
 }
@@ -803,7 +1461,9 @@ function AutomationCard({ data, T, onDismiss }) {
   return (
     <div style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 14, overflow: 'hidden', marginTop: 8 }}>
       <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 8, background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>⚡</div>
+        <div style={{ width: 26, height: 26, borderRadius: 8, background: 'rgba(0,210,255,0.15)', border: '1px solid rgba(0,210,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Logo height={13} showText={false} glowColor="#00d2ff" />
+        </div>
         <div style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace" }}>AUTOMATION CREATED</div>
         <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 16 }}>×</button>
       </div>
@@ -908,14 +1568,227 @@ function CreatedEventCard({ data, T, onDismiss }) {
   );
 }
 
+function GitHubReposCard({ data, T, onDismiss, onSelectRepo }) {
+  const repos = Array.isArray(data?.repos)
+    ? data.repos
+    : (Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []));
+
+  const getLangColor = (lang) => {
+    const colors = {
+      Python: '#3572A5',
+      JavaScript: '#f1e05a',
+      TypeScript: '#3178c6',
+      HTML: '#e34c26',
+      CSS: '#563d7c',
+      Java: '#b07219',
+      Go: '#00ADD8',
+      Rust: '#dea584',
+      C: '#555555',
+      'C++': '#f34b7d',
+      'C#': '#178600',
+      PHP: '#4F5D95',
+      Ruby: '#701516',
+      Swift: '#F05138',
+      Kotlin: '#A97BFF',
+      Dart: '#00B4AB',
+      Shell: '#89e051'
+    };
+    return colors[lang] || '#94a3b8';
+  };
+
+  return (
+    <div style={{
+      background: 'rgba(24, 23, 23, 0.75)',
+      border: '1px solid rgba(255, 255, 255, 0.12)',
+      borderRadius: 14,
+      overflow: 'hidden',
+      marginTop: 8,
+      backdropFilter: 'blur(16px)',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.35)'
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '12px 16px',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        background: 'rgba(255, 255, 255, 0.03)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            background: '#24292e',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px solid rgba(255,255,255,0.15)'
+          }}>
+            <SiGithub size={16} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
+              Connected GitHub Repositories
+              <span style={{
+                fontSize: 10,
+                padding: '1px 7px',
+                borderRadius: 99,
+                background: 'rgba(16, 185, 129, 0.15)',
+                color: '#34d399',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                fontFamily: "'JetBrains Mono', monospace"
+              }}>
+                {repos.length} Repositories
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>
+              Live codebases synchronized with WorkPilot AI
+            </div>
+          </div>
+        </div>
+        {onDismiss && (
+          <button onClick={onDismiss} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 18 }}>×</button>
+        )}
+      </div>
+
+      {/* Repo list */}
+      <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 380, overflowY: 'auto' }}>
+        {repos.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '20px 10px', color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+            No repositories found or access restricted.
+          </div>
+        ) : (
+          repos.map((repo, idx) => (
+            <div
+              key={repo.id || idx}
+              style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                borderRadius: 10,
+                padding: '10px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <a
+                    href={repo.html_url || `https://github.com/${repo.full_name || repo.name}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: '#60a5fa',
+                      fontWeight: 600,
+                      fontSize: 13,
+                      textDecoration: 'none',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                  >
+                    {repo.full_name || repo.name}
+                  </a>
+                  {repo.private && (
+                    <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>Private</span>
+                  )}
+                  {repo.default_branch && (
+                    <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', fontFamily: "'JetBrains Mono', monospace" }}>{repo.default_branch}</span>
+                  )}
+                </div>
+                {repo.description && (
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {repo.description}
+                  </div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 5, fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
+                  {repo.language && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: getLangColor(repo.language) }} />
+                      {repo.language}
+                    </span>
+                  )}
+                  {repo.open_issues_count !== undefined && (
+                    <span>{repo.open_issues_count} open issues</span>
+                  )}
+                  {repo.stargazers_count > 0 && (
+                    <span>★ {repo.stargazers_count}</span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                <a
+                  href={repo.html_url || `https://github.com/${repo.full_name || repo.name}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    padding: '5px 9px',
+                    borderRadius: 6,
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    color: 'rgba(255,255,255,0.7)',
+                    fontSize: 11,
+                    textDecoration: 'none',
+                    fontWeight: 500,
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  View ↗
+                </a>
+                {onSelectRepo && (
+                  <button
+                    onClick={() => onSelectRepo(repo.full_name || repo.name)}
+                    style={{
+                      padding: '5px 9px',
+                      borderRadius: 6,
+                      background: 'rgba(99,102,241,0.18)',
+                      border: '1px solid rgba(99,102,241,0.35)',
+                      color: '#a5b4fc',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    + Issue
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIntegrations }) {
   const T = theme || { primary: '#3b82f6', secondary: '#7c3aed', accent: '#06b6d4', glow: 'rgba(59,130,246,0.3)' };
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Alex';
   const firstName = displayName.split(' ')[0];
+  const [mode, setMode] = useState(() => {
+    return localStorage.getItem('wp_ai_mode') || 'suggest';
+  });
 
-  const [mode, setMode] = useState('suggest');
+  const handleSetMode = (newMode) => {
+    setMode(newMode);
+    localStorage.setItem('wp_ai_mode', newMode);
+  };
   const [msgs, setMsgs] = useState([
-    { id: 1, r: 'ai', text: `Welcome back, ${firstName}! I'm your AI Chief of Staff. I've reviewed your emails, calendar, and team status. You have 3 urgent items today. How can I help?`, card: null, streaming: false, done: true },
+    { id: 1, r: 'ai', text: `Welcome back, ${firstName}! I'm your AI Chief of Staff. How can I assist you across your workspace today?`, card: null, streaming: false, done: true },
   ]);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
@@ -926,7 +1799,9 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
   const [newPin, setNewPin] = useState('');
   const [copiedId, setCopiedId] = useState(null);
   const [searchQ, setSearchQ] = useState('');
-  const [statsCount, setStatsCount] = useState({ handled: 12, saved: 3, actions: 7 });
+  const [statsCount, setStatsCount] = useState({ handled: 0, saved: 0, actions: 0 });
+  const [canvasItem, setCanvasItem] = useState(null);
+  const [canvasOpen, setCanvasOpen] = useState(false);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [conversationTitle, setConversationTitle] = useState('New workspace chat');
@@ -941,6 +1816,65 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
   const [activeProvider, setActiveProvider] = useState('Groq GPT OSS 120B');
   const [showIntegrations, setShowIntegrations] = useState(false);
   const [connectionState, setConnectionState] = useState({ platforms: [], loading: true, error: false });
+
+  // ── SuperBrain Flagship Additions: Memory, Guardian & Voice TTS ──
+  const [showMemoryModal, setShowMemoryModal] = useState(false);
+  const [speakingId, setSpeakingId] = useState(null);
+  const [guardianData, setGuardianData] = useState(null);
+  const [guardianDismissed, setGuardianDismissed] = useState(false);
+  const recognitionRef = useRef(null);
+
+  const toggleSpeak = useCallback((msgId, text) => {
+    if (!('speechSynthesis' in window)) return;
+    if (speakingId === msgId) {
+      window.speechSynthesis.cancel();
+      setSpeakingId(null);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const clean = (text || '')
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/`[^`]*`/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/[*_#~>]/g, '')
+      .replace(/•/g, '')
+      .trim();
+    if (!clean) return;
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.onend = () => setSpeakingId(null);
+    utterance.onerror = () => setSpeakingId(null);
+    setSpeakingId(msgId);
+    window.speechSynthesis.speak(utterance);
+  }, [speakingId]);
+
+  // Check Schedule Guardian on load
+  useEffect(() => {
+    const fetchGuardian = async () => {
+      let authToken = '';
+      try {
+        const { auth } = await import('../firebase');
+        authToken = (await auth.currentUser?.getIdToken()) || '';
+      } catch {}
+      if (!authToken) {
+        const stored = JSON.parse(localStorage.getItem('wp_tokens') || 'null');
+        authToken = stored?.accessToken || '';
+      }
+      if (!authToken) return;
+      try {
+        const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+        const res = await fetch(`${API}/ai/superbrain/guardian`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        const data = await res.json();
+        if (data && data.alerts && data.alerts.length > 0) {
+          setGuardianData(data);
+        }
+      } catch (err) {
+        console.debug('[Guardian] check failed:', err);
+      }
+    };
+    fetchGuardian();
+  }, []);
 
   const endRef = useRef(null);
   const inputRef = useRef(null);
@@ -1011,6 +1945,7 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
   const sendMsg = useCallback(async (promptOverride) => {
     const userText = (promptOverride ?? input).trim();
     if (!userText || thinking) return;
+    const requestStartTime = performance.now();
     const requestText = attachedFile ? `${userText}\n\nAttached file: ${attachedFile.name}` : userText;
     setInput('');
     setAttachedFile(null);
@@ -1045,7 +1980,7 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
       console.log('[WorkPilot] Chat endpoint:', endpoint, '| Auth: YES');
 
       abortRef.current = new AbortController();
-      const streamTimeout = setTimeout(() => abortRef.current?.abort(), 45000);
+      const streamTimeout = setTimeout(() => abortRef.current?.abort(), 90000);
       const requestOptions = {
         method: 'POST',
         headers: {
@@ -1055,6 +1990,7 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
         body: JSON.stringify({
           message: requestText,
           conversation_id: conversationId,
+          mode: mode,
           history: msgs.slice(-8).map(m => ({ role: m.r === 'ai' ? 'assistant' : 'user', content: m.text }))
         }),
         signal: abortRef.current.signal,
@@ -1081,7 +2017,7 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
       }
 
       const msgId = Date.now() + 1;
-      setMsgs(p => [...p, { id: msgId, r: 'ai', text: '', card: null, toolCall: null, toolResult: null, streaming: true, done: false }]);
+      setMsgs(p => [...p, { id: msgId, r: 'ai', text: '', card: null, toolCall: null, toolResult: null, workflowSteps: [], streaming: true, done: false }]);
       setStatsCount(p => ({ ...p, handled: p.handled + 1 }));
 
       const reader = res.body.getReader();
@@ -1090,16 +2026,18 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
       let buf = '';
       let lastActivityTime = Date.now();
       
-      // Monitor for stuck streams
+      // Monitor for stuck streams (allow up to 60s for multi-hop tool reasoning + 3-model fallback)
       const activityMonitor = setInterval(() => {
         const elapsed = Date.now() - lastActivityTime;
-        if (elapsed > 15000) { // 15 seconds without activity
+        if (elapsed > 60000) { // 60 seconds without activity
           console.warn('[WorkPilot] Stream appears stuck, forcing completion');
           clearInterval(activityMonitor);
           clearTimeout(streamTimeout);
           setThinking(false);
+          const duration = ((performance.now() - requestStartTime) / 1000).toFixed(1);
           setMsgs(p => p.map(m => m.id === msgId ? {
             ...m,
+            duration,
             text: m.text || 'I encountered an issue processing your request. Please try again.',
             done: true,
             streaming: false,
@@ -1114,6 +2052,8 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
         const { done, value } = await reader.read();
         if (done) {
           clearInterval(activityMonitor);
+          const duration = ((performance.now() - requestStartTime) / 1000).toFixed(1);
+          setMsgs(p => p.map(m => m.id === msgId ? { ...m, duration: m.duration || duration, done: true, streaming: false } : m));
           break;
         }
         lastActivityTime = Date.now(); // Reset activity timer
@@ -1127,7 +2067,15 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
             clearTimeout(streamTimeout);
             clearInterval(activityMonitor);
             setThinking(false);  // Stop thinking animation
-            setMsgs(p => p.map(m => m.id === msgId ? { ...m, done: true, streaming: false, toolCall: null } : m));
+            const duration = ((performance.now() - requestStartTime) / 1000).toFixed(1);
+            setMsgs(p => p.map(m => m.id === msgId ? {
+              ...m,
+              duration,
+              done: true,
+              streaming: false,
+              toolCall: null,
+              workflowSteps: (m.workflowSteps || []).map(s => ({ ...s, status: 'completed' }))
+            } : m));
             break;
           }
           try {
@@ -1135,7 +2083,7 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
 
             // ── SuperBrain new event format: { type, content/tool/level/items } ──
             if (parsed.type !== undefined) {
-              const { type, content, tool, message, level, items } = parsed;
+              const { type, content, tool, message, level, items, hop, step_title, tools } = parsed;
 
               if (type === 'token') {
                 full += content;
@@ -1144,6 +2092,24 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
               } else if (type === 'thinking') {
                 setThinkMsg(content || 'Thinking...');
                 setThinking(true);
+
+              } else if (type === 'workflow_step') {
+                setThinkMsg(message || `Autonomous Hop ${hop}...`);
+                setThinking(true);
+                setMsgs(p => p.map(m => {
+                  if (m.id !== msgId) return m;
+                  const currentSteps = m.workflowSteps || [];
+                  const updatedSteps = currentSteps.map(s => ({ ...s, status: 'completed' }));
+                  updatedSteps.push({
+                    hop,
+                    title: step_title || `Step ${hop}`,
+                    tools: tools || [],
+                    message: message || '',
+                    status: 'running',
+                    time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                  });
+                  return { ...m, workflowSteps: updatedSteps };
+                }));
 
               } else if (type === 'tool_start') {
                 setThinkMsg(message || `Running ${tool}...`);
@@ -1164,6 +2130,9 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
                   notion_tool: 'notion', diagnose_issue: 'diagnose',
                   get_system_health: 'health', get_weather: 'weather',
                   github_tool: 'github', jira_tool: 'jira',
+                  prepare_meeting_briefing: 'briefing',
+                  inbox_triage_workflow: 'triage',
+                  workspace_cross_search: 'cross_search',
                 };
                 const card = cardMap[tool] || null;
                 setMsgs(p => p.map(m => m.id === msgId ? { ...m, toolCall: null, card: m.card || card } : m));
@@ -1221,7 +2190,13 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
       setMsgs(p => p.map(m => {
         if (m.id === msgId && !m.done) {
           console.warn('[WorkPilot] Stream ended without [DONE], forcing completion');
-          return { ...m, done: true, streaming: false, toolCall: null };
+          return {
+            ...m,
+            done: true,
+            streaming: false,
+            toolCall: null,
+            workflowSteps: (m.workflowSteps || []).map(s => ({ ...s, status: 'completed' }))
+          };
         }
         return m;
       }));
@@ -1233,18 +2208,9 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
       setThinking(false);
       abortRef.current = null;
       if (err?.name === 'AbortError') return;
-      // Offline fallback
-      const fallbacks = {
-        email: 'I checked your inbox. You have 5 emails — 2 urgent (CFO Budget, Acme complaint). Want me to draft replies?',
-        calendar: 'You have 4 events today: Standup 9AM, Client Meeting 11AM, Lunch 1:30PM, Project Sync 3PM.',
-        team: 'Team update: Sarah on-track, John 65%, Mike 2 days delayed, Priya no update submitted.',
-        deploy: 'Production v2.4.1 is live (99.9% uptime). Staging v2.4.2 is at 67% — auth conflict detected.',
-      };
-      const key = Object.keys(fallbacks).find(k => userText.toLowerCase().includes(k));
-      const fallbackText = fallbacks[key] || 'I encountered a connection issue. Please make sure the backend is running and accessible.';
+      const fallbackText = 'I encountered a connection issue communicating with the AI backend. Please verify that the backend server is active and try again.';
       const msgId = Date.now() + 1;
-      setMsgs(p => [...p, { id: msgId, r: 'ai', text: fallbackText, card: key || null, streaming: false, done: true }]);
-      setStatsCount(p => ({ ...p, handled: p.handled + 1 }));
+      setMsgs(p => [...p, { id: msgId, r: 'ai', text: fallbackText, card: null, streaming: false, done: true, error: true }]);
     }
   }, [attachedFile, conversationId, input, thinking, msgs]);
 
@@ -1259,14 +2225,26 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
   const startListening = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+      return;
+    }
     const r = new SR();
-    r.continuous = false; r.interimResults = false;
-    r.onresult = (e) => setInput(e.results[0][0].transcript);
+    recognitionRef.current = r;
+    r.continuous = false;
+    r.interimResults = true;
+    r.onresult = (e) => {
+      const transcript = Array.from(e.results)
+        .map(result => result[0].transcript)
+        .join('');
+      setInput(transcript);
+    };
     r.onend = () => setIsListening(false);
     r.onerror = () => setIsListening(false);
     setIsListening(true);
     r.start();
-  }, []);
+  }, [isListening]);
 
   const applyPinnedPrompt = (prompt) => { setInput(prompt); inputRef.current?.focus(); };
 
@@ -1307,6 +2285,123 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
   const connectedPlatforms = connectionState.platforms.filter(integration => integration.connected);
   const integrationCount = connectionState.platforms.length;
 
+  const renderCanvasArtifact = (item) => {
+    if (!item) return null;
+    const { type, data, msgId } = item;
+
+    switch (type) {
+      case 'interactive_meeting':
+      case 'create_event':
+        return (
+          <InteractiveMeetingCard
+            data={data?.event || data}
+            onScheduled={(res) => {
+              setStatsCount(p => ({ ...p, actions: p.actions + 1, saved: p.saved + 1 }));
+              setMsgs(p => [...p, { id: Date.now(), r: 'ai', text: `✓ Meeting **${res.title || 'Event'}** confirmed and invitation sent.`, done: true }]);
+            }}
+          />
+        );
+
+      case 'slot_picker':
+      case 'meeting_time':
+        return (
+          <VisualSlotPickerCard
+            data={data}
+            onSelectSlot={(slot) => {
+              sendMsg(`Schedule meeting on ${slot.date} at ${slot.time}`);
+            }}
+          />
+        );
+
+      case 'approval':
+        return (
+          <SafeguardApprovalCard
+            data={data}
+            onApprove={() => {
+              setMsgs(p => [...p, { id: Date.now(), r: 'ai', text: 'Action successfully approved and executed.', done: true }]);
+              if (msgId) removeCard(msgId);
+              setCanvasOpen(false);
+            }}
+            onReject={() => {
+              if (msgId) removeCard(msgId);
+              setCanvasOpen(false);
+            }}
+          />
+        );
+
+      case 'interactive_analytics':
+      case 'analytics':
+        return <InteractiveAnalyticsCard data={data} onDismiss={() => setCanvasOpen(false)} />;
+
+      case 'email':
+        return data?.emails?.length > 0 ? (
+          <RealEmailsCard emails={data.emails} source={data.source} T={T} onDismiss={() => setCanvasOpen(false)} />
+        ) : (
+          <LiveDataNotice source={data?.source} message={data?.note || data?.error} T={T} onOpenIntegrations={onOpenIntegrations} />
+        );
+
+      case 'calendar':
+        return data?.events?.length > 0 ? (
+          <RealCalendarCard events={data.events} T={T} onDismiss={() => setCanvasOpen(false)} />
+        ) : (
+          <LiveDataNotice source={data?.source} message={data?.note || data?.error} T={T} onOpenIntegrations={onOpenIntegrations} />
+        );
+
+      case 'compose':
+        return (
+          <ComposeEmailCard
+            data={data}
+            onSend={(emailData) => {
+              if (msgId) removeCard(msgId);
+              setStatsCount(p => ({ ...p, saved: p.saved + 1, actions: p.actions + 1 }));
+              setMsgs(p => [...p, { id: Date.now(), r: 'ai', text: `✓ Email to **${emailData.to}** — "${emailData.subject}" sent successfully.`, card: null, done: true }]);
+              setCanvasOpen(false);
+            }}
+            onDismiss={() => setCanvasOpen(false)}
+          />
+        );
+
+      case 'deploy':
+        return <DeployCard T={T} data={data} onOpenIntegrations={onOpenIntegrations} />;
+
+      case 'team':
+        return <TeamCard data={data} />;
+
+      case 'integrations':
+        return <IntegrationsStatusCard data={data} T={T} onDismiss={() => setCanvasOpen(false)} />;
+
+      case 'tasks':
+        return <TasksCard data={data} T={T} onDismiss={() => setCanvasOpen(false)} />;
+
+      case 'automation':
+        return <AutomationCard data={data} T={T} onDismiss={() => setCanvasOpen(false)} />;
+
+      case 'report':
+        return <ReportCard data={data} T={T} onDismiss={() => setCanvasOpen(false)} />;
+
+      case 'github':
+        return (
+          <GitHubReposCard
+            data={data}
+            T={T}
+            onDismiss={() => setCanvasOpen(false)}
+            onSelectRepo={(repoName) => {
+              setCanvasOpen(false);
+              sendMsg(`Create a new GitHub issue in ${repoName}`);
+            }}
+          />
+        );
+
+      default:
+        return (
+          <div style={{ padding: 20, textAlign: 'center', color: 'rgba(255,255,255,0.5)' }}>
+            <p>Artifact details loaded.</p>
+            {data && <pre style={{ textAlign: 'left', background: 'rgba(255,255,255,0.03)', padding: 12, borderRadius: 8, fontSize: 11, overflowX: 'auto' }}>{JSON.stringify(data, null, 2)}</pre>}
+          </div>
+        );
+    }
+  };
+
   return (
     <div style={{ display: 'flex', height: '100vh', background: '#000', color: '#fff', fontFamily: "'Inter',sans-serif", overflow: 'hidden', position: 'relative' }}>
       
@@ -1318,7 +2413,7 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
           </button>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: `linear-gradient(135deg,${T.primary},${T.secondary})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: `0 4px 14px ${T.glow}` }}>{Ic.brain}</div>
+            <WorkPilotAvatar size={34} T={T} />
             <div>
               <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 14, color: '#fff' }}>WorkPilot AI</div>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace" }}>AI Chief of Staff</div>
@@ -1336,7 +2431,8 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
               return (
                 <button
                   key={key}
-                  onClick={() => setMode(key)}
+                  onClick={() => handleSetMode(key)}
+                  title={`${val.label}: ${val.desc}`}
                   style={{
                     flex: 1,
                     display: 'flex',
@@ -1415,19 +2511,19 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
             ))}
           </div>
 
-          {/* Session context */}
+          {/* Workspace Status */}
           <div style={{ marginTop: 24 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.08em', fontFamily: "'JetBrains Mono',monospace", marginBottom: 12 }}>TODAY'S CONTEXT</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.08em', fontFamily: "'JetBrains Mono',monospace", marginBottom: 12 }}>WORKSPACE HEALTH</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {[
-                { icon: Ic.mail, label: '3 urgent emails' },
-                { icon: Ic.team, label: 'Mike overdue' },
-                { icon: Ic.deploy, label: 'v2.4.2 staging' },
-                { icon: Ic.cal, label: '3 meetings' },
+                { icon: Ic.bolt, label: `${connectedPlatforms.length} Connected` },
+                { icon: Ic.check, label: 'All Systems Live' },
+                { icon: Ic.brain, label: 'SuperBrain Ready' },
+                { icon: Ic.docs, label: 'Live Data Only' },
               ].map(ctx => (
                 <div key={ctx.label} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: '6px 8px' }}>
                   <span style={{ color: T.primary, display: 'flex', opacity: 0.8, transform: 'scale(0.9)' }}>{ctx.icon}</span>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ctx.label}</span>
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ctx.label}</span>
                 </div>
               ))}
             </div>
@@ -1450,66 +2546,250 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
       </aside>
 
       {/* ══ MAIN CHAT AREA ══ */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative' }}>
 
-        {/* TOP BAR */}
-        <header style={{ height: 52, background: '#0a0a0d', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12, flexShrink: 0 }}>
-          {!sidebarOpen && (
-            <button onClick={() => setSidebarOpen(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', padding: 6, borderRadius: 6 }} className="back-btn" title="Expand sidebar">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+        {/* ══ UNIFIED 56px EXECUTIVE TOPBAR ══ */}
+        <header style={{ 
+          height: 56, 
+          background: 'rgba(10, 10, 13, 0.85)', 
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          borderBottom: '1px solid rgba(255,255,255,0.08)', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          padding: '0 18px', 
+          gap: 12, 
+          flexShrink: 0,
+          zIndex: 40,
+        }}>
+          {/* Left: Sidebar toggle + Dashboard breadcrumb */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {!sidebarOpen && (
+              <button onClick={() => setSidebarOpen(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', padding: 6, borderRadius: 6 }} className="back-btn" title="Expand sidebar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            )}
+            <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 13, cursor: 'pointer', fontFamily: "'Inter',sans-serif", fontWeight: 500 }} className="back-btn">
+              {Ic.back} Dashboard
             </button>
-          )}
+          </div>
 
-          <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 13, cursor: 'pointer', fontFamily: "'Inter',sans-serif", fontWeight: 500 }} className="back-btn">
-            {Ic.back} Dashboard
-          </button>
-
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minWidth: 0 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />
-            <div style={{ minWidth: 0, textAlign: 'center' }}>
-              <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 14, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conversationTitle}</div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>WorkPilot AI · {activeProvider}</div>
+          {/* Center: Title + Mode Pill */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981', flexShrink: 0 }} />
+            <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 14, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {conversationTitle}
             </div>
-            <div style={{ padding: '2px 8px', borderRadius: 99, background: `${MODES[mode].color}15`, border: `1px solid ${MODES[mode].color}30`, fontSize: 10, fontWeight: 600, color: MODES[mode].color, marginLeft: 4 }}>
+            <div 
+              title={`${MODES[mode]?.label}: ${MODES[mode]?.desc}`}
+              style={{ padding: '2px 8px', borderRadius: 99, background: `${MODES[mode].color}15`, border: `1px solid ${MODES[mode].color}35`, fontSize: 10, fontWeight: 600, color: MODES[mode].color, cursor: 'help' }}
+            >
               {MODES[mode].label}
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+          {/* Right: Integrations Pill + Memory + Search + Canvas Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Integrations micro-button */}
+            <button 
+              onClick={() => setShowIntegrations(v => !v)} 
+              title="Connected Workspace Integrations"
+              style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                gap: 6, 
+                padding: '5px 10px', 
+                borderRadius: 8, 
+                border: '1px solid rgba(255,255,255,0.1)', 
+                background: showIntegrations ? 'rgba(99,102,241,0.18)' : 'rgba(255,255,255,0.04)', 
+                color: '#fff', 
+                fontSize: 11, 
+                cursor: 'pointer' 
+              }}
+            >
+              <span style={{ display: 'flex', gap: 3 }}>
+                {connectedPlatforms.slice(0, 3).map(integration => (
+                  <span key={integration.platform}>{INTEGRATION_ICONS[integration.platform] || Ic.pin}</span>
+                ))}
+              </span>
+              <span>{connectedPlatforms.length}/{integrationCount}</span>
+              <span style={{ color: '#10b981' }}>●</span>
+            </button>
+
+            {/* Personal Memory Button */}
+            <button
+              onClick={() => setShowMemoryModal(true)}
+              title="Personal Memory & Style"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '5px 10px',
+                borderRadius: 8,
+                border: '1px solid rgba(139, 92, 246, 0.3)',
+                background: 'rgba(139, 92, 246, 0.12)',
+                color: '#c4b5fd',
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              <span>🧠</span>
+              <span className="memory-btn-text">Memory</span>
+            </button>
+
+            {/* Split-Canvas Toggle */}
+            {canvasItem && (
+              <button
+                onClick={() => setCanvasOpen(v => !v)}
+                title={canvasOpen ? "Hide Artifact Canvas" : "Show Artifact Canvas"}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '5px 10px',
+                  borderRadius: 8,
+                  border: canvasOpen ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(255,255,255,0.1)',
+                  background: canvasOpen ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.04)',
+                  color: canvasOpen ? '#6ee7b7' : 'rgba(255,255,255,0.7)',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                <span>⤢</span>
+                <span>Canvas</span>
+              </button>
+            )}
+
+            {/* Search Box */}
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <div style={{ position: 'absolute', left: 10, color: 'rgba(255,255,255,0.3)', display: 'flex' }}>{Ic.search}</div>
-              <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search..." style={{ padding: '6px 28px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, color: '#fff', fontSize: 12, outline: 'none', width: 160, fontFamily: "'Inter',sans-serif", transition: 'all 0.2s' }} className="sinput" />
+              <div style={{ position: 'absolute', left: 8, color: 'rgba(255,255,255,0.3)', display: 'flex' }}>{Ic.search}</div>
+              <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search..." style={{ padding: '5px 10px 5px 26px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, color: '#fff', fontSize: 11, outline: 'none', width: 120, fontFamily: "'Inter',sans-serif", transition: 'all 0.2s' }} className="sinput" />
               {searchQ && (
-                <button onClick={() => setSearchQ('')} style={{ position: 'absolute', right: 8, background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', display: 'flex', padding: 2 }}>{Ic.x}</button>
+                <button onClick={() => setSearchQ('')} style={{ position: 'absolute', right: 6, background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', display: 'flex', padding: 2 }}>{Ic.x}</button>
               )}
             </div>
           </div>
         </header>
 
-        <div style={{ position: 'relative', minHeight: 42, padding: '4px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderBottom: '1px solid rgba(255,255,255,0.04)', background: 'rgba(255,255,255,0.015)', flexShrink: 0 }}>
-          <span className="status-pill"><span className="status-dot" /> {activeProvider}</span>
-          <button onClick={() => setShowIntegrations(value => !value)} title="View all integration connections" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 9, border: '1px solid rgba(255,255,255,0.1)', background: showIntegrations ? 'rgba(99,102,241,0.14)' : 'rgba(255,255,255,0.04)', color: '#fff', fontSize: 10, cursor: 'pointer' }}>
-            <span style={{ display: 'flex', gap: 3 }}>{connectedPlatforms.slice(0, 4).map(integration => <span key={integration.platform}>{INTEGRATION_ICONS[integration.platform] || Ic.pin}</span>)}</span>
-            {connectionState.loading ? 'Checking integrations' : connectionState.error ? 'Status unavailable' : `${connectedPlatforms.length}/${integrationCount} connected`}
-            {!connectionState.loading && !connectionState.error && <span style={{ color: '#10b981' }}>●</span>}
-          </button>
-          <button onClick={loadConnectionState} title="Refresh integration status" style={{ padding: '4px 7px', borderRadius: 7, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: 'rgba(255,255,255,0.45)', cursor: 'pointer', fontSize: 13 }}>↻</button>
-          {showIntegrations && !connectionState.loading && !connectionState.error && (
-            <div style={{ position: 'absolute', zIndex: 5, top: 'calc(100% + 8px)', right: 20, width: 'min(360px, calc(100vw - 40px))', padding: 10, borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)', background: '#101014', boxShadow: '0 16px 40px rgba(0,0,0,0.45)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 5px 9px', color: 'rgba(255,255,255,0.55)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}><span>Workspace connections</span><span>{connectedPlatforms.length} active</span></div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 5 }}>
-                {connectionState.platforms.map(integration => (
-                  <button key={integration.platform} onClick={onOpenIntegrations} title={`Manage ${integration.displayName}`} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, padding: '7px 8px', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7, background: 'rgba(255,255,255,0.03)', color: integration.connected ? '#d1fae5' : 'rgba(255,255,255,0.48)', cursor: 'pointer', fontSize: 10, textAlign: 'left' }}>
-                    <span style={{ display: 'flex', flexShrink: 0 }}>{INTEGRATION_ICONS[integration.platform] || Ic.pin}</span><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{integration.displayName}</span><span style={{ marginLeft: 'auto', color: integration.connected ? '#10b981' : '#6b7280' }}>●</span>
-                  </button>
-                ))}
+        {/* Integrations dropdown modal */}
+        {showIntegrations && !connectionState.loading && !connectionState.error && (
+          <div style={{ position: 'absolute', zIndex: 60, top: 62, right: 20, width: 'min(360px, calc(100vw - 40px))', padding: 12, borderRadius: 14, border: '1px solid rgba(255,255,255,0.12)', background: '#101014', boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 5px 10px', color: 'rgba(255,255,255,0.55)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              <span>Live Integrations</span>
+              <span>{connectedPlatforms.length} active</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+              {connectionState.platforms.map(integration => (
+                <button key={integration.platform} onClick={onOpenIntegrations} title={`Manage ${integration.displayName}`} style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, padding: '7px 8px', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, background: 'rgba(255,255,255,0.03)', color: integration.connected ? '#d1fae5' : 'rgba(255,255,255,0.48)', cursor: 'pointer', fontSize: 11, textAlign: 'left' }}>
+                  <span style={{ display: 'flex', flexShrink: 0 }}>{INTEGRATION_ICONS[integration.platform] || Ic.pin}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{integration.displayName}</span>
+                  <span style={{ marginLeft: 'auto', color: integration.connected ? '#10b981' : '#6b7280' }}>●</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ══ SPLIT-CANVAS WORKBENCH STAGE ══ */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0, position: 'relative' }}>
+
+          {/* Left: Chat stream and input composer */}
+          <div style={{
+            flex: canvasOpen && canvasItem ? '1 1 56%' : '1 1 100%',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            minWidth: 0,
+            transition: 'flex 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}>
+            {/* MESSAGES */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* ── Schedule Guardian Banner ── */}
+          {guardianData && !guardianDismissed && guardianData.alerts?.length > 0 && (
+            <div
+              style={{
+                padding: '12px 16px',
+                borderRadius: 14,
+                background: 'linear-gradient(90deg, rgba(239, 68, 68, 0.12) 0%, rgba(245, 158, 11, 0.08) 100%)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 10,
+                marginBottom: 6,
+                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+                animation: 'msgIn 0.3s ease',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 240 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f87171', fontSize: 14, flexShrink: 0 }}>
+                  🛡️
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#fca5a5' }}>
+                    Schedule Guardian Alert: {guardianData.alerts.length} item{guardianData.alerts.length > 1 ? 's' : ''} need attention
+                  </div>
+                  <div style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.65)' }}>
+                    {guardianData.alerts[0]?.message}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  onClick={() => sendMsg('Review my calendar for today and add Google Meet video links to meetings missing links')}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    background: 'rgba(239, 68, 68, 0.2)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    color: '#fecaca',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Quick Fix Links
+                </button>
+
+                <button
+                  onClick={() => sendMsg('Give me my complete morning briefing with priorities, calendar, and emails')}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#fff',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Morning Briefing
+                </button>
+
+                <button
+                  onClick={() => setGuardianDismissed(true)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'rgba(255, 255, 255, 0.4)',
+                    fontSize: 14,
+                    cursor: 'pointer',
+                    padding: 4,
+                  }}
+                >
+                  ✕
+                </button>
               </div>
             </div>
           )}
-        </div>
 
-        {/* MESSAGES */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
           {filteredMsgs.map(msg => (
             <div key={msg.id} className="msg-wrap" style={{ position: 'relative', display: 'flex', justifyContent: msg.r === 'user' ? 'flex-end' : 'flex-start', gap: 12, animation: 'msgIn .25s ease' }}>
               
@@ -1519,25 +2799,58 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
               </div>
 
               {msg.r === 'ai' && (
-                <div style={{ width: 32, height: 32, borderRadius: 10, background: `linear-gradient(135deg,${T.primary},${T.secondary})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0, boxShadow: `0 2px 10px ${T.glow}`, marginTop: 2 }}>{Ic.bolt}</div>
+                <WorkPilotAvatar isStreaming={msg.streaming && !msg.done} T={T} />
               )}
 
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: msg.r === 'user' ? 'flex-end' : 'flex-start', maxWidth: msg.r === 'ai' ? '75%' : '65%', minWidth: 80 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: msg.r === 'user' ? 'flex-end' : 'flex-start', maxWidth: msg.r === 'ai' ? '78%' : '65%', minWidth: 80 }}>
                 
                 <div style={{
-                  padding: msg.r === 'user' ? '12px 16px' : '14px 16px',
-                  borderRadius: msg.r === 'user' ? '18px 4px 18px 18px' : '4px 18px 18px 18px',
-                  background: msg.r === 'user' ? `linear-gradient(135deg,${T.primary},${T.secondary})` : msg.error ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.08)',
+                  padding: msg.r === 'user' ? '12px 16px' : '14px 18px',
+                  borderRadius: msg.r === 'user' ? '18px 4px 18px 18px' : '6px 18px 18px 18px',
+                  background: msg.r === 'user' 
+                    ? `linear-gradient(135deg,${T.primary},${T.secondary})` 
+                    : msg.error 
+                      ? 'rgba(239,68,68,0.1)' 
+                      : 'rgba(15, 20, 32, 0.75)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
                   border: msg.r === 'ai' ? `1px solid ${msg.error ? 'rgba(239,68,68,0.35)' : 'rgba(255,255,255,0.09)'}` : 'none',
-                  borderLeft: msg.r === 'ai' ? `3px solid ${msg.error ? '#ef4444' : `${T.primary}50`}` : 'none',
+                  borderLeft: msg.r === 'ai' ? `3px solid ${msg.error ? '#ef4444' : 'rgba(0, 210, 255, 0.7)'}` : 'none',
                   fontSize: 14, lineHeight: 1.7, color: '#fff',
-                  boxShadow: msg.r === 'user' ? `0 6px 24px ${T.glow}` : 'none',
+                  boxShadow: msg.r === 'user' ? `0 6px 24px ${T.glow}` : '0 4px 20px rgba(0,0,0,0.35)',
                   width: '100%'
                 }}>
-                  {/* Render text directly — StreamText caused blank bubble by restarting from char 0 on each token */}
-                  <MdText text={msg.text} />
-                  {msg.streaming && !msg.done && (
-                    <span style={{ display: 'inline-block', width: 2, height: '1em', background: 'rgba(255,255,255,0.7)', marginLeft: 2, animation: 'blink .7s step-end infinite', verticalAlign: 'text-bottom' }} />
+                  {(!msg.text && msg.streaming && !msg.done) ? (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '2px 0' }}>
+                      <div style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: '50%',
+                        border: '2px solid rgba(0, 210, 255, 0.25)',
+                        borderTopColor: '#00d2ff',
+                        animation: 'wpSpin 0.75s linear infinite',
+                        flexShrink: 0,
+                      }} />
+                      <span style={{
+                        fontSize: 13,
+                        fontWeight: 500,
+                        background: 'linear-gradient(90deg, rgba(255,255,255,0.5) 0%, #ffffff 50%, rgba(255,255,255,0.5) 100%)',
+                        backgroundSize: '200% 100%',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        animation: 'wpShimmerText 2s infinite ease-in-out',
+                        fontFamily: "'Inter', sans-serif",
+                      }}>
+                        WorkPilot AI is preparing your response...
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <MdText text={msg.text} onSelectOption={(val) => sendMsg(val)} />
+                      {msg.streaming && !msg.done && (
+                        <span style={{ display: 'inline-block', width: 2, height: '1em', background: '#00d2ff', marginLeft: 3, boxShadow: '0 0 6px #00d2ff', animation: 'blink .7s step-end infinite', verticalAlign: 'text-bottom' }} />
+                      )}
+                    </>
                   )}
 
                   {/* Tool call status badge */}
@@ -1545,16 +2858,109 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
                     <ToolStatusBadge label={msg.toolCall.label} />
                   )}
 
+                  {/* Autonomous Multi-Hop Workflow Stepper */}
+                  {msg.workflowSteps && msg.workflowSteps.length > 0 && (
+                    <WorkflowProgressAccordion steps={msg.workflowSteps} done={msg.done} T={T} />
+                  )}
+
                   {/* Rich card */}
-                  {msg.card && msg.done && (
+                  {Boolean(
+                    msg.done && (
+                      [
+                        'interactive_meeting', 'slot_picker', 'approval', 'interactive_analytics',
+                        'compose', 'improve_text', 'deploy', 'team', 'integrations', 'analytics',
+                        'tasks', 'automation', 'report', 'meeting_time', 'create_event', 'github'
+                      ].includes(msg.card) ||
+                      (msg.card === 'email' && (msg.toolResult?.emails?.length > 0 || (!msg.text || msg.text.length < 100))) ||
+                      (msg.card === 'calendar' && (msg.toolResult?.events?.length > 0 || (!msg.text || msg.text.length < 100)))
+                    )
+                  ) && (
                     <>
                       <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '12px -16px' }} />
                       <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: 14, margin: '0 -2px' }}>
+                        {/* Open in Canvas quick button */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+                          <button
+                            onClick={() => {
+                              const cardTitles = {
+                                interactive_meeting: 'Meeting Invitation',
+                                create_event: 'Meeting Invitation',
+                                slot_picker: 'Select Meeting Time',
+                                meeting_time: 'Available Time Slots',
+                                approval: 'Action Safeguard Approval',
+                                interactive_analytics: 'Workspace Analytics',
+                                analytics: 'Productivity Analytics',
+                                compose: 'Compose Email',
+                                deploy: 'Deployment Pipelines',
+                                team: 'Team Standup',
+                                report: 'Workspace Report',
+                                email: 'Email Inbox',
+                                calendar: 'Google Calendar',
+                                github: 'Connected GitHub Repositories'
+                              };
+                              setCanvasItem({
+                                type: msg.card,
+                                title: cardTitles[msg.card] || 'Artifact Details',
+                                data: msg.toolResult,
+                                msgId: msg.id
+                              });
+                              setCanvasOpen(true);
+                            }}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '3px 8px',
+                              borderRadius: 6,
+                              background: 'rgba(255,255,255,0.06)',
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              color: 'rgba(255,255,255,0.7)',
+                              fontSize: 10,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              transition: 'all 0.15s'
+                            }}
+                            title="Inspect in side-by-side Canvas stage"
+                          >
+                            <span>⤢</span>
+                            <span>Open in Canvas</span>
+                          </button>
+                        </div>
+
+                        {msg.card === 'interactive_meeting' && (
+                          <InteractiveMeetingCard
+                            data={msg.toolResult?.event || msg.toolResult}
+                            onScheduled={(res) => {
+                              setStatsCount(p => ({ ...p, actions: p.actions + 1, saved: p.saved + 1 }));
+                              setMsgs(p => [...p, { id: Date.now(), r: 'ai', text: `✓ Meeting **${res.title || 'Event'}** confirmed and invitation sent.`, done: true }]);
+                            }}
+                          />
+                        )}
+                        {msg.card === 'slot_picker' && (
+                          <VisualSlotPickerCard
+                            data={msg.toolResult}
+                            onSelectSlot={(slot) => {
+                              sendMsg(`Schedule meeting on ${slot.date} at ${slot.time}`);
+                            }}
+                          />
+                        )}
+                        {msg.card === 'approval' && (
+                          <SafeguardApprovalCard
+                            data={msg.toolResult}
+                            onApprove={() => {
+                              setMsgs(p => [...p, { id: Date.now(), r: 'ai', text: 'Action successfully approved and executed.', done: true }]);
+                              removeCard(msg.id);
+                            }}
+                            onReject={() => removeCard(msg.id)}
+                          />
+                        )}
+                        {msg.card === 'interactive_analytics' && (
+                          <InteractiveAnalyticsCard data={msg.toolResult} onDismiss={() => removeCard(msg.id)} />
+                        )}
                         {msg.card === 'email' && (
                           msg.toolResult?.emails?.length > 0
                             ? <RealEmailsCard emails={msg.toolResult.emails} source={msg.toolResult.source} T={T} onDismiss={() => removeCard(msg.id)} />
-                            : // Only show "No live data" notice if the main text response is also empty/short
-                              (!msg.text || msg.text.length < 100)
+                            : (!msg.text || msg.text.length < 100)
                                 ? <LiveDataNotice source={msg.toolResult?.source} message={msg.toolResult?.note || msg.toolResult?.error} T={T} onOpenIntegrations={onOpenIntegrations} />
                                 : null
                         )}
@@ -1584,12 +2990,11 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
                         {msg.card === 'calendar' && (
                           msg.toolResult?.events?.length > 0
                             ? <RealCalendarCard events={msg.toolResult.events} T={T} onDismiss={() => removeCard(msg.id)} />
-                            : // Only show "No live data" notice if the main text response is also empty/short
-                              (!msg.text || msg.text.length < 100)
+                            : (!msg.text || msg.text.length < 100)
                                 ? <LiveDataNotice source={msg.toolResult?.source} message={msg.toolResult?.note || msg.toolResult?.error} T={T} onOpenIntegrations={onOpenIntegrations} />
                                 : null
                         )}
-                        {msg.card === 'deploy' && <DeployCard T={T} data={msg.toolResult} />}
+                        {msg.card === 'deploy' && <DeployCard T={T} data={msg.toolResult} onOpenIntegrations={onOpenIntegrations} />}
                         {msg.card === 'team' && <TeamCard data={msg.toolResult} />}
                         {msg.card === 'integrations' && msg.toolResult && (
                           <IntegrationsStatusCard data={msg.toolResult} T={T} onDismiss={() => removeCard(msg.id)} />
@@ -1612,8 +3017,45 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
                         {msg.card === 'create_event' && msg.toolResult && (
                           <CreatedEventCard data={msg.toolResult} T={T} onDismiss={() => removeCard(msg.id)} />
                         )}
+                        {msg.card === 'github' && (
+                          <GitHubReposCard
+                            data={msg.toolResult}
+                            T={T}
+                            onDismiss={() => removeCard(msg.id)}
+                            onSelectRepo={(repoName) => {
+                              sendMsg(`Create a new GitHub issue in ${repoName}`);
+                            }}
+                          />
+                        )}
                       </div>
                     </>
+                  )}
+
+                  {/* ── Response Generation Latency / Thought Time Metric ── */}
+                  {msg.r === 'ai' && msg.duration && (
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '3px 10px',
+                      borderRadius: 12,
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      fontSize: 11,
+                      color: 'rgba(255, 255, 255, 0.55)',
+                      fontFamily: "'JetBrains Mono', monospace",
+                      marginTop: 10,
+                    }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                        <Logo height={12} showText={false} glowColor="#00d2ff" />
+                      </span>
+                      <span>Thought for {msg.duration}s</span>
+                      {msg.workflowSteps?.length > 0 && (
+                        <span style={{ color: 'rgba(255, 255, 255, 0.35)' }}>
+                          · {msg.workflowSteps.length} action{msg.workflowSteps.length > 1 ? 's' : ''} chained
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -1674,6 +3116,38 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
                 {/* Actions */}
                 {msg.done && (
                   <div className="msg-actions" style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    {/* Voice TTS Listen/Stop button */}
+                    {msg.r === 'ai' && (
+                      <button
+                        onClick={() => toggleSpeak(msg.id, msg.text)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          background: speakingId === msg.id ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+                          border: speakingId === msg.id ? '1px solid rgba(99, 102, 241, 0.4)' : 'none',
+                          color: speakingId === msg.id ? '#a5b4fc' : 'rgba(255,255,255,0.4)',
+                          fontSize: 11,
+                          cursor: 'pointer',
+                          fontFamily: "'Inter',sans-serif",
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        {speakingId === msg.id ? (
+                          <>
+                            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#818cf8', animation: 'pulse 1s infinite' }} />
+                            <span>Stop</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>🔊</span>
+                            <span>Listen</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                     <button onClick={() => copyMsg(msg.id, msg.text)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 6, background: 'transparent', border: 'none', color: copiedId === msg.id ? '#10b981' : 'rgba(255,255,255,0.4)', fontSize: 11, cursor: 'pointer', fontFamily: "'Inter',sans-serif" }}>
                       {copiedId === msg.id ? Ic.check : Ic.copy} {copiedId === msg.id ? 'Copied' : 'Copy'}
                     </button>
@@ -1695,18 +3169,20 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
           {/* THINKING INDICATOR */}
           {thinking && (
             <div style={{ display: 'flex', gap: 12, animation: 'msgIn .2s ease' }}>
-              <div style={{ width: 32, height: 32, borderRadius: 10, background: `linear-gradient(135deg,${T.primary},${T.secondary})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0, boxShadow: `0 2px 10px ${T.glow}` }}>{Ic.bolt}</div>
-              <div style={{ flex: 1, maxWidth: 300, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <WorkPilotAvatar isThinking={true} T={T} />
+              <div style={{ flex: 1, maxWidth: 360, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                 <div style={{ 
                   height: 3, 
                   borderRadius: 99, 
-                  background: `linear-gradient(90deg, transparent, ${T.primary}, ${T.accent}, ${T.secondary}, transparent)`,
+                  background: `linear-gradient(90deg, transparent, #00d2ff, #8b5cf6, #3b82f6, transparent)`,
                   backgroundSize: '200% 100%',
                   animation: 'thinkSlide 1.5s ease infinite',
-                  margin: '8px 0 4px'
+                  margin: '8px 0 4px',
+                  boxShadow: '0 0 8px rgba(0, 210, 255, 0.4)'
                 }} />
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', fontStyle: 'italic', paddingLeft: 8 }}>
-                  {thinkMsg}
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', fontStyle: 'italic', paddingLeft: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#00d2ff', boxShadow: '0 0 6px #00d2ff', animation: 'wpAvatarPulse 1.2s infinite' }} />
+                  <span>{thinkMsg}</span>
                 </div>
               </div>
             </div>
@@ -1731,7 +3207,7 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
           }} className="chips-container">
             {[
               ['Morning briefing', 'brain'],
-              ['Draft CFO reply', 'mail'],
+              ['Draft an email', 'mail'],
               ['Team standup', 'team'],
               ['Deploy status', 'deploy'],
               ['Schedule meeting', 'cal'],
@@ -1824,13 +3300,115 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
         </div>
       </div>
 
-      {/* STYLES */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
-        * { box-sizing: border-box; }
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+      {/* Right: Dynamic Split-Canvas Stage */}
+      {canvasOpen && canvasItem && (
+        <aside
+          className="canvas-workbench"
+          style={{
+            flex: '1 1 44%',
+            minWidth: 360,
+            maxWidth: 640,
+            borderLeft: '1px solid rgba(255,255,255,0.09)',
+            background: 'linear-gradient(180deg, rgba(13,13,17,0.97) 0%, rgba(9,9,12,0.99) 100%)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            animation: 'canvasSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1)',
+            zIndex: 25,
+            boxShadow: '-8px 0 32px rgba(0,0,0,0.5)',
+          }}
+        >
+          {/* Canvas Topbar */}
+          <div style={{
+            height: 52,
+            padding: '0 16px',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexShrink: 0,
+            background: 'rgba(255,255,255,0.02)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <div style={{ width: 26, height: 26, borderRadius: 7, background: 'rgba(0,210,255,0.15)', border: '1px solid rgba(0,210,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Logo height={14} showText={false} glowColor="#00d2ff" />
+              </div>
+              <span style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 13, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {canvasItem.title || 'Interactive Artifact'}
+              </span>
+              <span style={{
+                fontSize: 9,
+                padding: '2px 7px',
+                borderRadius: 99,
+                background: 'rgba(99, 102, 241, 0.15)',
+                border: '1px solid rgba(99, 102, 241, 0.35)',
+                color: '#a5b4fc',
+                fontFamily: "'JetBrains Mono',monospace",
+                fontWeight: 600,
+                letterSpacing: '0.05em',
+                flexShrink: 0
+              }}>
+                CANVAS
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                onClick={() => setCanvasOpen(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'rgba(255,255,255,0.6)',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontFamily: "'Inter',sans-serif",
+                  transition: 'all 0.15s',
+                }}
+                title="Close canvas stage"
+              >
+                ✕ Close
+              </button>
+            </div>
+          </div>
+
+          {/* Canvas Content Body */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+            {renderCanvasArtifact(canvasItem)}
+          </div>
+        </aside>
+      )}
+
+    </div>
+  </div>
+
+  {/* STYLES */}
+  <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
+    * { box-sizing: border-box; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+    
+    @keyframes canvasSlideIn {
+      from { opacity: 0; transform: translateX(30px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @media (max-width: 960px) {
+      .canvas-workbench {
+        position: absolute!important;
+        top: 0; right: 0; bottom: 0; left: 0;
+        max-width: 100%!important;
+        width: 100%!important;
+        z-index: 50!important;
+      }
+    }
         
         .chips-container::-webkit-scrollbar { display: none; }
         
@@ -1863,6 +3441,10 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
         @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.15)} }
         @keyframes msgIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+        @keyframes wpSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes wpAvatarPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 14px rgba(0,210,255,0.4), inset 0 0 8px rgba(139,92,246,0.25); } 50% { transform: scale(1.04); box-shadow: 0 0 24px rgba(0,210,255,0.7), inset 0 0 14px rgba(139,92,246,0.5); } }
+        @keyframes wpShimmerText { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+        .wp-avatar-pulse { animation: wpAvatarPulse 2.2s ease-in-out infinite; }
 
         .back-btn:hover { color: #fff!important; background: rgba(255,255,255,0.05)!important; }
         .pin-btn:hover { background: rgba(255,255,255,0.06)!important; }
@@ -1881,9 +3463,9 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
           .status-pill:nth-child(3) { display: none; }
           .status-pill { font-size: 9px; }
           .sinput { width: 34px!important; padding: 6px 10px!important; }
-          .sinput:focus { width: 130px!important; padding: 6px 28px!important; }
         }
       `}</style>
+      <PersonalMemoryModal isOpen={showMemoryModal} onClose={() => setShowMemoryModal(false)} />
     </div>
   );
 }

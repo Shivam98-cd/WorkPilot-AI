@@ -26,14 +26,13 @@ const SummarizerAgent = ({ setState, getState }) => {
         },
         body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error('Summary generation failed');
+      if (!res.ok) return;
       const { summary } = await res.json();
 
       // Store summary in state under a key like 'dailyBrief'
       setState(prev => ({ ...prev, dailyBrief: summary }));
     } catch (err) {
-      console.error('SummarizerAgent error:', err);
-      // Optionally set an error state
+      // Endpoint is optional; fail silently
     }
   };
 

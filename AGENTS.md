@@ -263,6 +263,7 @@ npm run preview                  # Preview production build
 6. Add comprehensive API documentation with examples
 7. Consider implementing WebSocket support for real-time features
 8. Add comprehensive logging structure with correlation IDs
+9. Implement Enterprise RAG & Vector Knowledge Pipeline (see [RAG_ARCHITECTURE_ROADMAP.md](file:///d:/workpilot-ai/RAG_ARCHITECTURE_ROADMAP.md))
 
 ## Important Files Reference
 

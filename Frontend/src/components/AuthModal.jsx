@@ -57,9 +57,9 @@ function Particles() {
 }
 
 /* ─── FloatingLabelInput ─── */
-function FloatingInput({ label, type = 'text', value, onChange, icon, autoFocus, rightElement, error }) {
+function FloatingInput({ label, type = 'text', value = '', onChange, icon, autoFocus, rightElement, error }) {
   const [focused, setFocused] = useState(false);
-  const floated = focused || value.length > 0;
+  const floated = focused || Boolean(value && String(value).length > 0);
 
   return (
     <div style={{ position: 'relative', marginBottom: error ? '0.25rem' : '0' }}>
@@ -306,13 +306,16 @@ export default function AuthModal({ isOpen, onClose }) {
   );
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0,
-      width: '100vw', height: '100vh', zIndex: 10000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(14px)',
-      animation: 'modalFadeIn 0.3s ease', padding: '1rem',
-    }}>
+    <div 
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed', top: 0, left: 0,
+        width: '100vw', height: '100vh', zIndex: 10000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(14px)',
+        animation: 'modalFadeIn 0.3s ease', padding: '1rem',
+      }}
+    >
       {/* Card */}
       <div className="auth-modal-card" style={{
         width: '100%', maxWidth: '820px',
@@ -373,14 +376,19 @@ export default function AuthModal({ isOpen, onClose }) {
 
           {/* ── SUCCESS STATE ── */}
           {mode === 'success' && (
-            <div style={{ textAlign:'center', animation:'successPop 0.4s cubic-bezier(0.16,1,0.3,1)' }}>
-              <div style={{ width:'64px', height:'64px', borderRadius:'50%', background:'linear-gradient(135deg,#22c55e,#16a34a)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 1.5rem', boxShadow:'0 0 30px rgba(34,197,94,0.4)' }}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
+            <div className="auth-success" role="status" aria-live="polite">
+              <div className="auth-success-icon-wrap">
+                <div className="auth-success-icon-ring" />
+                <div className="auth-success-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                </div>
               </div>
-              <h3 style={{ fontSize:'1.4rem', fontWeight:800, color:'#ffffff', marginBottom:'0.5rem' }}>Node Active!</h3>
-              <p style={{ color:'rgba(255,255,255,0.5)', fontSize:'0.9rem' }}>Redirecting to your workspace...</p>
+              <span className="auth-success-eyebrow">Connection established</span>
+              <h3>{isSignUp ? 'Your workspace is ready' : 'Welcome back'}</h3>
+              <p>{isSignUp ? 'Your WorkPilot workspace is being prepared.' : 'Opening your WorkPilot workspace...'}</p>
+              <div className="auth-success-progress" aria-hidden="true"><span /></div>
             </div>
           )}
 
@@ -634,6 +642,9 @@ export default function AuthModal({ isOpen, onClose }) {
         @keyframes modalFadeIn { from { opacity:0 } to { opacity:1 } }
         @keyframes cardSlideUp { from { opacity:0; transform:translateY(20px) scale(0.97) } to { opacity:1; transform:translateY(0) scale(1) } }
         @keyframes successPop { from { opacity:0; transform:scale(0.85) } to { opacity:1; transform:scale(1) } }
+        @keyframes successRing { 0% { transform:scale(0.72); opacity:0 } 55% { opacity:0.7 } 100% { transform:scale(1.35); opacity:0 } }
+        @keyframes successIcon { from { opacity:0; transform:scale(0.55) rotate(-10deg) } to { opacity:1; transform:scale(1) rotate(0) } }
+        @keyframes successProgress { from { transform:scaleX(0) } to { transform:scaleX(1) } }
         @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
         @keyframes spin { to { transform: rotate(360deg) } }
         @keyframes authParticleFloat {
@@ -661,6 +672,16 @@ export default function AuthModal({ isOpen, onClose }) {
         .glow-btn:hover:not(:disabled) { box-shadow: 0 6px 24px rgba(0,210,255,0.22) !important; transform: translateY(-1px); }
         .glow-btn:active:not(:disabled) { transform: translateY(0); }
         .auth-shake { animation: shake 0.4s ease; }
+        .auth-success { text-align:center; animation:successPop 0.55s cubic-bezier(0.16,1,0.3,1); }
+        .auth-success-icon-wrap { width:76px; height:76px; position:relative; margin:0 auto 1.25rem; display:grid; place-items:center; }
+        .auth-success-icon-ring { position:absolute; inset:0; border:1px solid rgba(34,197,94,0.45); border-radius:50%; animation:successRing 1.8s ease-out infinite; }
+        .auth-success-icon { width:64px; height:64px; border-radius:50%; display:grid; place-items:center; background:linear-gradient(145deg,#34d399,#16a34a); box-shadow:0 12px 32px rgba(34,197,94,0.28), inset 0 1px rgba(255,255,255,0.35); animation:successIcon 0.5s 0.1s both cubic-bezier(0.16,1,0.3,1); }
+        .auth-success-eyebrow { display:inline-block; color:#86efac; font-size:0.68rem; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; margin-bottom:0.7rem; }
+        .auth-success h3 { font-size:1.55rem; font-weight:800; line-height:1.2; color:#ffffff; margin:0 0 0.6rem; letter-spacing:-0.02em; }
+        .auth-success p { color:rgba(255,255,255,0.52); font-size:0.9rem; margin:0; }
+        .auth-success-progress { width:150px; height:3px; margin:1.6rem auto 0; overflow:hidden; border-radius:999px; background:rgba(255,255,255,0.08); }
+        .auth-success-progress span { display:block; width:100%; height:100%; transform-origin:left; transform:scaleX(0); border-radius:inherit; background:linear-gradient(90deg,#34d399,#00d2ff); animation:successProgress 1.65s 0.15s linear forwards; }
+        @media (prefers-reduced-motion: reduce) { .auth-success, .auth-success-icon, .auth-success-icon-ring, .auth-success-progress span { animation:none; } .auth-success-progress span { transform:scaleX(1); } }
         @media (max-width: 680px) {
           .auth-modal-card { grid-template-columns: 1fr !important; }
           .auth-modal-card > div:first-child { display: none !important; }

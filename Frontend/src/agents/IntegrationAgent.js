@@ -1,4 +1,4 @@
-import { auth, signOut } from '../firebase';
+import { auth, signOutUser } from '../firebase';
 import { backendLogout } from '../api';
 
 const IntegrationAgent = ({ setState, getState }) => {
@@ -56,17 +56,10 @@ const IntegrationAgent = ({ setState, getState }) => {
 
   const handleLogout = async () => {
     try {
-      await backendLogout();
-      await signOut();
+      await signOutUser();
       setState(prev => ({ ...prev, user: null, isAuthenticated: false }));
     } catch (error) {
       console.error('Logout error:', error);
-      // Still attempt to sign out from Firebase
-      try {
-        await signOut();
-      } catch (firebaseError) {
-        console.error('Firebase logout error:', firebaseError);
-      }
       setState(prev => ({ ...prev, user: null, isAuthenticated: false }));
     }
   };

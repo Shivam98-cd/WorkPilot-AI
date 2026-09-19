@@ -9,7 +9,9 @@
  *   4. If auth fails or times out, the public catalog stays visible (all disconnected).
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { auth } from '../firebase';
 import {
+  clearAuthCache,
   syncAllIntegrations, syncIntegration, getIntegrationsHealth,
   getUnifiedInbox, getUnifiedCalendar, executeWorkflow, getIntegrations,
 } from '../api';
@@ -67,12 +69,23 @@ function mergeWithCatalog(authItems) {
 }
 
 
+const STORAGE_KEY = 'wp_integrations_cache_v2';
+
+function getInitialIntegrations() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return mergeWithCatalog(parsed);
+      }
+    }
+  } catch {}
+  return CATALOG.map(b => ({ ...b, connected: false, status: 'disconnected' }));
+}
+
 export function useIntegrationAgents() {
-  // Start with the static catalog so the grid renders immediately on mount —
-  // no network call, no auth, no blank page.
-  const [integrations, setIntegrations] = useState(
-    CATALOG.map(b => ({ ...b, connected: false, status: 'disconnected' }))
-  );
+  const [integrations, setIntegrations] = useState(getInitialIntegrations);
   const [health, setHealth]             = useState({});
   const [syncingAll, setSyncingAll]     = useState(false);
   const [syncingPlatform, setSyncingPlatform] = useState(null);
@@ -80,52 +93,71 @@ export function useIntegrationAgents() {
   const [loading, setLoading]           = useState(false);  // false = catalog already shown
   const [error, setError]               = useState(null);
 
-  // Track whether we're loading the *authenticated* overlay (shown as subtle indicator)
-  const [authLoading, setAuthLoading]   = useState(true);
+  // If we already have cached connections, authLoading starts false so UI shows real state immediately
+  const hasCachedConnections = Boolean(integrations && integrations.some(i => i.connected));
+  const [authLoading, setAuthLoading]   = useState(!hasCachedConnections);
 
-  const mountedRef = useRef(true);
-  const [updateCounter, setUpdateCounter] = useState(0); // Force re-render counter
-
-  useEffect(() => { return () => { mountedRef.current = false; }; }, []);
+  // ─── Optimistic update helper (called immediately on OAuth callback) ────────
+  const markConnectedOptimistic = useCallback((platform, accountLabel = null) => {
+    console.log('⚡ useIntegrationAgents: markConnectedOptimistic:', platform);
+    setIntegrations(prev => {
+      const updated = prev.map(item => {
+        if (item.platform === platform) {
+          return {
+            ...item,
+            connected: true,
+            status: 'connected',
+            accountLabel: accountLabel || item.accountLabel || 'Connected',
+          };
+        }
+        return item;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    setAuthLoading(false);
+  }, []);
 
   // ─── Load authenticated integrations list (overlay on top of catalog) ─────────
-  const loadIntegrations = useCallback(async () => {
-    if (!mountedRef.current) return;
-    console.log('🔄 useIntegrationAgents: loadIntegrations called (always fresh data)');
-    setAuthLoading(true);
-    setError(null);
-    try {
-      const res = await getIntegrations(); // Always fetches fresh data
-      console.log('📦 useIntegrationAgents: RAW API RESPONSE:', res);
-      console.log('📦 useIntegrationAgents: API data array:', res?.data);
-      if (!mountedRef.current) return;
-      if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
-        console.log('✅ useIntegrationAgents: About to merge, data length:', res.data.length);
-        const merged = mergeWithCatalog(res.data);
-        console.log('✅ useIntegrationAgents: Merged result (first 5):', merged.slice(0, 5).map(i => ({ 
-          platform: i.platform, 
-          connected: i.connected, 
-          status: i.status,
-          accountLabel: i.accountLabel 
-        })));
-        // Force update with new array reference + counter to trigger re-render
-        setIntegrations([...merged]);
-        setUpdateCounter(prev => prev + 1);
-        console.log('✅ setIntegrations called with', merged.filter(i => i.connected).length, 'connected');
-      } else {
-        console.warn('⚠️ useIntegrationAgents: API returned empty or invalid data:', res);
-      }
-    } catch (e) {
-      console.error('❌ useIntegrationAgents: loadIntegrations error:', e);
-      if (!mountedRef.current) return;
-      if (!e.message?.includes('timed out') && !e.message?.includes('401')) {
-        setError(e.message);
-      }
-    } finally {
-      if (mountedRef.current) {
-        console.log('✅ useIntegrationAgents: setAuthLoading(false)');
+  const inFlightRef = useRef(null);
+  const loadIntegrations = useCallback(async (bust = true) => {
+    if (inFlightRef.current) {
+      return inFlightRef.current;
+    }
+
+    const run = (async () => {
+      console.log('🔄 useIntegrationAgents: loadIntegrations called (always fresh data)');
+      setError(null);
+      try {
+        const res = await getIntegrations(bust);
+        console.log('📦 useIntegrationAgents: RAW API RESPONSE:', res);
+        if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+          const merged = mergeWithCatalog(res.data);
+          setIntegrations(merged);
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+          } catch {}
+          console.log('✅ setIntegrations called with', merged.filter(i => i.connected).length, 'connected');
+        } else {
+          console.warn('⚠️ useIntegrationAgents: API returned empty or invalid data:', res);
+        }
+      } catch (e) {
+        console.error('❌ useIntegrationAgents: loadIntegrations error:', e);
+        if (!e.message?.includes('timed out') && !e.message?.includes('401')) {
+          setError(e.message);
+        }
+      } finally {
         setAuthLoading(false);
       }
+    })();
+
+    inFlightRef.current = run;
+    try {
+      await run;
+    } finally {
+      inFlightRef.current = null;
     }
   }, []);
 
@@ -133,7 +165,7 @@ export function useIntegrationAgents() {
   const refreshHealth = useCallback(async () => {
     try {
       const res = await getIntegrationsHealth();
-      if (res?.data && mountedRef.current) setHealth(res.data);
+      if (res?.data) setHealth(res.data);
     } catch {
       // health is non-critical, silently fail
     }
@@ -146,15 +178,15 @@ export function useIntegrationAgents() {
     setError(null);
     try {
       const res = await syncAllIntegrations();
-      if (res?.data && mountedRef.current) setLastSyncResults(res.data);
-      await loadIntegrations();
+      if (res?.data) setLastSyncResults(res.data);
+      await loadIntegrations(true);
       await refreshHealth();
       return res?.data;
     } catch (e) {
-      if (mountedRef.current) setError(e.message);
+      setError(e.message);
       throw e;
     } finally {
-      if (mountedRef.current) setSyncingAll(false);
+      setSyncingAll(false);
     }
   }, [syncingAll, loadIntegrations, refreshHealth]);
 
@@ -165,14 +197,14 @@ export function useIntegrationAgents() {
     setError(null);
     try {
       const res = await syncIntegration(platform);
-      await loadIntegrations();
+      await loadIntegrations(true);
       await refreshHealth();
       return res?.data;
     } catch (e) {
-      if (mountedRef.current) setError(e.message);
+      setError(e.message);
       throw e;
     } finally {
-      if (mountedRef.current) setSyncingPlatform(null);
+      setSyncingPlatform(null);
     }
   }, [syncingPlatform, loadIntegrations, refreshHealth]);
 
@@ -188,7 +220,7 @@ export function useIntegrationAgents() {
         return res?.data;
       }
     } catch (e) {
-      if (mountedRef.current) setError(e.message);
+      setError(e.message);
       throw e;
     }
   }, []);
@@ -199,7 +231,7 @@ export function useIntegrationAgents() {
       const res = await executeWorkflow(workflow, params);
       return res?.data;
     } catch (e) {
-      if (mountedRef.current) setError(e.message);
+      setError(e.message);
       throw e;
     }
   }, []);
@@ -215,14 +247,53 @@ export function useIntegrationAgents() {
 
   // ─── On mount: catalog is already shown; load auth data in background ─────────
   useEffect(() => {
-    // Small delay so the page renders the static catalog first, then we try auth
-    // Always fetches fresh data (no caching in frontend)
-    const t = setTimeout(() => {
-      loadIntegrations().then(() => {
-        setTimeout(refreshHealth, 500);
-      });
-    }, 100);
-    return () => clearTimeout(t);
+    // Safety guard: authLoading should NEVER remain true indefinitely (max 2.5s)
+    const safetyTimer = setTimeout(() => {
+      setAuthLoading(false);
+    }, 2500);
+
+    // Initial fetch
+    loadIntegrations(true).then(() => {
+      setTimeout(refreshHealth, 1500);
+    });
+
+    // Also listen to Firebase auth state changes so when user logs in or session restores, integrations load immediately
+    const unsub = auth.onAuthStateChanged((user) => {
+      clearAuthCache();
+      if (user) {
+        console.log('🔑 useIntegrationAgents: Firebase user detected:', user.email);
+        loadIntegrations(true).then(() => {
+          setTimeout(refreshHealth, 1500);
+        });
+      }
+    });
+
+    // Listen to custom integration events (e.g. from OAuth or modal)
+    const handleConnectedEvent = (e) => {
+      const platform = e?.detail?.platform;
+      if (platform) markConnectedOptimistic(platform);
+      clearAuthCache();
+      loadIntegrations(true);
+    };
+    window.addEventListener('wp-integration-connected', handleConnectedEvent);
+
+    // Listen to popup OAuth completion postMessage
+    const handlePopupMessage = (e) => {
+      if (e?.data?.type === 'oauth_complete' && e.data?.platform) {
+        console.log('⚡ useIntegrationAgents: Received popup oauth_complete:', e.data);
+        markConnectedOptimistic(e.data.platform, e.data.accountLabel);
+        clearAuthCache();
+        loadIntegrations(true);
+      }
+    };
+    window.addEventListener('message', handlePopupMessage);
+
+    return () => {
+      clearTimeout(safetyTimer);
+      unsub();
+      window.removeEventListener('wp-integration-connected', handleConnectedEvent);
+      window.removeEventListener('message', handlePopupMessage);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -233,7 +304,7 @@ export function useIntegrationAgents() {
     syncingPlatform,
     lastSyncResults,
     loading,       // always false now — catalog shown immediately
-    authLoading,   // true while fetching auth-overlay
+    authLoading,   // true only while initial load runs without cache
     error,
     connectedCount: integrations.filter(i => i.connected).length,
     totalCount: integrations.length,
@@ -244,6 +315,7 @@ export function useIntegrationAgents() {
     runWorkflow,
     getHealthForPlatform,
     isConnected,
+    markConnectedOptimistic,
     reload: loadIntegrations,
   };
 }

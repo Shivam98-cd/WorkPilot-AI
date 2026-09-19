@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { auth, signOut } from '../firebase';
+import { signOutUser } from '../firebase';
 import Logo from './Logo';
 import LanguageSelector from './LanguageSelector';
 
@@ -70,10 +70,10 @@ export default function Navbar({ user, onAuthClick }) {
                 borderRight: '1px solid rgba(255,255,255,0.1)',
                 paddingRight: '1rem'
               }}>
-                [NODE: {user.displayName || user.email.split('@')[0]}]
+                [NODE: {user?.displayName || (user?.email ? user.email.split('@')[0] : 'User')}]
               </span>
               <button 
-                onClick={() => signOut(auth)} 
+                onClick={() => signOutUser()} 
                 className="btn btn-secondary" 
                 style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
               >
@@ -158,9 +158,9 @@ export default function Navbar({ user, onAuthClick }) {
           {user ? (
             <>
               <span style={{ color: '#ffffff', fontSize: '1rem', textAlign: 'center', fontFamily: 'var(--font-code)' }}>
-                [NODE: {user.displayName || user.email}]
+                [NODE: {user?.displayName || user?.email || 'User'}]
               </span>
-              <button onClick={() => { signOut(auth); setIsMobileMenuOpen(false); }} className="btn btn-secondary" style={{ width: '100%' }}>Sign Out</button>
+              <button onClick={() => { signOutUser(); setIsMobileMenuOpen(false); }} className="btn btn-secondary" style={{ width: '100%' }}>Sign Out</button>
             </>
           ) : (
             <>

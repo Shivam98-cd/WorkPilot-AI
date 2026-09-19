@@ -128,3 +128,12 @@ async def test_login(mock_firebase_auth, mock_user_repo, mock_session_repo):
     mock_firebase_auth.get_user_by_email.assert_awaited_once_with("test@example.com")
     mock_user_repo.get_by_uid.assert_awaited_once_with(fake_fb_user.uid)
     mock_session_repo.create.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@patch("services.auth_service.session_repository")
+async def test_logout(mock_session_repo):
+    """Test user logout calls session repository."""
+    mock_session_repo.revoke_all_user_sessions = AsyncMock(return_value=True)
+    await auth_service.logout("user-123")
+    mock_session_repo.revoke_all_user_sessions.assert_awaited_once_with("user-123")

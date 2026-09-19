@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { auth } from './firebase';
+import { clearAuthCache, primeAuthToken } from './api';
 import './i18n';
 import { ToastProvider } from './components/Toast';
 import AuthModal from './components/AuthModal';
@@ -24,6 +25,7 @@ import CTA from './components/CTA';
 import Footer from './components/Footer';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const OAUTH_LABELS = {
   gmail: 'Gmail', google_calendar: 'Google Calendar', google_drive: 'Google Drive',
@@ -42,14 +44,38 @@ function OAuthRedirect() {
   return <Navigate to="/" replace state={{ oauthResult: { platform, status, message } }} />;
 }
 
-/** Shell component — just provides Router + ToastProvider */
+/** Shell component — just provides Router + ToastProvider + ErrorBoundary */
 export default function App() {
   return (
-    <Router>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
-    </Router>
+    <ErrorBoundary>
+      <Router>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </Router>
+    </ErrorBoundary>
+  );
+}
+
+/** Standalone HomePage component — prevents unmounting/remounting child canvases and components when modal opens */
+function HomePage({ user, onAuthClick }) {
+  return (
+    <>
+      <GlobalParticles />
+      <Navbar user={user} onAuthClick={onAuthClick} />
+      <Hero user={user} onAuthClick={onAuthClick} />
+      <FeaturesGrid />
+      <HowItWorks />
+      <AutomationWorkspace />
+      <LiveDemo />
+      <UniqueFeatures />
+      <Integrations />
+      <Stats />
+      <RoiCalculator />
+      <Comparison />
+      <CTA user={user} onAuthClick={onAuthClick} />
+      <Footer />
+    </>
   );
 }
 
@@ -183,6 +209,9 @@ function AppContent() {
       errorMessage: r.message ? decodeURIComponent(r.message) : null,
     });
     setDashboardNav('integrations');
+    if (r.status === 'connected') {
+      window.dispatchEvent(new CustomEvent('wp-integration-connected', { detail: { platform: r.platform } }));
+    }
     // Also fire toast
     window.dispatchEvent(new CustomEvent('wp-oauth-result', { detail: { label, status: r.status, message: r.message } }));
   }, [location.state]);
@@ -190,9 +219,13 @@ function AppContent() {
   // ── Firebase Auth ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (currentUser) => {
+      clearAuthCache();
       setUser(currentUser);
       setAuthLoading(false); // Firebase has resolved — stop showing loader
       if (currentUser?.emailVerified) {
+        // Prime the auth token immediately so the first API call after login
+        // has zero Firebase overhead (token is already resolved in background).
+        primeAuthToken();
         if (!localStorage.getItem('wp_tokens')) {
           try {
             const idToken = await currentUser.getIdToken();
@@ -204,6 +237,17 @@ function AppContent() {
       }
     });
     return () => unsub();
+  }, []);
+
+  // ── Immediate sign-out event listener ──────────────────────────────────────────
+  useEffect(() => {
+    const handleImmediateSignOut = () => {
+      setUser(null);
+      setDashboardNav(null);
+      setView('dashboard');
+    };
+    window.addEventListener('wp-user-signed-out', handleImmediateSignOut);
+    return () => window.removeEventListener('wp-user-signed-out', handleImmediateSignOut);
   }, []);
 
   // ── Scroll reveal ──────────────────────────────────────────────────────────────
@@ -223,24 +267,6 @@ function AppContent() {
     return () => { io.disconnect(); mo.disconnect(); };
   }, []);
 
-  const HomePage = () => (
-    <>
-      <GlobalParticles />
-      <Navbar user={user} onAuthClick={() => setShowAuthModal(true)} />
-      <Hero user={user} onAuthClick={() => setShowAuthModal(true)} />
-      <FeaturesGrid />
-      <HowItWorks />
-      <AutomationWorkspace />
-      <LiveDemo />
-      <UniqueFeatures />
-      <Integrations />
-      <Stats />
-      <RoiCalculator />
-      <Comparison />
-      <CTA user={user} onAuthClick={() => setShowAuthModal(true)} />
-      <Footer />
-    </>
-  );
 
   return (
     <>
@@ -300,7 +326,7 @@ function AppContent() {
               </div>
             </>
           ) : (
-            <HomePage />
+            <HomePage user={user} onAuthClick={() => setShowAuthModal(true)} />
           )
         } />
       </Routes>
@@ -312,25 +338,21 @@ function AppContent() {
         <ConnectionSheet
           result={connectionSheet}
           onClose={() => {
+            const p = connectionSheet.platform;
             setConnectionSheet(null);
-            // Set flag so Integrations page knows to reload
-            if (connectionSheet.status === 'connected') {
-              console.log('✅ App.jsx: Integration connected, setting localStorage flag and firing event');
+            if (connectionSheet.status === 'connected' && p) {
               localStorage.setItem('wp_integration_just_connected', Date.now().toString());
+              window.dispatchEvent(new CustomEvent('wp-integration-connected', { detail: { platform: p } }));
             }
-            // Trigger integrations reload by firing a custom event
-            window.dispatchEvent(new CustomEvent('wp-integration-connected'));
           }}
           onNavigate={(nav) => { 
+            const p = connectionSheet.platform;
             setConnectionSheet(null); 
             setDashboardNav(nav);
-            // Set flag so Integrations page knows to reload
-            if (connectionSheet.status === 'connected') {
-              console.log('✅ App.jsx: Integration connected (via navigate), setting localStorage flag and firing event');
+            if (connectionSheet.status === 'connected' && p) {
               localStorage.setItem('wp_integration_just_connected', Date.now().toString());
+              window.dispatchEvent(new CustomEvent('wp-integration-connected', { detail: { platform: p } }));
             }
-            // Trigger integrations reload
-            window.dispatchEvent(new CustomEvent('wp-integration-connected'));
           }}
         />
       )}

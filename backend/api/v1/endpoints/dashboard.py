@@ -50,10 +50,10 @@ _CACHE: Dict[str, Dict] = {}
 _CACHE_TTL = 300  # seconds
 
 
-async def _safe(coro: Awaitable[T], default: T) -> T:
-    """Await a coroutine and return *default* on any exception."""
+async def _safe(coro: Awaitable[T], default: T, timeout: float = 4.0) -> T:
+    """Await a coroutine with a timeout and return *default* on any exception or timeout."""
     try:
-        return await coro
+        return await asyncio.wait_for(coro, timeout=timeout)
     except Exception:
         return default
 

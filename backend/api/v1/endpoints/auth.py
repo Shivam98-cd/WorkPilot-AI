@@ -1,7 +1,8 @@
 """
 Authentication API Endpoints
 """
-from fastapi import APIRouter, Request, Depends
+from typing import Optional
+from fastapi import APIRouter, Request, Depends, BackgroundTasks
 from schemas.auth import (
     LoginRequest,
     SignupRequest,
@@ -14,7 +15,7 @@ from schemas.user import AuthResponse
 from schemas.responses import ApiResponse
 from services.auth_service import auth_service
 from services.audit_service import audit_service
-from middleware.auth import get_current_user
+from middleware.auth import get_current_user, get_optional_user
 from firebase.auth import firebase_auth_service
 from firebase.admin_config import get_auth_client
 
@@ -145,16 +146,33 @@ async def refresh_token(request: RefreshTokenRequest):
 
 
 @router.post("/logout")
-async def logout(req: Request, current_user: dict = Depends(get_current_user)):
-    """Logout user"""
-    uid = current_user.get('uid')
-    await audit_service.log_action(
-        uid, "LOGOUT", "auth", uid,
-        req.client.host,
-        req.headers.get('User-Agent', 'Unknown'),
-    )
-    await auth_service.logout(uid)
-    
+async def logout(
+    req: Request,
+    background_tasks: BackgroundTasks,
+    current_user: Optional[dict] = Depends(get_optional_user),
+):
+    """Logout user and revoke sessions asynchronously without blocking the client."""
+    if current_user:
+        uid = current_user.get('uid')
+        host = req.client.host if req.client else 'Unknown'
+        user_agent = req.headers.get('User-Agent', 'Unknown')
+
+        async def _do_logout_cleanup():
+            try:
+                await audit_service.log_action(
+                    uid, "LOGOUT", "auth", uid,
+                    host,
+                    user_agent,
+                )
+            except Exception:
+                pass
+            try:
+                await auth_service.logout(uid)
+            except Exception:
+                pass
+
+        background_tasks.add_task(_do_logout_cleanup)
+
     return {
         "success": True,
         "message": "Logout successful",

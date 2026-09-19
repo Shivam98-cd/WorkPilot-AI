@@ -188,6 +188,16 @@ def get_forced_tool(message: str) -> str | None:
     """
     lower = message.lower()
 
+    # ── Multi-Hop Autonomous Workflows ─────────────────────────────────────────
+    if any(k in lower for k in ["prepare me for", "prepare for meeting", "prepare for my meeting", "meeting prep", "meeting briefing", "brief me for"]):
+        return "prepare_meeting_briefing"
+
+    if any(k in lower for k in ["triage my inbox", "triage emails", "triage inbox", "triage my unread", "inbox triage"]):
+        return "inbox_triage_workflow"
+
+    if any(k in lower for k in ["cross search", "search across", "search everything about", "find everything about", "360 search"]):
+        return "workspace_cross_search"
+
     # Google Meet + email → create_meet_and_email
     # OR creating a meeting WITH attendees (email addresses present)
     has_attendees = "@" in lower and any(k in lower for k in ["with", "attendee", "invite", "send to"])
@@ -227,7 +237,13 @@ def get_forced_tool(message: str) -> str | None:
         return "create_calendar_event"
 
     # GitHub
-    if any(k in lower for k in ["pull request", "list prs", "github issue", "list issues", "get commits"]):
+    if any(k in lower for k in [
+        "pull request", "list prs", "github issue", "list issues", "get commits",
+        "create repo", "create repository", "new repo", "github repo", "make a repo",
+        "create a repo", "create a repository", "create private repo", "create public repo",
+        "list repositories", "list repos", "my repositories", "github repositories",
+        "list my repositories", "show repositories", "show my repos", "my repos"
+    ]) or ("github" in lower and any(r in lower for r in ["repo", "repos", "repository", "repositories"])):
         return "github_tool"
 
     # Jira

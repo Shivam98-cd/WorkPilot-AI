@@ -1,6 +1,6 @@
 """
 WorkPilot AI - FastAPI Backend
-Enterprise-grade authentication system
+Enterprise-grade authentication and workplace platform
 """
 # ── SSL fix (Windows) ──────────────────────────────────────────────────────────
 # Python on Windows often lacks the system CA bundle that Google APIs require.
@@ -21,6 +21,7 @@ except ImportError:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -94,6 +95,9 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# GZip Middleware — compresses responses >500 bytes (saves 60-80% on JSON payloads)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Trusted Host Middleware
 if not settings.DEBUG:

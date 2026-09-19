@@ -9,7 +9,7 @@ import uuid
 import logging
 import re
 from datetime import datetime, timezone
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Any
 from collections import defaultdict, deque
 
 try:
@@ -55,6 +55,9 @@ THINK_MSGS = {
     "get_news_briefing":      "📰 Curating news briefing...",
     "get_system_health":      "💊 Running health diagnostics...",
     "explain_code":           "💻 Analyzing your code...",
+    "prepare_meeting_briefing":"🎯 Assembling cross-platform briefing (Calendar + Gmail + Notion)...",
+    "inbox_triage_workflow":  "📬 Running automated inbox triage & conflict resolution...",
+    "workspace_cross_search": "🌐 Running 360° cross-search across connected workspace...",
 }
 
 
@@ -79,20 +82,185 @@ class SuperBrainOrchestrator:
         self.critic  = CriticAgent()
         # Per-user conversation history:  uid:conv_id → deque of {role, content}
         self._convs: dict = defaultdict(lambda: deque(maxlen=20))
-        self._model  = "openai/gpt-oss-120b"   # confirmed on this Groq account
-        self._model_fallbacks = ["openai/gpt-oss-20b", "groq/compound", "groq/compound-mini"]
+        self._model  = "qwen/qwen3.8-27b"   # fast, reliable, high token limits on this Groq account
+        self._tool_models = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+        self._synth_models = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+
+    async def _stream_tokens_with_fallback(
+        self,
+        groq_client: Groq,
+        messages: list,
+        models: list[str],
+        max_tokens: int = 2048,
+        temperature: float = 0.4,
+    ) -> AsyncGenerator[str, None]:
+        """
+        Stream tokens from Groq chat completion with automatic model fallback on rate limits or API errors.
+        Each model call is bounded by a 20-second timeout to prevent silent hangs on rate limits.
+        """
+        last_exc = None
+        for model in models:
+            streamed_any = False
+            try:
+                # 20s timeout per model to avoid silent Groq rate-limit hangs
+                final_resp = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        lambda m=model: groq_client.chat.completions.create(
+                            model=m,
+                            messages=messages,
+                            max_tokens=max_tokens,
+                            temperature=temperature,
+                            stream=True,
+                        )
+                    ),
+                    timeout=20.0,
+                )
+                for chunk in final_resp:
+                    delta = chunk.choices[0].delta
+                    if delta and delta.content:
+                        streamed_any = True
+                        yield delta.content
+                return
+            except asyncio.TimeoutError:
+                last_exc = asyncio.TimeoutError(f"Model '{model}' synthesis timed out after 20s")
+                logger.warning(f"SuperBrain synthesis timeout on model '{model}'. Trying next fallback...")
+                if streamed_any:
+                    return
+                continue
+            except Exception as exc:
+                last_exc = exc
+                logger.warning(f"SuperBrain synthesis stream error on model '{model}': {exc}. Trying fallback model...")
+                if streamed_any:
+                    return
+                continue
+
+        raise last_exc or RuntimeError("All models in synthesis fallback list failed.")
+
+    async def _call_llm_with_fallback(
+        self,
+        groq_client: Groq,
+        messages: list,
+        models: list[str],
+        tools: list | None = None,
+        tool_choice: Any = None,
+        max_tokens: int = 1500,
+        temperature: float = 0.25,
+        stream: bool = False,
+    ):
+        """
+        Execute Groq chat completion with automatic model fallback on rate limits or API errors.
+        Each model call is bounded by a 20-second timeout to prevent silent hangs on rate limits.
+        """
+        last_exc = None
+        for model in models:
+            kw = {"max_tokens": max_tokens, "temperature": temperature, "stream": stream}
+            if tools is not None:
+                kw["tools"] = tools
+            if tool_choice is not None:
+                kw["tool_choice"] = tool_choice
+
+            try:
+                # 20s timeout per model to avoid silent Groq rate-limit hangs
+                resp = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        lambda m=model, kw_args=kw: groq_client.chat.completions.create(
+                            model=m,
+                            messages=messages,
+                            **kw_args,
+                        )
+                    ),
+                    timeout=20.0,
+                )
+                return resp, model
+            except asyncio.TimeoutError:
+                last_exc = asyncio.TimeoutError(f"Model '{model}' LLM call timed out after 20s")
+                logger.warning(f"SuperBrain LLM timeout on model '{model}'. Trying next fallback...")
+                # If tool_choice was forced, retry same model with auto (quick, no new timeout slot wasted)
+                if tools is not None and tool_choice is not None and tool_choice != "auto":
+                    logger.info(f"Skipping auto-retry for '{model}' (timed out) - moving to next model")
+                continue
+            except Exception as exc:
+                last_exc = exc
+                logger.warning(f"SuperBrain LLM call failed on model '{model}': {exc}. Checking fallback...")
+                # If tool_choice was forced on this model, retry with auto first
+                if tools is not None and tool_choice is not None and tool_choice != "auto":
+                    try:
+                        logger.info(f"Retrying model '{model}' with tool_choice='auto'...")
+                        auto_kw = dict(kw)
+                        auto_kw["tool_choice"] = "auto"
+                        resp = await asyncio.wait_for(
+                            asyncio.to_thread(
+                                lambda m=model, kw_args=auto_kw: groq_client.chat.completions.create(
+                                    model=m,
+                                    messages=messages,
+                                    **kw_args,
+                                )
+                            ),
+                            timeout=20.0,
+                        )
+                        return resp, model
+                    except Exception as exc2:
+                        last_exc = exc2
+                        logger.warning(f"Retry with tool_choice='auto' on model '{model}' also failed: {exc2}")
+                continue
+
+        raise last_exc or RuntimeError("All models in fallback list failed.")
 
 
     # ── System Prompt ──────────────────────────────────────────────────────────
-    def _build_system_prompt(self, memory_ctx: str, now: str, intent: dict) -> str:
+    def _build_system_prompt(self, memory_ctx: str, now: str, intent: dict, mode: str = "suggest") -> str:
         priority_block = ""
         if intent.get("priority") == "urgent":
             priority_block = "\n⚠️ URGENT REQUEST — respond with maximum priority and urgency.\n"
+
+        mode_clean = (mode or "suggest").lower()
+        if mode_clean == "autopilot":
+            mode_directive = """
+━━━ AUTONOMY MODE: AUTO-PILOT (FULL AUTONOMY ENABLED) ━━━
+• You are operating in AUTO-PILOT mode: The user has authorized you to take direct actions.
+• When the user requests an action (scheduling meetings, sending emails, updating tasks, setting reminders, running automations):
+  - Do NOT pause to ask "Would you like me to schedule this?" or render approval confirmation cards.
+  - Call the relevant execution tool immediately (e.g., create_calendar_event, compose_email, task_management).
+  - Execute the action and report the confirmed outcome with all details directly.
+  - Only ask clarifying questions if mandatory parameters (such as an email address) are completely missing.
+"""
+        elif mode_clean == "ask":
+            mode_directive = """
+━━━ AUTONOMY MODE: ASK FIRST (STRICT HUMAN-IN-THE-LOOP SAFEGUARDS) ━━━
+• You are operating in ASK FIRST mode: You have ZERO autonomy to perform write/mutation actions without human approval!
+• You may freely call READ-ONLY tools (checking emails, reading calendar events, search, analytics).
+• You are STRICTLY FORBIDDEN from executing write tools (compose_email, create_calendar_event, create_meet_and_email, schedule_automation, task modifications) autonomously.
+• When the user requests an action, you MUST emit an interactive Safeguard Approval Card:
+```artifact:safeguard
+{{
+  "action": "<action_name>",
+  "tool": "<tool_name>",
+  "title": "Approve <Descriptive Action>",
+  "risk_level": "medium",
+  "description": "<Clear explanation of the action to be performed>",
+  "args": {{ ... }}
+}}
+```
+• This allows the user to review the exact parameters and click [Approve & Execute] or [Decline].
+"""
+        else:  # "suggest"
+            mode_directive = """
+━━━ AUTONOMY MODE: SUGGEST (ASSISTED DRAFTING & REVIEW) ━━━
+• You are operating in SUGGEST mode: AI suggests, user approves before acting.
+• For read tools: fetch live workspace data freely to answer questions.
+• For action requests (scheduling meetings, sending emails, creating tasks):
+  - Propose drafts using interactive Generative UI cards:
+    * For meetings/calls: render an ```artifact:meeting ... ``` card with editable details and a [Confirm & Schedule] button.
+    * For open slots: render an ```artifact:slot_picker ... ``` card.
+    * For emails: present a clear draft preview for the user to review.
+  - Do NOT silently execute write tools in the background without user review.
+"""
 
         return f"""You are WorkPilot SuperBrain — the most advanced AI Chief of Staff ever built. You combine the analytical power of a top management consultant, the technical depth of a senior engineer, and the organizational skill of an elite executive assistant.
 
 Current date/time: {now}
 {priority_block}
+{mode_directive}
 USER CONTEXT (from memory):
 {memory_ctx or "No prior context — this is a new conversation."}
 
@@ -108,13 +276,14 @@ USER CONTEXT (from memory):
 1. NEVER invent data. Call the relevant tool FIRST. Only respond based on tool output.
 2. Cite every data source in brackets: [Gmail] [Calendar] [GitHub] [Jira] [Notion] [Analytics]
 3. If a tool returns empty data: state exactly what was checked and WHY it might be empty. Offer to diagnose.
-4. If a tool fails: immediately call diagnose_issue to find root cause, then tell user the exact fix steps.
+4. If an external integration fails with a technical/API error: call diagnose_issue to find root cause. If a tool requests user clarification or indicates a placeholder (e.g. asking which repository to use), directly explain this to the user and prompt for the required input without calling diagnose_issue.
 5. Be DIRECT. Never start with "Certainly!", "Of course!", "Great question!", or any filler phrase.
 6. Use rich markdown: **bold** names, • bullet lists, ```code blocks```, > quotes for highlights.
 7. Always end your response with a concrete **Next Action** you can take on the user's behalf.
 8. When the user seems stressed or the request is urgent: acknowledge the pressure first, then solve.
 9. Reference past context naturally: "As you mentioned earlier..." or "Following up on the email to..."
 10. When you detect anomalies in data (e.g., 3 urgent emails with no reply, team member 2 days late), proactively flag them.
+11. CONVERSATIONAL CONTINUITY & CONTEXT RESOLUTION: Always maintain continuity with the ongoing chat. When the user uses relative references like "it", "that repo", "the repository which we've created", "the issue we just opened", or "that meeting", immediately resolve the target repository, issue number, or parameters from the preceding conversation history turns instead of asking the user to re-enter them!
 
 ━━━ INTERACTIVE Q&A FOR MEETINGS ━━━
 **CRITICAL: When user wants to create a meeting, ask clarifying questions BEFORE calling tools:**
@@ -147,12 +316,88 @@ I'll help you create a meeting! Let me confirm a few details:
 
 **NEVER assume platform or attendees - ALWAYS ask if not explicitly stated.**
 
+━━━ GENERATIVE UI & IN-CHAT INTERACTIVE ARTIFACTS ━━━
+You can render rich interactive mini-apps inside the chat by including special artifact code blocks in your response:
+
+1. **Interactive Meeting Invitation Card:**
+When the user wants to draft, schedule, or invite to a meeting (or when you propose a meeting with known/partial details), include an interactive meeting card:
+```artifact:meeting
+{{
+  "title": "Product Sync with Sarah",
+  "date": "2026-09-15",
+  "time": "3:00 PM",
+  "duration_minutes": 45,
+  "attendees": ["sarah@company.com"],
+  "platform": "Google Meet",
+  "description": "Weekly progress sync"
+}}
+```
+The user can edit details inline or click [Confirm & Schedule] directly in the UI!
+
+2. **Visual Calendar Slot Picker:**
+When proposing or finding meeting availability:
+```artifact:slot_picker
+{{
+  "title": "Select a Free Slot",
+  "duration_minutes": 30,
+  "slots": [
+    {{"date": "Tomorrow", "time": "10:00 AM", "available": true}},
+    {{"date": "Tomorrow", "time": "02:30 PM", "available": true}},
+    {{"date": "Friday", "time": "11:00 AM", "available": true}}
+  ]
+}}
+```
+
+3. **Safeguard Approval Card (Human-in-the-Loop):**
+When about to perform a high-impact action:
+```artifact:safeguard
+{{
+  "action": "bulk_email_campaign",
+  "tool": "compose_email",
+  "title": "Approve Bulk Email Dispatch",
+  "risk_level": "medium",
+  "description": "Send meeting preparation notes to stakeholders",
+  "args": {{}}
+}}
+```
+
+4. **Interactive Analytics Chart Card:**
+When summarizing productivity, focus hours, email volume, or team progress:
+```artifact:analytics
+{{
+  "title": "Productivity & Focus Trends",
+  "labels": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  "values": [4.2, 5.8, 6.1, 6.5, 7.2, 5.9, 6.5],
+  "unit": "hours",
+  "highlight": "Peak performance on Friday (7.2 hrs)"
+}}
+```
+
+5. **Interactive Choice & Repository Selector Card:**
+When the user needs to select between options (such as picking a repository, channel, platform, template, or category):
+```artifact:options
+{{
+  "title": "Select Repository for New Issue",
+  "description": "Choose which repository to create the issue in:",
+  "options": [
+    {{"label": "Shivam98-cd/WorkPilot-AI", "value": "Shivam98-cd/WorkPilot-AI", "badge": "Core"}},
+    {{"label": "Shivam98-cd/workpilot-tool-test-1789705467", "value": "Shivam98-cd/workpilot-tool-test-1789705467", "badge": "Test Repo"}}
+  ],
+  "submit_label": "Create Issue in Selected Repo"
+}}
+```
+
+━━━ CRITICAL MARKDOWN & GENERATIVE UI RULES ━━━
+• NEVER write XML or HTML tags like `<artifact:slot_picker>` or `<artifact:...>`. NEVER invent custom JSX/HTML tags! ALWAYS use triple-backtick markdown code blocks: ```artifact:options with valid JSON.
+• NEVER repeat choices across multiple formats in the same response (e.g., DO NOT output a markdown table AND a numbered list AND a card repeating the same repositories). Use ONE clean presentation: either the interactive card, or a clean single-source markdown table.
+• Keep text concise and actionable: state what is needed in 1-2 crisp sentences, present the interactive card or table, and state the exact next action.
+
 ━━━ RESPONSE STYLE ━━━
-• Concise but complete — no padding, no fluff
+• Concise but complete — no padding, no fluff, no repetitive lists
 • Data-driven — ground every claim in tool results with citations
-• Action-oriented — always move the conversation toward a resolution
+• Action-oriented — always move the conversation toward immediate resolution
 • Empathetic when needed — recognize stress, workload, or urgency cues
-• Professional but natural — like a brilliant colleague, not a formal report
+• Professional but natural — like a brilliant Chief of Staff, not a bureaucratic template
 """
 
     # ── Tool Executor ──────────────────────────────────────────────────────────
@@ -341,7 +586,8 @@ I'll help you create a meeting! Let me confirm a few details:
             action   = args.get("action", "list")
             try:
                 from services.integration_service import integration_service
-                data = await integration_service.get_platform_data(uid, platform, action)
+                clean_args = {k: v for k, v in args.items() if k not in ("action", "platform")}
+                data = await integration_service.get_platform_data(uid, platform, action=action, **clean_args)
                 return {"platform": platform, "action": action, "data": data, "source": platform}
             except Exception as e:
                 return {
@@ -352,6 +598,145 @@ I'll help you create a meeting! Let me confirm a few details:
                     "source":   "mock",
                     "error":    str(e),
                 }
+
+        # ── Autonomous Cross-Platform Multi-Hop Workflows ──────────────────────
+        if name == "prepare_meeting_briefing":
+            meeting_query = args.get("meeting_query", "")
+            attendee_email = args.get("attendee_email", "")
+            days_ahead = args.get("days_ahead", 2)
+            
+            import importlib
+            mod = importlib.import_module("api.v1.endpoints.ai_chat")
+            cal_data = await mod._execute_tool("get_calendar_events", {"days_ahead": days_ahead}, uid)
+            events = cal_data.get("events", []) if isinstance(cal_data, dict) else []
+            
+            target_event = None
+            if meeting_query and events:
+                for ev in events:
+                    if meeting_query.lower() in ev.get("title", "").lower() or any(meeting_query.lower() in str(a).lower() for a in ev.get("attendees", [])):
+                        target_event = ev
+                        break
+            if not target_event and events:
+                target_event = events[0]
+            
+            email_data = await mod._execute_tool("get_emails", {"limit": 10, "filter": "all"}, uid)
+            all_emails = email_data.get("emails", []) if isinstance(email_data, dict) else []
+            
+            relevant_emails = []
+            attendees = target_event.get("attendees", []) if target_event else []
+            if attendee_email and attendee_email not in attendees:
+                attendees.append(attendee_email)
+            
+            for em in all_emails:
+                sender = em.get("sender", "") or em.get("from", "")
+                subj = em.get("subject", "")
+                if any(att.lower() in sender.lower() for att in attendees if "@" in att) or (target_event and target_event.get("title", "").lower() in subj.lower()):
+                    relevant_emails.append(em)
+            
+            if not relevant_emails and all_emails:
+                relevant_emails = all_emails[:3]
+                
+            notion_notes = []
+            try:
+                from services.integration_service import integration_service
+                n_res = await integration_service.get_platform_data(uid, "notion", "search")
+                if isinstance(n_res, list):
+                    notion_notes = n_res[:3]
+            except Exception:
+                pass
+
+            return {
+                "workflow": "prepare_meeting_briefing",
+                "meeting": target_event or {"title": meeting_query or "Upcoming Meeting", "time": "Today", "status": "Confirmed"},
+                "attendees": attendees,
+                "related_emails": relevant_emails,
+                "notion_context": notion_notes,
+                "summary": f"Cross-platform briefing prepared: Calendar event matched with {len(relevant_emails)} email thread(s) and {len(notion_notes)} workspace doc(s)."
+            }
+
+        if name == "inbox_triage_workflow":
+            urgency_filter = args.get("urgency_filter", "urgent")
+            draft_replies = args.get("draft_replies", True)
+            limit = args.get("limit", 10)
+            
+            import importlib
+            mod = importlib.import_module("api.v1.endpoints.ai_chat")
+            email_data = await mod._execute_tool("get_emails", {"limit": limit, "filter": "all"}, uid)
+            emails = email_data.get("emails", []) if isinstance(email_data, dict) else []
+            
+            cal_data = await mod._execute_tool("get_calendar_events", {"days_ahead": 2}, uid)
+            events = cal_data.get("events", []) if isinstance(cal_data, dict) else []
+            
+            categorized = {
+                "urgent_action_required": [],
+                "meeting_scheduling": [],
+                "informational": [],
+                "newsletters_low_priority": []
+            }
+            
+            for em in emails:
+                subj = em.get("subject", "").lower()
+                snip = em.get("snippet", "").lower()
+                if any(w in subj or w in snip for w in ["urgent", "asap", "review", "deadline", "action required", "important"]):
+                    categorized["urgent_action_required"].append(em)
+                elif any(w in subj or w in snip for w in ["meeting", "calendar", "invite", "call", "schedule", "sync"]):
+                    categorized["meeting_scheduling"].append(em)
+                elif any(w in subj or w in snip for w in ["newsletter", "digest", "unsubscribe", "update", "promo"]):
+                    categorized["newsletters_low_priority"].append(em)
+                else:
+                    categorized["informational"].append(em)
+                    
+            return {
+                "workflow": "inbox_triage_workflow",
+                "total_scanned": len(emails),
+                "categorized": categorized,
+                "upcoming_schedule": [e.get("title") for e in events[:3]],
+                "ready_for_reply_drafting": draft_replies,
+                "status": "success"
+            }
+
+        if name == "workspace_cross_search":
+            query = args.get("query", "").lower()
+            platforms = args.get("platforms", ["gmail", "calendar", "notion", "github"])
+            
+            import importlib
+            mod = importlib.import_module("api.v1.endpoints.ai_chat")
+            
+            results = {}
+            if "gmail" in platforms or "emails" in platforms:
+                e_data = await mod._execute_tool("get_emails", {"limit": 10, "filter": "all"}, uid)
+                emails = e_data.get("emails", []) if isinstance(e_data, dict) else []
+                matching_emails = [e for e in emails if query in str(e).lower()]
+                results["gmail"] = matching_emails[:5]
+                
+            if "calendar" in platforms:
+                c_data = await mod._execute_tool("get_calendar_events", {"days_ahead": 7}, uid)
+                events = c_data.get("events", []) if isinstance(c_data, dict) else []
+                matching_events = [e for e in events if query in str(e).lower()]
+                results["calendar"] = matching_events[:5]
+                
+            from services.integration_service import integration_service
+            if "notion" in platforms:
+                try:
+                    n_data = await integration_service.get_platform_data(uid, "notion", "search")
+                    results["notion"] = [n for n in (n_data if isinstance(n_data, list) else []) if query in str(n).lower()][:5]
+                except Exception:
+                    results["notion"] = []
+                    
+            if "github" in platforms:
+                try:
+                    g_data = await integration_service.get_platform_data(uid, "github", "list")
+                    results["github"] = [g for g in (g_data if isinstance(g_data, list) else []) if query in str(g).lower()][:5]
+                except Exception:
+                    results["github"] = []
+                    
+            return {
+                "workflow": "workspace_cross_search",
+                "query": query,
+                "findings": results,
+                "total_matches": sum(len(v) for v in results.values()),
+                "status": "success"
+            }
 
         return {"error": f"Unknown tool: {name}", "tool": name}
 
@@ -374,13 +759,24 @@ I'll help you create a meeting! Let me confirm a few details:
         uid: str,
         message: str,
         conversation_id: str | None = None,
+        mode: str = "suggest",
+        history: list[dict] | None = None,
     ) -> AsyncGenerator[str, None]:
         """
         Full multi-agent pipeline: classify → remember → plan → execute → criticise → synthesise → stream.
+        Maintains conversational memory across turns and integrates with persistent user memory.
         """
         now     = datetime.now(timezone.utc).strftime("%A, %B %d, %Y %H:%M UTC")
         conv_id = conversation_id or str(uuid.uuid4())
-        history = self._convs[f"{uid}:{conv_id}"]
+        conv_history = self._convs[f"{uid}:{conv_id}"]
+
+        # Synchronize conversation history sent from client (AICockpit msgs)
+        if history:
+            for item in history:
+                r = item.get("role") or ("assistant" if item.get("r") == "ai" else "user")
+                c = (item.get("content") or item.get("text") or "").strip()
+                if c and not any(existing.get("content") == c for existing in conv_history):
+                    conv_history.append({"role": r, "content": c})
 
         # ── 1. Memory ──────────────────────────────────────────────────────────
         try:
@@ -409,11 +805,11 @@ I'll help you create a meeting! Let me confirm a few details:
         groq_client = Groq(api_key=groq_key)
 
         # ── 5. Build messages ──────────────────────────────────────────────────
-        system_prompt = self._build_system_prompt(memory_ctx, now, intent)
+        system_prompt = self._build_system_prompt(memory_ctx, now, intent, mode=mode)
         messages = [{"role": "system", "content": system_prompt}]
-        # Include recent history (last 10 turns)
-        for h in list(history)[-10:]:
-            messages.append(h)
+        # Include recent conversation history turns
+        for h in list(conv_history)[-12:]:
+            messages.append({"role": h["role"], "content": h["content"]})
         messages.append({"role": "user", "content": message})
 
         # ── 6. Detect forced tool (but be defensive - don't force if query is ambiguous) ──────
@@ -442,62 +838,123 @@ I'll help you create a meeting! Let me confirm a few details:
             return False
 
         try:
-            # ── 7. First LLM call — tool selection ────────────────────────────
-            # Only force tool choice if we're VERY confident (no ambiguity)
-            # Otherwise let the LLM decide (tool_choice="auto") so it can ask questions
-            call_kwargs: dict = {"tool_choice": "auto"}
-            
-            # Only force if:
-            # 1. Tool is explicitly clear from context
-            # 2. Query is NOT ambiguous (has all required details)
-            if forced_tool and not is_ambiguous_query(message):
-                # Safe to force - no ambiguity detected
-                call_kwargs["tool_choice"] = {"type": "function", "function": {"name": forced_tool}}
-                logger.info(f"Forcing tool choice: {forced_tool}")
-            elif forced_tool:
-                logger.info(f"Suggested tool {forced_tool} but letting LLM decide due to ambiguous query")
+            # ── 7. Multi-Hop Autonomous ReAct Loop (Up to 4 sequential hops) ──
+            all_tool_results = []
+            loop_messages = list(messages)
+            MAX_HOPS = 4
 
-            first_resp = await asyncio.to_thread(
-                lambda: groq_client.chat.completions.create(
-                    model=self._model,
-                    messages=messages,
+            for hop in range(1, MAX_HOPS + 1):
+                call_kwargs: dict = {"tool_choice": "auto"}
+                if hop == 1 and forced_tool and not is_ambiguous_query(message):
+                    call_kwargs["tool_choice"] = {"type": "function", "function": {"name": forced_tool}}
+                    logger.info(f"Hop 1: Forcing tool choice: {forced_tool}")
+                elif hop == 1 and forced_tool:
+                    logger.info(f"Hop 1: Suggested tool {forced_tool} but letting LLM decide due to ambiguous query")
+
+                step_resp, active_model = await self._call_llm_with_fallback(
+                    groq_client=groq_client,
+                    messages=loop_messages,
+                    models=self._tool_models,
                     tools=ALL_TOOLS,
-                    max_tokens=2048,
+                    tool_choice=call_kwargs.get("tool_choice", "auto"),
+                    max_tokens=1500,
                     temperature=0.25,
-                    **call_kwargs,
                 )
-            )
 
-            first_msg  = first_resp.choices[0].message
-            tool_calls = first_msg.tool_calls or []
+                step_msg = step_resp.choices[0].message
+                tool_calls = step_msg.tool_calls or []
 
-            # ── 8. Parallel tool execution ─────────────────────────────────────
-            tool_results = []
-            if tool_calls:
-                yield _sse({"type": "thinking", "content": f"Running {len(tool_calls)} tool(s) in parallel..."})
+                if not tool_calls:
+                    logger.info(f"Hop {hop}: No further tools called, terminating agent loop.")
+                    break
 
-                async def exec_one(tc):
+                # ── Real-Time Workflow Step SSE Emission ───────────────────────
+                FRIENDLY_TOOL_NAMES = {
+                    "get_emails": "Gmail Inbox",
+                    "get_calendar_events": "Google Calendar",
+                    "create_calendar_event": "Google Calendar Event",
+                    "create_meet_and_email": "Google Meet",
+                    "compose_email": "Gmail Draft",
+                    "notion_tool": "Notion Workspace",
+                    "github_tool": "GitHub",
+                    "jira_tool": "Jira Backlog",
+                    "slack_tool": "Slack",
+                    "zoom_tool": "Zoom",
+                    "web_search": "Web Search",
+                    "prepare_meeting_briefing": "Meeting Briefing",
+                    "inbox_triage_workflow": "Inbox Triage & Schedule",
+                    "workspace_cross_search": "360° Workspace Cross-Search",
+                    "get_team_members": "Team Roster",
+                    "get_deployments": "Deployments",
+                    "get_analytics": "Analytics",
+                    "get_integrations_status": "Integrations",
+                    "improve_text": "Text Polish",
+                    "schedule_automation": "Automation",
+                    "generate_report": "Report Generation",
+                    "find_meeting_time": "Availability Check",
+                    "task_management": "Task Manager",
+                    "diagnose_issue": "Diagnostics",
+                    "set_reminder": "Smart Reminder",
+                }
+                tool_names = [tc.function.name for tc in tool_calls]
+                friendly_names = [FRIENDLY_TOOL_NAMES.get(name, name) for name in tool_names]
+                step_title = f"Step {hop}: {' + '.join(friendly_names)}"
+                yield _sse({
+                    "type": "workflow_step",
+                    "hop": hop,
+                    "step_title": step_title,
+                    "tools": tool_names,
+                    "message": f"Autonomous Workflow Step {hop}: running {len(tool_calls)} action(s)...",
+                })
+
+                MUTATING_TOOLS = {
+                    "compose_email", "create_calendar_event", "create_meet_and_email",
+                    "schedule_automation", "sync_integration"
+                }
+
+                async def exec_one(tc, current_hop=hop):
                     tname = tc.function.name
                     try:
                         targs = json.loads(tc.function.arguments or "{}")
                     except Exception:
                         targs = {}
+
+                    # Strict safeguard check in Ask First mode
+                    if (mode or "").lower() == "ask" and tname in MUTATING_TOOLS:
+                        logger.info(f"Safeguard intercepted mutating tool '{tname}' under 'Ask First' mode")
+                        think = f"🛡️ Safeguard: Requiring user authorization for {tname}..."
+                        result = {
+                            "status": "requires_safeguard_approval",
+                            "tool": tname,
+                            "action": tname,
+                            "args": targs,
+                            "title": f"Approve {tname.replace('_', ' ').title()}",
+                            "description": f"Action paused for human confirmation under 'Ask First' policy.",
+                            "risk_level": "medium",
+                            "instruction": "Render an ```artifact:safeguard ... ``` approval card with these exact tool and args so the user can approve."
+                        }
+                        return tc.id, tname, targs, result, think, current_hop
+
                     think = THINK_MSGS.get(tname, f"⚙️ Running {tname}...")
                     result = await self._execute_tool(tname, targs, uid)
-                    return tc.id, tname, targs, result, think
+                    return tc.id, tname, targs, result, think, current_hop
 
                 gathered = await asyncio.gather(*[exec_one(tc) for tc in tool_calls], return_exceptions=True)
 
+                # Append assistant tool calls to message history for next hop
+                loop_messages.append(step_msg)
+
+                stop_hops = False
                 for item in gathered:
                     if isinstance(item, Exception):
-                        logger.error(f"Tool gather error: {item}")
+                        logger.error(f"Tool gather error in hop {hop}: {item}")
                         continue
-                    tc_id, tname, targs, result, think_msg = item
+                    tc_id, tname, targs, result, think_msg, current_hop = item
 
                     yield _sse({"type": "tool_start", "tool": tname, "message": think_msg})
 
                     # Critic check
-                    critic_data = result.get("_critic")
+                    critic_data = result.get("_critic") if isinstance(result, dict) else None
                     if critic_data and critic_data.get("status") == "error":
                         severity = critic_data.get("severity", "medium")
                         level    = "error" if severity in ("critical", "high") else "warning"
@@ -505,87 +962,91 @@ I'll help you create a meeting! Let me confirm a few details:
                         yield _sse({"type": "alert", "level": level, "message": fix})
 
                     yield _sse({"type": "tool_done", "tool": tname})
-                    tool_results.append({"id": tc_id, "name": tname, "result": result})
+                    all_tool_results.append({"id": tc_id, "name": tname, "result": result, "hop": current_hop})
 
-                # ── 9. Second LLM call — synthesis with tool results ───────────
-                # Build a completely fresh message context for synthesis
-                # Don't include ANY tool-related context from previous messages
-                
-                tool_summary = "\n\n━━━ DATA FROM CONNECTED INTEGRATIONS ━━━\n"
-                for tr in tool_results:
-                    result_str = json.dumps(tr["result"], ensure_ascii=False)[:2000]
-                    tool_summary += f"\n[{tr['name']}]\n{result_str}\n"
-                
-                # Create COMPLETELY clean messages - only user query + tool data
+                    # Feed tool response into loop_messages for context chaining in subsequent hops
+                    result_str = json.dumps(result, ensure_ascii=False)[:3000]
+                    loop_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "name": tname,
+                        "content": result_str,
+                    })
+
+                    # Stop hops early if composite cross-platform pipeline finished
+                    if tname in ("prepare_meeting_briefing", "inbox_triage_workflow", "workspace_cross_search"):
+                        stop_hops = True
+
+                if stop_hops:
+                    logger.info(f"Composite multi-hop tool completed in hop {hop}, ending workflow loop.")
+                    break
+
+            tool_results = all_tool_results
+
+            # ── 8. Synthesis LLM call with aggregated multi-hop data ──────────
+            if all_tool_results:
+                tool_summary = "\n\n━━━ WORKSPACE CROSS-PLATFORM DATA ━━━\n"
+                for tr in all_tool_results:
+                    result_str = json.dumps(tr["result"], ensure_ascii=False)[:2500]
+                    tool_summary += f"\n[Step {tr.get('hop', 1)} | Tool: {tr['name']}]\n{result_str}\n"
+
+                mode_clean = (mode or "suggest").lower()
+                mode_guidance = {
+                    "autopilot": "AUTONOMY MODE: AUTO-PILOT. Confirm the executed actions directly and summarize next steps.",
+                    "suggest": "AUTONOMY MODE: SUGGEST. Present proposals with interactive Generative UI cards (e.g. artifact:meeting or artifact:slot_picker) so the user can review and confirm before final execution.",
+                    "ask": "AUTONOMY MODE: ASK FIRST. Strict safeguard mode. For any action requiring user authorization, render an ```artifact:safeguard ... ``` approval card with the tool name and arguments so the user can review and click [Approve & Execute]."
+                }.get(mode_clean, "")
+
                 synthesis_messages = [
                     {
                         "role": "system",
-                        "content": f"""You are WorkPilot AI Chief of Staff. Answer the user's question using the data provided below.
+                        "content": f"""You are WorkPilot AI Chief of Staff. Answer the user's question using the multi-step data gathered across integrations below.
 
 Current date/time: {now}
+{mode_guidance}
 
 USER CONTEXT:
 {memory_ctx or "No prior context"}
 
-AVAILABLE DATA:
+MULTI-HOP WORKFLOW DATA:
 {tool_summary}
 
-Provide a clear, helpful response based on this data. Format with markdown (tables, bullets, bold)."""
-                    },
-                    {
-                        "role": "user",
-                        "content": message
+Provide a clear, structured, and executive-grade response based on this cross-platform data. Use markdown formatting (headings, bullet points, tables, bold text)."""
                     }
                 ]
+                # Carry recent turns into synthesis so LLM remembers conversational context!
+                for h in list(conv_history)[-8:]:
+                    synthesis_messages.append({"role": h["role"], "content": h["content"]})
+                synthesis_messages.append({"role": "user", "content": message})
 
-                yield _sse({"type": "thinking", "content": "Synthesizing insights..."})
-
-                # Second LLM call WITHOUT tools parameter - pure text generation
-                final_resp = await asyncio.to_thread(
-                    lambda: groq_client.chat.completions.create(
-                        model=self._model,
-                        messages=synthesis_messages,
-                        max_tokens=2048,
-                        temperature=0.4,
-                        stream=True,
-                        # NO tools, NO tool_choice - just pure text generation
-                    )
-                )
-            else:
-                # No tool calls — stream direct answer WITHOUT tools parameter
-                final_resp = await asyncio.to_thread(
-                    lambda: groq_client.chat.completions.create(
-                        model=self._model,
-                        messages=messages,
-                        max_tokens=2048,
-                        temperature=0.4,
-                        stream=True,
-                        # Don't pass tools or tool_choice
-                    )
-                )
+                yield _sse({"type": "thinking", "content": "Synthesizing cross-platform insights..."})
 
             # ── 10. Stream tokens ──────────────────────────────────────────────
             full_response = ""
-            for chunk in final_resp:
-                delta = chunk.choices[0].delta
-                if delta and delta.content:
-                    token = delta.content
-                    full_response += token
-                    # Escape for JSON
-                    safe = token.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
-                    yield f'data: {{"type":"token","content":"{safe}"}}\n\n'
+            synth_msg_list = synthesis_messages if all_tool_results else messages
+            async for token in self._stream_tokens_with_fallback(
+                groq_client=groq_client,
+                messages=synth_msg_list,
+                models=self._synth_models,
+                max_tokens=2048,
+                temperature=0.4,
+            ):
+                full_response += token
+                yield _sse({"type": "token", "content": token})
 
             # ── 11. Save to memory ─────────────────────────────────────────────
-            last_tool = tool_results[0]["name"] if tool_results else None
+            last_tool = all_tool_results[-1]["name"] if all_tool_results else None
             try:
                 await self.memory.add_interaction(uid, "user", message, tool_used=last_tool)
                 await self.memory.add_interaction(uid, "assistant", full_response[:600])
+                # Proactively extract entities from assistant response (created repos, issues, meetings)
+                await self.memory.extract_entities(uid, full_response)
             except Exception:
                 pass
 
             # Update conversation history
-            history.append({"role": "user",      "content": message})
-            history.append({"role": "assistant",  "content": full_response})
+            conv_history.append({"role": "user", "content": message})
+            conv_history.append({"role": "assistant", "content": full_response})
 
             # ── 12. Smart suggestions ──────────────────────────────────────────
             try:
@@ -601,10 +1062,13 @@ Provide a clear, helpful response based on this data. Format with markdown (tabl
 
         except Exception as e:
             logger.error(f"SuperBrain stream_response error: {e}", exc_info=True)
-            # User-friendly error message (hide technical details)
-            user_message = "I encountered a technical issue while processing your request. Please try rephrasing or simplifying your question."
+            err_text = str(e).lower()
+            if "rate limit" in err_text or "429" in err_text:
+                user_message = "AI service rate limit reached temporarily. Please wait a moment and try again."
+            else:
+                user_message = "I encountered a technical issue while processing your request. Please try rephrasing or simplifying your question."
             yield _sse({"type": "alert", "level": "error", "message": user_message})
-            yield _sse({"type": "token", "content": "\n\nI ran into a technical issue. Please try again or rephrase your request."})
+            yield _sse({"type": "token", "content": f"\n\n{user_message}"})
 
         finally:
             yield "data: [DONE]\n\n"

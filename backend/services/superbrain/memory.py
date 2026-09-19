@@ -151,6 +151,18 @@ class MemoryManager:
             r"\s+\d{1,2}(?:,\s*\d{4})?)\b",
             text, re.IGNORECASE,
         )
+        # Repositories (owner/repo pattern)
+        raw_repos = re.findall(r"\b([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)\b", text)
+        clean_repos = [
+            r for r in raw_repos
+            if not r.startswith("http")
+            and not any(r.endswith(ext) for ext in [".com", ".py", ".js", ".jsx", ".ts", ".tsx", ".md", ".json", ".html"])
+            and not any(r.startswith(pfx) for pfx in ["api/", "v1/", "services/", "models/", "schemas/", "components/"])
+            and len(r.split("/")) == 2
+        ]
+        # Issue and PR numbers
+        issue_nums = re.findall(r"(?:issue|pr|pull request|#)\s*#?(\d+)", text, re.IGNORECASE)
+
         if emails:
             mem.entities.setdefault("emails", [])
             for e in emails:
@@ -165,8 +177,21 @@ class MemoryManager:
             mem.entities["names"] = mem.entities["names"][-30:]
         if dates:
             mem.entities["last_dates_mentioned"] = dates[-5:]
+        if clean_repos:
+            mem.entities.setdefault("repositories", [])
+            for cr in clean_repos:
+                if cr not in mem.entities["repositories"]:
+                    mem.entities["repositories"].append(cr)
+            mem.entities["repositories"] = mem.entities["repositories"][-10:]
+        if issue_nums:
+            mem.entities.setdefault("recent_issues", [])
+            for num in issue_nums:
+                if num not in mem.entities["recent_issues"]:
+                    mem.entities["recent_issues"].append(num)
+            mem.entities["recent_issues"] = mem.entities["recent_issues"][-10:]
+
         await self.save_memory(uid, mem)
-        return {"emails": emails, "names": names, "dates": dates}
+        return {"emails": emails, "names": names, "dates": dates, "repositories": clean_repos, "issues": issue_nums}
 
     async def update_preference(self, uid: str, key: str, value) -> None:
         """Store a user preference (e.g., tone='casual')."""
@@ -194,6 +219,10 @@ class MemoryManager:
                 lines.append(f"  {role_label}: {snippet}{tool_note}")
 
         # Entities
+        if mem.entities.get("repositories"):
+            lines.append(f"RECENT REPOSITORIES DISCUSSED: {', '.join(mem.entities['repositories'][-3:])}")
+        if mem.entities.get("recent_issues"):
+            lines.append(f"RECENT ISSUE/PR NUMBERS: {', '.join(mem.entities['recent_issues'][-3:])}")
         if mem.entities.get("names"):
             lines.append(f"PEOPLE MENTIONED: {', '.join(mem.entities['names'][-5:])}")
         if mem.entities.get("emails"):

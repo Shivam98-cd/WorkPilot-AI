@@ -1,50 +1,92 @@
 import { auth } from './firebase';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 
-/* ─── Auth helpers ─────────────────────────────── */
+/* ─── Auth helpers ─────────────────────────────────────────────────────────── */
 
 let _cachedHeaders = null;
 let _cachedHeadersAt = 0;
 const HEADER_CACHE_MS = 60_000;
 let _refreshInFlight = null;
 
-async function getFirebaseToken() {
+// ── Token priming ─────────────────────────────────────────────────────────────
+// Call primeAuthToken() right after Firebase auth state resolves (in App.jsx).
+// This kicks off a background header fetch so the FIRST api call has zero
+// Firebase overhead — it just awaits an already-resolved promise.
+let _primedHeadersPromise = null;
+
+export function primeAuthToken() {
+  _primedHeadersPromise = getAuthHeaders(true).catch(() => null);
+}
+
+function isJwtExpired(token) {
+  if (!token || typeof token !== 'string') return true;
   try {
+    const parts = token.split('.');
+    if (parts.length < 2) return true;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    if (payload.exp && (payload.exp * 1000) <= (Date.now() + 10_000)) {
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+export async function getFirebaseToken(force = false) {
+  try {
+    if (typeof auth.authStateReady === 'function') {
+      await withTimeout(auth.authStateReady(), 1500, 'authStateReady').catch(() => null);
+    }
     const user = auth.currentUser;
-    if (user) return await user.getIdToken(false);
-  } catch {}
+    if (user) {
+      return await withTimeout(user.getIdToken(force), 2000, 'getIdToken').catch(() => null);
+    }
+  } catch (err) {
+    console.warn('⚠️ getFirebaseToken failed:', err?.message || err);
+  }
   return null;
 }
 
-function clearAuthCache() {
+export function clearAuthCache() {
   _cachedHeaders = null;
   _cachedHeadersAt = 0;
+  _primedHeadersPromise = null;
+  _swr.clear();
 }
 
-async function getAuthHeaders(force = false) {
-  if (!force && _cachedHeaders && Date.now() - _cachedHeadersAt < HEADER_CACHE_MS) {
+export async function getAuthHeaders(force = false) {
+  if (!force && _cachedHeaders && _cachedHeaders.Authorization && (Date.now() - _cachedHeadersAt < HEADER_CACHE_MS)) {
     return _cachedHeaders;
   }
 
   let headers = { 'Content-Type': 'application/json' };
-  try {
-    const tokens = JSON.parse(localStorage.getItem('wp_tokens') || 'null');
-    if (tokens?.accessToken) {
-      headers = { 'Authorization': `Bearer ${tokens.accessToken}`, 'Content-Type': 'application/json' };
-    }
-  } catch {}
 
-  if (!headers.Authorization) {
-    const firebaseToken = await getFirebaseToken();
-    if (firebaseToken) {
-      headers = { 'Authorization': `Bearer ${firebaseToken}`, 'Content-Type': 'application/json' };
-    }
+  // 1. Try Firebase token first (modern Firebase SDK with authStateReady)
+  const firebaseToken = await getFirebaseToken(force);
+  if (firebaseToken) {
+    headers = { 'Authorization': `Bearer ${firebaseToken}`, 'Content-Type': 'application/json' };
+  } else {
+    // 2. Fallback to localStorage wp_tokens if available and not expired
+    try {
+      const tokens = JSON.parse(localStorage.getItem('wp_tokens') || 'null');
+      if (tokens?.accessToken && !isJwtExpired(tokens.accessToken)) {
+        headers = { 'Authorization': `Bearer ${tokens.accessToken}`, 'Content-Type': 'application/json' };
+      }
+    } catch {}
   }
 
-  _cachedHeaders = headers;
-  _cachedHeadersAt = Date.now();
+  // CRITICAL: NEVER cache unauthenticated headers! Only cache if Authorization header exists.
+  if (headers.Authorization) {
+    _cachedHeaders = headers;
+    _cachedHeadersAt = Date.now();
+  } else {
+    _cachedHeaders = null;
+    _cachedHeadersAt = 0;
+  }
+
   return headers;
 }
 
@@ -80,12 +122,12 @@ export async function refreshAccessToken() {
   }
 }
 
-// Hard timeout (ms) for each API call — prevents indefinite hangs when the
-// backend or Firestore SSL is slow.
-const API_TIMEOUT_MS = 10_000;
+// Hard timeout (ms) for each API call — generous timeout prevents false aborts
+// on external OAuth integrations (Gmail, Google Calendar).
+const API_TIMEOUT_MS = 25_000;
 // Hard timeout for the token-refresh flow — backend refresh can hang if
 // Firestore SSL is retrying (seen as 287-second Duration in logs).
-const REFRESH_TIMEOUT_MS = 6_000;
+const REFRESH_TIMEOUT_MS = 10_000;
 
 /** Wrap a promise with a hard timeout that rejects after `ms` milliseconds. */
 function withTimeout(promise, ms, label = 'request') {
@@ -98,12 +140,16 @@ function withTimeout(promise, ms, label = 'request') {
 }
 
 async function apiFetch(url, options = {}) {
-  let headers = await getAuthHeaders();
+  // Use primed token promise if available (avoids per-request Firebase overhead)
+  let headers = await (_primedHeadersPromise || getAuthHeaders());
+  // Reset primed promise after first use so subsequent calls use getAuthHeaders normally
+  _primedHeadersPromise = null;
   let res;
 
   // ── First attempt with a hard timeout ────────────────────────────────────
+  const timeoutDuration = options.timeout || API_TIMEOUT_MS;
   const controller = new AbortController();
-  const timeoutId  = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  const timeoutId  = setTimeout(() => controller.abort(), timeoutDuration);
   try {
     res = await fetch(`${API_BASE}${url}`, {
       ...options,
@@ -119,24 +165,50 @@ async function apiFetch(url, options = {}) {
   }
   clearTimeout(timeoutId);
 
-  // ── Token refresh on 401 — with a hard 6-second timeout ──────────────────
-  if (res.status === 401) {
+  // ── Token refresh on 401 or 403 ─────────────────────────────────────────────
+  if (res.status === 401 || res.status === 403) {
+    clearAuthCache();
+    // 1. Try refreshing via Firebase user first
     try {
-      await withTimeout(refreshAccessToken(), REFRESH_TIMEOUT_MS, 'token-refresh');
-      headers = await getAuthHeaders(true);
-      const ctrl2 = new AbortController();
-      const tid2   = setTimeout(() => ctrl2.abort(), API_TIMEOUT_MS);
-      try {
-        res = await fetch(`${API_BASE}${url}`, {
-          ...options,
-          signal: ctrl2.signal,
-          headers: { ...headers, ...options.headers },
-        });
-      } finally {
-        clearTimeout(tid2);
+      const freshFbToken = await getFirebaseToken(true);
+      if (freshFbToken) {
+        headers = { 'Authorization': `Bearer ${freshFbToken}`, 'Content-Type': 'application/json' };
+        _cachedHeaders = headers;
+        _cachedHeadersAt = Date.now();
+
+        const retryCtrl = new AbortController();
+        const retryTid = setTimeout(() => retryCtrl.abort(), API_TIMEOUT_MS);
+        try {
+          res = await fetch(`${API_BASE}${url}`, {
+            ...options,
+            signal: retryCtrl.signal,
+            headers: { ...headers, ...options.headers },
+          });
+        } finally {
+          clearTimeout(retryTid);
+        }
       }
-    } catch {
-      // Refresh failed or timed out — let the original 401 propagate below
+    } catch {}
+
+    // 2. If still 401 or 403, try backend refresh token
+    if (res.status === 401 || res.status === 403) {
+      try {
+        await withTimeout(refreshAccessToken(), REFRESH_TIMEOUT_MS, 'token-refresh');
+        headers = await getAuthHeaders(true);
+        const ctrl2 = new AbortController();
+        const tid2   = setTimeout(() => ctrl2.abort(), API_TIMEOUT_MS);
+        try {
+          res = await fetch(`${API_BASE}${url}`, {
+            ...options,
+            signal: ctrl2.signal,
+            headers: { ...headers, ...options.headers },
+          });
+        } finally {
+          clearTimeout(tid2);
+        }
+      } catch {
+        // Refresh failed or timed out — let the original 401 propagate below
+      }
     }
   }
 
@@ -166,7 +238,45 @@ export async function backendRegister(name, email, password) {
 }
 
 export async function backendLogout() {
-  try { return await apiFetch('/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
+  try {
+    let token = null;
+    try {
+      const tokens = JSON.parse(localStorage.getItem('wp_tokens') || 'null');
+      token = tokens?.accessToken;
+    } catch {}
+
+    if (!token && auth?.currentUser) {
+      token = await Promise.race([
+        auth.currentUser.getIdToken(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000)),
+      ]).catch(() => null);
+    }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 2000);
+
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+    }).catch(() => null);
+
+    clearTimeout(tid);
+  } catch {
+    // Ignore all errors during logout
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('wp-user-signed-out', () => {
+    clearAuthCache();
+    backendLogout().catch(() => {});
+  });
 }
 
 export async function getProfile() {
@@ -177,20 +287,89 @@ export async function getSessions() {
   return apiFetch('/auth/sessions');
 }
 
+// ── Stale-While-Revalidate (SWR) page-level cache ────────────────────────────
+// Returns stale data instantly on revisit while silently fetching fresh data.
+// Cache is keyed by URL; TTL is 60 s for list pages (configurable per endpoint).
+// Write-through mutations (send/delete/star) invalidate the relevant keys.
+const _swr = new Map();   // key -> { data, ts, inflight }
+const SWR_TTL = 60_000;  // 60 s default
+
+function _swrKey(url, ...args) {
+  return [url, ...args.filter(Boolean)].join('|');
+}
+
+async function _swrFetch(key, ttl, fetcher) {
+  const now = Date.now();
+  const hit = _swr.get(key);
+
+  if (hit) {
+    const age = now - hit.ts;
+    if (age < ttl) {
+      // Fresh — return immediately, no background fetch
+      return hit.data;
+    }
+    // Stale — return old data instantly AND kick off background refresh
+    if (!hit.inflight) {
+      hit.inflight = fetcher()
+        .then(fresh => { _swr.set(key, { data: fresh, ts: Date.now(), inflight: null }); })
+        .catch(() => { if (hit) hit.inflight = null; });
+    }
+    return hit.data;
+  }
+
+  // Cache miss — fetch synchronously and populate
+  const data = await fetcher();
+  _swr.set(key, { data, ts: Date.now(), inflight: null });
+  return data;
+}
+
+export function invalidateSwrKey(...parts) {
+  _swr.delete(_swrKey(...parts));
+}
+
+export function invalidateSwrPrefix(prefix) {
+  for (const k of _swr.keys()) {
+    if (k.startsWith(prefix)) _swr.delete(k);
+  }
+}
+
 /* ─── Email ─────────────────────────────────────── */
-export const getEmails = () => apiFetch('/emails');
-export const markEmailRead = (id) => apiFetch(`/emails/${id}/read`, { method: 'PUT' });
-export const draftEmail = (body) => apiFetch('/emails/draft', { method: 'POST', body: JSON.stringify(body) });
-export const sendEmail = (body) => apiFetch('/emails/send', { method: 'POST', body: JSON.stringify(body) });
-export const triageEmails = () => apiFetch('/emails/triage', { method: 'POST' });
+export const getEmails = (folder = 'inbox', q = '', limit = 25) => {
+  const params = new URLSearchParams({ folder, limit });
+  if (q) params.set('q', q);
+  const url = `/emails?${params}`;
+  return _swrFetch(_swrKey('emails', folder, q, limit), SWR_TTL, () => apiFetch(url));
+};
+
+// Fetch the full body of a single email lazily (called when user opens it)
+export const getEmailBody = (id) => apiFetch(`/emails/${id}/body`);
+
+export const getEmailCounts = () => {
+  return _swrFetch('email_counts', SWR_TTL, () => apiFetch('/emails/counts'));
+};
+export const markEmailRead   = (id, read = true) => { invalidateSwrPrefix('emails'); return apiFetch(`/emails/${id}/read`, { method: 'PUT', body: JSON.stringify({ read }) }); };
+export const markEmailUnread = (id) => { invalidateSwrPrefix('emails'); return apiFetch(`/emails/${id}/read`, { method: 'PUT', body: JSON.stringify({ read: false }) }); };
+export const archiveEmail    = (id) => { invalidateSwrPrefix('emails'); return apiFetch(`/emails/${id}/archive`, { method: 'POST' }); };
+export const deleteEmail     = (id) => { invalidateSwrPrefix('emails'); return apiFetch(`/emails/${id}`, { method: 'DELETE' }); };
+export const starEmail       = (id, starred = true) => apiFetch(`/emails/${id}/star`, { method: 'POST', body: JSON.stringify({ starred }) });
+export const draftEmail      = (body) => apiFetch('/emails/draft', { method: 'POST', body: JSON.stringify(body) });
+export const sendEmail       = (body) => { invalidateSwrPrefix('emails'); return apiFetch('/emails/send',  { method: 'POST', body: JSON.stringify(body) }); };
+export const triageEmails    = () => apiFetch('/emails/triage', { method: 'POST' });
 
 
 /* ─── Calendar ──────────────────────────────────── */
-export const getCalendarEvents = () => apiFetch('/calendar/events');
-export const createCalendarEvent = (ev) => apiFetch('/calendar/events', { method: 'POST', body: JSON.stringify(ev) });
+export const getCalendarEvents = (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const url = `/calendar/events${query ? `?${query}` : ''}`;
+  return _swrFetch(_swrKey('calendar', query), SWR_TTL, () => apiFetch(url));
+};
+export const createCalendarEvent = (ev) => { invalidateSwrKey('calendar', ''); return apiFetch('/calendar/events', { method: 'POST', body: JSON.stringify(ev) }); };
+export const deleteCalendarEvent = (id) => { invalidateSwrPrefix('calendar'); return apiFetch(`/calendar/events/${id}`, { method: 'DELETE' }); };
+export const aiScheduleEvent = (prompt) => apiFetch('/calendar/ai-schedule', { method: 'POST', body: JSON.stringify({ prompt }) });
 
 /* ─── Team ──────────────────────────────────────── */
 export const getTeamMembers = () => apiFetch('/team/members');
+export const createTeamMember = (data) => apiFetch('/team/members', { method: 'POST', body: JSON.stringify(data) });
 export const updateTeamMember = (id, data) => apiFetch(`/team/members/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 /* ─── Deployments ───────────────────────────────── */
@@ -213,7 +392,7 @@ export const askDocumentAI = (doc_id, question) => apiFetch('/documents/ask', { 
 export const getAnalytics = () => apiFetch('/analytics/summary');
 
 /* ─── Integrations ──────────────────────────────── */
-export const getIntegrations = () => apiFetch('/integrations'); // Always fetch fresh - no caching
+export const getIntegrations = (bust = true) => apiFetch(bust ? `/integrations?_t=${Date.now()}` : '/integrations');
 export const getIntegrationsCatalog = () => apiFetch('/integrations/catalog');
 
 /** Public catalog — no auth required */
@@ -353,4 +532,114 @@ export async function superChat(message, conversationId = '', callbacks = {}) {
     }
   }
   onDone?.();
+}
+
+/* ─── Notifications & Reminders API ────────────────── */
+
+export async function getNotifications() {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/notifications`, { headers });
+  if (!res.ok) throw new Error('Failed to fetch notifications');
+  return res.json();
+}
+
+export async function markNotificationRead(id) {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/notifications/${id}/read`, {
+    method: 'PUT',
+    headers,
+  });
+  if (!res.ok) throw new Error('Failed to mark notification read');
+  return res.json();
+}
+
+export async function markAllNotificationsRead() {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/notifications/read-all`, {
+    method: 'PUT',
+    headers,
+  });
+  if (!res.ok) throw new Error('Failed to mark all notifications read');
+  return res.json();
+}
+
+export async function clearNotifications() {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/notifications/clear`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!res.ok) throw new Error('Failed to clear notifications');
+  return res.json();
+}
+
+export async function createNotification(title, body, kind = 'info') {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/notifications`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ title, body, kind }),
+  });
+  if (!res.ok) throw new Error('Failed to create notification');
+  return res.json();
+}
+
+export async function getReminders(status = null) {
+  const headers = await getAuthHeaders();
+  const url = status ? `${API_BASE}/reminders?status=${status}` : `${API_BASE}/reminders`;
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error('Failed to fetch reminders');
+  return res.json();
+}
+
+export async function createReminder(data) {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/reminders`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create reminder');
+  return res.json();
+}
+
+export async function completeReminder(id) {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/reminders/${id}/complete`, {
+    method: 'PUT',
+    headers,
+  });
+  if (!res.ok) throw new Error('Failed to complete reminder');
+  return res.json();
+}
+
+export async function deleteReminder(id) {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/reminders/${id}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!res.ok) throw new Error('Failed to delete reminder');
+  return res.json();
+}
+
+export async function triggerTestReminder(data = {}) {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/reminders/test`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to trigger test reminder');
+  return res.json();
+}
+
+export async function syncCalendarReminders() {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/reminders/sync-calendar`, {
+    method: 'POST',
+    headers,
+  });
+  if (!res.ok) throw new Error('Failed to sync calendar reminders');
+  return res.json();
 }

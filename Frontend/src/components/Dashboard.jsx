@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { auth, signOut } from '../firebase';
+import { auth, signOut, signOutUser } from '../firebase';
 import { backendLogout, getDashboardSummary } from '../api';
+import { useWebSocket } from '../hooks/useWebSocket';
 import Logo from './Logo';
 import { EmailPage, CalendarPage, TeamPage, DeploymentsPage, DocumentsPage, AnalyticsPage, IntegrationsPage, SettingsPage } from './Pages';
+import NotificationCenter from './NotificationCenter';
+import ToastNotification, { playAlertChime } from './ToastNotification';
 import { SiGmail, SiGooglecalendar, SiGithub, SiZoom } from 'react-icons/si';
 import UIUpdateAgent from '../agents/UIUpdateAgent';
 import StateManagerAgent from '../agents/StateManagerAgent';
@@ -73,19 +76,15 @@ const NAV_SECTIONS = [
 
 const SPARKLINE_DATA = [4, 7, 5, 9, 6, 11, 8, 14, 10, 13];
 const TICKER_ITEMS = [
-  '⚡ Sent follow-up to Acme Corp',
-  '📅 Meeting scheduled — Wednesday 3pm',
-  '📧 3 urgent emails processed',
-  '🚀 Deployment v2.4.2 at 67%',
-  '👥 Mike Chen task — 2 days overdue',
-  '✅ Daily standup brief ready',
-  '📄 Budget_2026.xlsx analyzed',
-  '🔔 CFO email due by 5pm today',
+  '⚡ SuperBrain Autonomous Workflows Active',
+  '🛡️ Schedule Guardian Monitoring Calendar',
+  '📧 Live Email Triage & Draft Engine Online',
+  '🚀 Multi-Hop Tool Execution Ready',
+  '🔒 Executive Safeguards & Role Enforcement Enabled',
+  '✨ Real-Time Workspace Knowledge Indexed',
 ];
 const CHAT_INIT = [
-  { id: 1, r: 'ai', text: "Good morning! I've reviewed your schedule. 3 urgent items need attention today. Start with the CFO budget email?" },
-  { id: 2, r: 'user', text: 'Yes, draft a reply for the CFO.' },
-  { id: 3, r: 'ai', text: 'Draft: "Hi Robert, Thanks for the Q3 budget proposal. Can we schedule a 30-min call Thursday 2pm to discuss?" — Send?' },
+  { id: 1, r: 'ai', text: "Welcome to WorkPilot AI! Your autonomous executive assistant is ready. What would you like to accomplish today?" },
 ];
 
 function Counter({ target, suffix = '', duration = 1200 }) {
@@ -259,6 +258,19 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
   const [msgs, setMsgs] = useState(CHAT_INIT);
   const [typing, setTyping] = useState(false);
   const [dismissedAlerts, setDismissedAlerts] = useState([]);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOutUser();
+    } catch (e) {
+      console.error('Sign out error:', e);
+    } finally {
+      setSigningOut(false);
+    }
+  };
   const [showKbHelp, setShowKbHelp] = useState(false);
   const DEFAULT_DASHBOARD_DATA = {
     counts: { emails: 0, urgentEmails: 0, events: 0, teamMembers: 0, deployments: 0, documents: 0, connectedIntegrations: 0, notifications: 0 },
@@ -347,6 +359,71 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
     const cleanupSummary = summarizerAgent.init();
     return () => cleanupSummary?.();
   }, []);
+
+  const refreshDashboard = useCallback(() => {
+    getDashboardSummary()
+      .then(res => {
+        if (res?.data) {
+          setDashboardData(res.data);
+          setDashboardLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Dashboard API error:', err);
+      });
+  }, []);
+
+  const [toasts, setToasts] = useState([]);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
+
+  const addToast = useCallback((toast) => {
+    setToasts(prev => [toast, ...prev.slice(0, 3)]);
+    playAlertChime(toast.priority);
+    // Native HTML5 Browser Desktop Notification
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(toast.title || 'WorkPilot AI Alert', {
+          body: toast.body || toast.message || '',
+        });
+      } catch {}
+    }
+  }, []);
+
+  const dismissToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const handleWsEvent = useCallback((event) => {
+    if (!event) return;
+    if (event.type === 'reminder_alert' || event.event === 'reminder_alert') {
+      const d = event.data || {};
+      addToast({
+        id: `toast_${Date.now()}`,
+        title: d.title || '⏰ Upcoming Reminder',
+        body: d.body || 'A scheduled reminder is due.',
+        priority: d.priority || 'high',
+        type: d.type || 'meeting',
+        meeting_link: d.meeting_link,
+      });
+      setUnreadNotifs(prev => prev + 1);
+      refreshDashboard();
+    } else if (event.type === 'notification' || event.type === 'alert') {
+      const d = event.data || {};
+      addToast({
+        id: `toast_${Date.now()}`,
+        title: d.title || '🔔 WorkPilot Alert',
+        body: d.body || d.message || '',
+        priority: d.kind === 'warning' ? 'high' : 'normal',
+        type: 'alert',
+      });
+      setUnreadNotifs(prev => prev + 1);
+      refreshDashboard();
+    } else if (event.type === 'refresh_dashboard' || event.type === 'email_triage') {
+      refreshDashboard();
+    }
+  }, [refreshDashboard, addToast]);
+
+  const { status: _wsStatus } = useWebSocket(user?.uid, handleWsEvent);
 
   useEffect(() => {
     let cancelled = false;
@@ -443,11 +520,11 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   
-  const ALERTS = [
-    { id: 1, text: '🔴 CFO email due', c: BASE.red },
-    { id: 2, text: '🟡 Mike overdue', c: BASE.amber },
-    { id: 3, text: '🔵 Deploy in 2h', c: T.primary },
-  ].filter(a => !dismissedAlerts.includes(a.id));
+  const ALERTS = (dashboardData?.alerts || []).map((a, i) => ({
+    id: a.id || i,
+    text: a.message || a.text || 'Notification',
+    c: a.kind === 'error' ? BASE.red : a.kind === 'warn' ? BASE.amber : T.primary
+  })).filter(a => !dismissedAlerts.includes(a.id));
 
   const SPANS = {
     email: { col: 7, row: 1 },
@@ -460,7 +537,8 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
     docs: { col: 4, row: 1 },
   };
 
-  const getDurHeight = (dur) => {
+  const parseDuration = (dur) => {
+    if (!dur) return 30;
     if (dur.includes('h')) return parseInt(dur) * 60;
     return parseInt(dur);
   };
@@ -468,38 +546,44 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
   const WIDGETS = {
     email: () => {
       const emails = dashboardData?.email || DEFAULT_DASHBOARD_DATA.email;
-      const urgentCount = dashboardData?.counts?.urgentEmails ?? 2;
+      const urgentCount = dashboardData?.counts?.urgentEmails ?? (emails.filter(e => e.priority === 'urgent').length || 0);
       return (
         <Bento draggable onDragStart={e => handleDragStart(e, 'email')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'email')} style={{ gridColumn: `span ${SPANS.email.col}`, gridRow: `span ${SPANS.email.row}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 14, fontWeight: 700 }}>Email</span>
-              <Pill label={`${urgentCount} Urgent`} color={BASE.red} bg="rgba(239,68,68,0.15)" />
+              {urgentCount > 0 && <Pill label={`${urgentCount} Urgent`} color={BASE.red} bg="rgba(239,68,68,0.15)" />}
             </div>
-            <GBtn color={T.primary} onClick={() => { setActiveNav('email'); }}>Draft All</GBtn>
+            <GBtn color={T.primary} onClick={() => { setActiveNav('email'); }}>Open Inbox</GBtn>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 12 }}>
-            {emails.map(em => (
-              <div key={em.id} className="email-row" onClick={() => { setActiveNav('email'); }} style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '9px 10px', borderRadius: 10, cursor: 'pointer',
-                borderLeft: em.priority === 'urgent' ? '3px solid #ef4444' : '3px solid transparent',
-                background: em.priority === 'urgent' ? 'rgba(239,68,68,0.04)' : 'transparent',
-                transition: 'all 0.15s', marginBottom: 2,
-              }}>
-                <Av name={em.from || em.sender || '?'} size={30} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: em.read ? 500 : 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {em.from || em.sender} <Pill label={em.role || 'Inbox'} color="rgba(255,255,255,0.5)" bg="rgba(255,255,255,0.08)" />
-                  </div>
-                  <div className="truncate-text" style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 1 }}>{em.subject}</div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', fontFamily: "'JetBrains Mono',monospace" }}>{em.time || '8m ago'}</span>
-                  <GBtn color={T.primary} onClick={(e) => { e.stopPropagation(); setActiveNav('email'); }}>Reply</GBtn>
-                </div>
+            {emails.length === 0 ? (
+              <div style={{ padding: '20px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+                No new messages. Live inbox is clear.
               </div>
-            ))}
+            ) : (
+              emails.map(em => (
+                <div key={em.id} className="email-row" onClick={() => { setActiveNav('email'); }} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '9px 10px', borderRadius: 10, cursor: 'pointer',
+                  borderLeft: em.priority === 'urgent' ? '3px solid #ef4444' : '3px solid transparent',
+                  background: em.priority === 'urgent' ? 'rgba(239,68,68,0.04)' : 'transparent',
+                  transition: 'all 0.15s', marginBottom: 2,
+                }}>
+                  <Av name={em.from || em.sender || '?'} size={30} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: em.read ? 500 : 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {em.from || em.sender} <Pill label={em.role || 'Inbox'} color="rgba(255,255,255,0.5)" bg="rgba(255,255,255,0.08)" />
+                    </div>
+                    <div className="truncate-text" style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 1 }}>{em.subject}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', fontFamily: "'JetBrains Mono',monospace" }}>{em.time || 'Today'}</span>
+                    <GBtn color={T.primary} onClick={(e) => { e.stopPropagation(); setActiveNav('email'); }}>Reply</GBtn>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
           <PBtn T={T} style={{ width: '100%', justifyContent: 'center' }} onClick={() => { onOpenCockpit && onOpenCockpit("triage my emails and draft replies for urgent items"); }}>Handle all with AI {I.bolt}</PBtn>
         </Bento>
@@ -556,10 +640,10 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
     stats: () => {
       const analytics = dashboardData?.analytics || DEFAULT_DASHBOARD_DATA.analytics;
       const metrics = [
-        { label: 'Tasks Done', value: String(analytics.tasks_completed ?? 14), delta: '+12%', color: BASE.green },
-        { label: 'Emails Handled', value: String(analytics.emails_handled ?? 28), delta: '+8%', color: T.primary },
-        { label: 'Focus Hours', value: `${analytics.focus_hours ?? 6.8}h`, delta: '+15%', color: BASE.amber },
-        { label: 'AI Saves', value: `${analytics.ai_time_saved ?? 4.5}h`, delta: '+22%', color: T.secondary }
+        { label: 'Tasks Done', value: String(analytics.tasks_completed ?? 0), delta: '+0%', color: BASE.green },
+        { label: 'Emails Handled', value: String(analytics.emails_handled ?? 0), delta: '+0%', color: T.primary },
+        { label: 'Focus Hours', value: `${analytics.focus_hours ?? 0}h`, delta: '+0%', color: BASE.amber },
+        { label: 'AI Saves', value: `${analytics.ai_time_saved ?? 0}h`, delta: '+0%', color: T.secondary }
       ];
       return (
         <Bento draggable onDragStart={e => handleDragStart(e, 'stats')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'stats')} style={{ gridColumn: `span ${SPANS.stats.col}`, gridRow: `span ${SPANS.stats.row}`, display: 'flex', flexDirection: 'column' }}>
@@ -574,7 +658,7 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{s.label}</div>
                 </div>
                 <div style={{ marginTop: 12 }}>
-                  <Sparkline data={(analytics.weekly_data || SPARKLINE_DATA).map(v => typeof v === 'number' ? v : 5)} color={s.color} width={100} height={30} />
+                  <Sparkline data={(analytics.weekly_data || SPARKLINE_DATA).map(v => typeof v === 'number' ? v : 0)} color={s.color} width={100} height={30} />
                 </div>
               </div>
             ))}
@@ -588,70 +672,86 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
       return (
         <Bento draggable onDragStart={e => handleDragStart(e, 'team')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'team')} style={{ gridColumn: `span ${SPANS.team.col}`, gridRow: `span ${SPANS.team.row}` }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Team Status</div>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <tbody>
-              {members.map(m => {
-                const sMap = { done: BASE.green, 'on-track': T.primary, delayed: BASE.amber, missing: BASE.red, on_track: T.primary };
-                const rawStatus = (m.status || 'on-track').toLowerCase();
-                const c = sMap[rawStatus] || T.primary;
-                const displayStatus = rawStatus.replace('_', '-');
-                return (
-                  <tr key={m.id || m.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <td style={{ padding: '8px 0' }}><Av name={m.name} size={28} /></td>
-                    <td style={{ padding: '8px', fontSize: 13, fontWeight: 500 }}>{m.name}</td>
-                    <td style={{ padding: '8px', fontSize: 12, color: 'rgba(255,255,255,0.5)' }} className="truncate-text">{m.task || m.role || ''}</td>
-                    <td style={{ padding: '8px', width: 80 }}>
-                      <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
-                        <div style={{ width: `${m.progress ?? 50}%`, height: '100%', background: c, borderRadius: 2 }} />
-                      </div>
-                    </td>
-                    <td style={{ padding: '8px', textAlign: 'center' }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: c, margin: '0 auto', boxShadow: `0 0 6px ${c}` }} />
-                    </td>
-                    <td style={{ padding: '8px 0', textAlign: 'right' }}>
-                      {(displayStatus === 'delayed' || displayStatus === 'missing') ? <GBtn color={BASE.amber} style={{ display: 'inline-flex' }} onClick={() => onOpenCockpit && onOpenCockpit(`Send a follow up reminder to ${m.name}`)}>{displayStatus === 'missing' ? 'Remind' : 'Follow up'}</GBtn> : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {members.length === 0 ? (
+            <div style={{ padding: '24px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+              No team members configured. Connect Slack or workspace directory.
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <tbody>
+                {members.map(m => {
+                  const sMap = { done: BASE.green, 'on-track': T.primary, delayed: BASE.amber, missing: BASE.red, on_track: T.primary };
+                  const rawStatus = (m.status || 'on-track').toLowerCase();
+                  const c = sMap[rawStatus] || T.primary;
+                  const displayStatus = rawStatus.replace('_', '-');
+                  return (
+                    <tr key={m.id || m.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ padding: '8px 0' }}><Av name={m.name} size={28} /></td>
+                      <td style={{ padding: '8px', fontSize: 13, fontWeight: 500 }}>{m.name}</td>
+                      <td style={{ padding: '8px', fontSize: 12, color: 'rgba(255,255,255,0.5)' }} className="truncate-text">{m.task || m.role || ''}</td>
+                      <td style={{ padding: '8px', width: 80 }}>
+                        <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
+                          <div style={{ width: `${m.progress ?? 0}%`, height: '100%', background: c, borderRadius: 2 }} />
+                        </div>
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'center' }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: c, margin: '0 auto', boxShadow: `0 0 6px ${c}` }} />
+                      </td>
+                      <td style={{ padding: '8px 0', textAlign: 'right' }}>
+                        {(displayStatus === 'delayed' || displayStatus === 'missing') ? <GBtn color={BASE.amber} style={{ display: 'inline-flex' }} onClick={() => onOpenCockpit && onOpenCockpit(`Send a follow up reminder to ${m.name}`)}>{displayStatus === 'missing' ? 'Remind' : 'Follow up'}</GBtn> : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </Bento>
       );
     },
 
     deploy: () => {
       const pipelines = dashboardData?.deployments || DEFAULT_DASHBOARD_DATA.deployments;
-      const current = pipelines[0] || DEFAULT_DASHBOARD_DATA.deployments[0];
+      const current = pipelines[0] || null;
       return (
         <Bento draggable onDragStart={e => handleDragStart(e, 'deploy')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'deploy')} style={{ gridColumn: `span ${SPANS.deploy.col}`, gridRow: `span ${SPANS.deploy.row}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, marginRight: 16 }}>Deployment Pipeline</span>
-              {[
-                { label: 'Build', status: 'done' },
-                { label: 'Test', status: 'done' },
-                { label: `Staging ${Math.round(current.progress || 68)}%`, status: current.status === 'live' ? 'done' : 'active' },
-                { label: 'Production live', status: current.status === 'live' ? 'done' : 'active' }
-              ].map((step, i, arr) => (
-                <React.Fragment key={step.label}>
-                  <div style={{ padding: '6px 12px', borderRadius: 99, background: step.status === 'done' ? `${BASE.green}15` : step.status === 'active' ? `${T.primary}15` : 'rgba(255,255,255,0.05)', border: `1px solid ${step.status === 'done' ? BASE.green : step.status === 'active' ? T.primary : 'rgba(255,255,255,0.1)'}`, color: step.status === 'wait' ? 'rgba(255,255,255,0.5)' : '#fff', fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {step.status === 'done' && <span style={{ color: BASE.green }}>✓</span>}
-                    {step.status === 'active' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.primary, animation: 'pulse 2s infinite' }} />}
-                    {step.label}
-                  </div>
-                  {i < arr.length - 1 && <span style={{ color: 'rgba(255,255,255,0.2)' }}>→</span>}
-                </React.Fragment>
-              ))}
+          {!current ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0' }}>
+              <div>
+                <span style={{ fontSize: 14, fontWeight: 700 }}>Deployment Pipeline</span>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>No active deployment pipelines. Connect GitHub to track CI/CD.</div>
+              </div>
+              <GBtn color={T.primary} onClick={() => setActiveNav('integrations')}>Connect GitHub</GBtn>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-               <div style={{ textAlign: 'right' }}>
-                 <div style={{ fontSize: 13, fontWeight: 600 }}>{current.version || 'v2.4.1'}</div>
-                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{current.uptime || '99.98% Uptime'}</div>
-               </div>
-               <GBtn color={BASE.red} onClick={() => onOpenCockpit && onOpenCockpit("Check deployment health and logs")}>Rollback</GBtn>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, marginRight: 16 }}>Deployment Pipeline</span>
+                {[
+                  { label: 'Build', status: 'done' },
+                  { label: 'Test', status: 'done' },
+                  { label: `Staging ${Math.round(current.progress || 0)}%`, status: current.status === 'live' ? 'done' : 'active' },
+                  { label: 'Production live', status: current.status === 'live' ? 'done' : 'active' }
+                ].map((step, i, arr) => (
+                  <React.Fragment key={step.label}>
+                    <div style={{ padding: '6px 12px', borderRadius: 99, background: step.status === 'done' ? `${BASE.green}15` : step.status === 'active' ? `${T.primary}15` : 'rgba(255,255,255,0.05)', border: `1px solid ${step.status === 'done' ? BASE.green : step.status === 'active' ? T.primary : 'rgba(255,255,255,0.1)'}`, color: step.status === 'wait' ? 'rgba(255,255,255,0.5)' : '#fff', fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {step.status === 'done' && <span style={{ color: BASE.green }}>✓</span>}
+                      {step.status === 'active' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.primary, animation: 'pulse 2s infinite' }} />}
+                      {step.label}
+                    </div>
+                    {i < arr.length - 1 && <span style={{ color: 'rgba(255,255,255,0.2)' }}>→</span>}
+                  </React.Fragment>
+                ))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                 <div style={{ textAlign: 'right' }}>
+                   <div style={{ fontSize: 13, fontWeight: 600 }}>{current.version || 'v1.0.0'}</div>
+                   <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{current.uptime || 'Active'}</div>
+                 </div>
+                 <GBtn color={BASE.red} onClick={() => onOpenCockpit && onOpenCockpit("Check deployment health and logs")}>Rollback</GBtn>
+              </div>
             </div>
-          </div>
+          )}
         </Bento>
       );
     },
@@ -698,12 +798,7 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
     },
 
     docs: () => {
-      const docs = dashboardData?.documents || [
-        { id: '1', name: 'Q3_Financial_Report.pdf', status: 'analyzed' },
-        { id: '2', name: 'Client_SLA_Agreement_2026.docx', status: 'ready' },
-        { id: '3', name: 'Sprint_14_Architecture_Spec.md', status: 'analyzed' },
-        { id: '4', name: 'HR_Offsite_Policy.pdf', status: 'pending' },
-      ];
+      const docs = dashboardData?.documents || [];
       const docStatusColor = { analyzed: BASE.green, pending: BASE.amber, ready: T.primary, issues: BASE.red };
       return (
       <Bento draggable onDragStart={e => handleDragStart(e, 'docs')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'docs')} style={{ gridColumn: `span ${SPANS.docs.col}`, gridRow: `span ${SPANS.docs.row}`, display: 'flex', flexDirection: 'column' }}>
@@ -712,24 +807,27 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
           <Pill label={`${docs.length} files`} color="rgba(255,255,255,0.4)" bg="rgba(255,255,255,0.06)" />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-          {docs.map(d => {
-            const status = (d.status || 'ready').toLowerCase();
-            const sc = docStatusColor[status] || BASE.green;
-            const ext = (d.name || d.fileName || 'file').split('.').pop()?.toUpperCase() || 'FILE';
-            return (
-            <div key={d.id || d.name} className="email-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px', borderRadius: 8, transition: 'all 0.15s', cursor: 'pointer' }} onClick={() => onOpenCockpit && onOpenCockpit(`Summarize the document ${d.name}`)}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: `${sc}15`, border: `1px solid ${sc}25`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: sc, flexShrink: 0, fontSize: 13 }}>{I.docs}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="truncate-text" style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{d.name || d.fileName || 'Untitled'}</div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2, fontFamily: "'JetBrains Mono',monospace" }}>{ext}</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: `${sc}15`, border: `1px solid ${sc}30`, color: sc, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace" }}>{status}</span>
-                <GBtn color={T.primary}>Ask AI</GBtn>
-              </div>
+          {docs.length === 0 ? (
+            <div style={{ padding: '24px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+              No documents uploaded yet. Upload files to query with AI.
             </div>
-            );
-          })}
+          ) : (
+            docs.map(d => {
+              const status = (d.status || 'ready').toLowerCase();
+              const sc = docStatusColor[status] || BASE.green;
+              const ext = (d.name || d.fileName || 'file').split('.').pop()?.toUpperCase() || 'FILE';
+              return (
+                <div key={d.id || d.name} className="email-row" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px', borderRadius: 8, transition: 'all 0.15s', cursor: 'pointer' }} onClick={() => onOpenCockpit && onOpenCockpit(`Summarize the document ${d.name}`)}>
+                  <div style={{ width: 30, height: 30, borderRadius: 8, background: `${sc}15`, border: `1px solid ${sc}25`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: sc, flexShrink: 0, fontSize: 13 }}>{I.docs}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="truncate-text" style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{d.name || d.fileName || 'Untitled'}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2, fontFamily: "'JetBrains Mono',monospace" }}>{ext}</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: sc, fontWeight: 600, textTransform: 'capitalize' }}>{status}</span>
+                </div>
+              );
+            })
+          )}
         </div>
         <div style={{ marginTop: 12, border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 10, padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
           📤 Drop files here
@@ -809,10 +907,52 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
 
            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
              <div ref={notifRef} style={{ position: 'relative' }}>
-                <button onClick={() => setShowNotif(!showNotif)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', position: 'relative', display: 'flex' }}>
+                <button
+                  onClick={() => setShowNotif(!showNotif)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: showNotif ? '#fff' : 'rgba(255,255,255,0.6)',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    display: 'flex',
+                    padding: 4,
+                  }}
+                  title="Notifications & Reminders"
+                >
                    {I.bell}
-                   <span style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, background: BASE.red, borderRadius: '50%', border: '2px solid #0a0a0d' }} />
+                   {unreadNotifs > 0 ? (
+                     <span style={{
+                       position: 'absolute',
+                       top: -3,
+                       right: -3,
+                       minWidth: 16,
+                       height: 16,
+                       background: BASE.red,
+                       color: '#fff',
+                       borderRadius: 99,
+                       fontSize: 10,
+                       fontWeight: 700,
+                       display: 'flex',
+                       alignItems: 'center',
+                       justifyContent: 'center',
+                       padding: '0 3px',
+                       border: '2px solid #0a0a0d',
+                     }}>
+                       {unreadNotifs > 9 ? '9+' : unreadNotifs}
+                     </span>
+                   ) : (
+                     <span style={{ position: 'absolute', top: -1, right: -1, width: 7, height: 7, background: T.primary, borderRadius: '50%', border: '2px solid #0a0a0d' }} />
+                   )}
                 </button>
+                <NotificationCenter
+                  isOpen={showNotif}
+                  onClose={() => setShowNotif(false)}
+                  unreadCount={unreadNotifs}
+                  onRefreshCount={() => setUnreadNotifs(0)}
+                  onTriggerToast={addToast}
+                  userEmail={user?.email}
+                />
              </div>
              
              <div ref={userRef} style={{ position: 'relative' }}>
@@ -835,7 +975,14 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
                        ))}
                     </div>
                     <div style={{ padding: '8px 12px 4px' }}>
-                      <GBtn color={BASE.red} style={{ width: '100%', justifyContent: 'center' }} onClick={async () => { try { await backendLogout(); } catch {} localStorage.removeItem('wp_tokens'); signOut(auth); }}>Sign out</GBtn>
+                      <GBtn 
+                        color={BASE.red} 
+                        disabled={signingOut}
+                        style={{ width: '100%', justifyContent: 'center', opacity: signingOut ? 0.7 : 1 }} 
+                        onClick={handleSignOut}
+                      >
+                        {signingOut ? 'Signing out...' : 'Sign out'}
+                      </GBtn>
                     </div>
                   </div>
                 )}
@@ -857,7 +1004,7 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
           {activeNav === 'documents'    && <DocumentsPage T={T} />}
           {activeNav === 'analytics'    && <AnalyticsPage T={T} />}
           {activeNav === 'integrations' && <IntegrationsPage T={T} />}
-          {activeNav === 'settings'     && <SettingsPage T={T} user={user} onSignOut={async () => { try { await backendLogout(); } catch(e) {} localStorage.removeItem('wp_tokens'); signOut(auth); }} />}
+          {activeNav === 'settings'     && <SettingsPage T={T} user={user} onSignOut={handleSignOut} />}
 
           {activeNav === 'dashboard' && (
              <div>
@@ -1050,6 +1197,7 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
            .alerts-container { display: none !important; }
         }
       `}</style>
+      <ToastNotification toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

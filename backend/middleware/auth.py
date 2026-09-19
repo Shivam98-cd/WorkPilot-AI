@@ -101,6 +101,8 @@ async def get_current_user(
     # 1. Backend JWT — local decode, no network call, no blocking
     try:
         payload = verify_token(token, token_type="access")
+        if "uid" not in payload:
+            payload["uid"] = payload.get("sub") or payload.get("user_id") or ""
         return payload
     except AuthenticationException:
         pass

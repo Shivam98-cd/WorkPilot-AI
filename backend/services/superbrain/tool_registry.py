@@ -197,13 +197,17 @@ ALL_TOOLS = [
     }},
     {"type": "function", "function": {
         "name": "github_tool",
-        "description": "Interact with GitHub: list PRs, issues, commits, create issues. Use when user asks about GitHub repositories.",
+        "description": "Interact with GitHub: list PRs, issues, commits, create issues, and create repositories. Use when user asks about GitHub or wants to create a new repository.",
         "parameters": {"type": "object", "properties": {
-            "action": {"type": "string", "enum": ["list_prs", "list_issues", "get_commits", "create_issue"]},
-            "repo":   {"type": "string", "description": "Repository name e.g. 'org/repo'"},
-            "limit":  {"type": "integer", "default": 10},
-            "title":  {"type": "string", "description": "Issue title for create_issue"},
-            "body":   {"type": "string", "description": "Issue body for create_issue"},
+            "action":      {"type": "string", "enum": ["list_prs", "list_issues", "get_commits", "create_issue", "create_repo", "list_repos"]},
+            "repo":        {"type": "string", "description": "Target repository in 'owner/repo' format (e.g. 'octocat/Hello-World'). If the user provides a placeholder like 'owner/repo' or omits the repository, pass it as is or leave empty so available repositories can be retrieved."},
+            "name":        {"type": "string", "description": "Repository name to create (for create_repo)"},
+            "description": {"type": "string", "description": "Repository description (for create_repo or issue)"},
+            "private":     {"type": "boolean", "default": False, "description": "Whether the new repository should be private (for create_repo)"},
+            "auto_init":   {"type": "boolean", "default": True, "description": "Initialize repository with a README (for create_repo)"},
+            "limit":       {"type": "integer", "default": 10},
+            "title":       {"type": "string", "description": "Issue title for create_issue"},
+            "body":        {"type": "string", "description": "Issue body for create_issue"},
         }, "required": ["action"]},
     }},
     {"type": "function", "function": {
@@ -277,5 +281,33 @@ ALL_TOOLS = [
             "language": {"type": "string", "description": "Programming language e.g. Python, JavaScript"},
             "action":   {"type": "string", "enum": ["explain", "debug", "optimize", "document"]},
         }, "required": ["code", "action"]},
+    }},
+
+    # ── Autonomous Cross-Platform Multi-Hop Tools ──────────────────────────────
+    {"type": "function", "function": {
+        "name": "prepare_meeting_briefing",
+        "description": "Autonomous Multi-Hop Workflow: Inspects Google Calendar for upcoming meetings, resolves attendees, fetches related Gmail email threads, cross-references Notion project notes, and compiles an executive pre-meeting briefing.",
+        "parameters": {"type": "object", "properties": {
+            "meeting_query":  {"type": "string", "description": "Meeting title or attendee name e.g. 'Alex', 'Sprint Review'"},
+            "attendee_email": {"type": "string", "description": "Specific attendee email to filter context for"},
+            "days_ahead":     {"type": "integer", "default": 2, "description": "Days ahead to look for meetings"},
+        }, "required": []},
+    }},
+    {"type": "function", "function": {
+        "name": "inbox_triage_workflow",
+        "description": "Autonomous Multi-Hop Workflow: Triages unread Gmail inbox, categorizes emails into urgent/action items, cross-references calendar commitments, and prepares draft replies.",
+        "parameters": {"type": "object", "properties": {
+            "urgency_filter":      {"type": "string", "enum": ["urgent", "all", "action_required"], "default": "urgent"},
+            "draft_replies":       {"type": "boolean", "default": True, "description": "Whether to auto-generate ready-to-send draft responses"},
+            "limit":               {"type": "integer", "default": 10},
+        }, "required": []},
+    }},
+    {"type": "function", "function": {
+        "name": "workspace_cross_search",
+        "description": "Autonomous Multi-Hop Workflow: Searches across Gmail emails, Google Calendar events, Notion notes, and GitHub PRs simultaneously, synthesizing a 360-degree unified view.",
+        "parameters": {"type": "object", "properties": {
+            "query":     {"type": "string", "description": "Topic, person, or keyword to search across platforms"},
+            "platforms": {"type": "array", "items": {"type": "string"}, "description": "Platforms to search: gmail, calendar, notion, github"},
+        }, "required": ["query"]},
     }},
 ]

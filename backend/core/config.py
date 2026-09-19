@@ -92,6 +92,10 @@ class Settings(BaseSettings):
 
     # Integration OAuth redirects
     BACKEND_PUBLIC_URL: str = "http://localhost:8000"
+    # When running via ngrok/tunnel, set this to override BACKEND_PUBLIC_URL for ALL
+    # OAuth redirect URIs (Zoom, Microsoft, Slack, Notion, Jira, GitHub, Google, etc.)
+    # e.g. OAUTH_PUBLIC_URL=https://defunctive-nondefiantly-cornelia.ngrok-free.dev
+    OAUTH_PUBLIC_URL: str = ""
     FRONTEND_OAUTH_REDIRECT: str = "http://localhost:5173/dashboard"
     INTEGRATION_TOKEN_ENCRYPTION_KEY: str = ""
 

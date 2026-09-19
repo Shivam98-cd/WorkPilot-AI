@@ -58,7 +58,7 @@ const AutomationWorkspace = memo(function AutomationWorkspace() {
       logs: [
         '$ workpilot email --run-followup --delay=3d --heuristics=tone-matching',
         '[DAEMON] Running batch query: CRM deals status where updated_at < date_sub(now(), interval 3 day)',
-        '[PARSER] Key hit: Deal ID: acme_corp_849; Status: Awaiting Client Reply.',
+        '[PARSER] Key hit: Deal ID: client_partner_849; Status: Awaiting Client Reply.',
         '[NLP_INGEST] Tokenizing email corpus... Mimicry model loaded: Style=Concise.',
         '[TRANSFORMER] Drafting message payload: "Hi Sarah, checking if you had..."',
         '[API_COMMIT] Injecting draft transaction block to user Gmail drafts folder... [OK]',
