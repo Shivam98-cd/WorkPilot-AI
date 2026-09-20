@@ -2419,10 +2419,10 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#000', color: '#fff', fontFamily: "'Inter',sans-serif", overflow: 'hidden', position: 'relative' }}>
+    <div className="cockpit-root" style={{ display: 'flex', height: '100vh', background: 'var(--wp-bg, #000)', color: 'var(--wp-text, #fff)', fontFamily: "'Inter',sans-serif", overflow: 'hidden', position: 'relative' }}>
       
       {/* ══ LEFT SIDEBAR ══ */}
-      <aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+      <aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`} style={{ background: 'var(--wp-bg-sidebar, #08080b)', borderRight: '1px solid var(--wp-border, rgba(255,255,255,0.07))' }}>
         <div style={{ padding: '16px 16px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)', position: 'relative' }}>
           <button onClick={() => setSidebarOpen(false)} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: 4 }} title="Collapse sidebar">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -2562,15 +2562,15 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
       </aside>
 
       {/* ══ MAIN CHAT AREA ══ */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, position: 'relative', background: 'var(--wp-bg, #000)' }}>
 
         {/* ══ UNIFIED 56px EXECUTIVE TOPBAR ══ */}
         <header style={{ 
           height: 56, 
-          background: 'rgba(10, 10, 13, 0.85)', 
+          background: 'var(--wp-surface, rgba(10, 10, 13, 0.85))', 
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
-          borderBottom: '1px solid rgba(255,255,255,0.08)', 
+          borderBottom: '1px solid var(--wp-border, rgba(255,255,255,0.08))', 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'space-between',
@@ -2820,22 +2820,24 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
 
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: msg.r === 'user' ? 'flex-end' : 'flex-start', maxWidth: msg.r === 'ai' ? '78%' : '65%', minWidth: 80 }}>
                 
-                <div style={{
-                  padding: msg.r === 'user' ? '12px 16px' : '14px 18px',
-                  borderRadius: msg.r === 'user' ? '18px 4px 18px 18px' : '6px 18px 18px 18px',
-                  background: msg.r === 'user' 
-                    ? `linear-gradient(135deg,${T.primary},${T.secondary})` 
-                    : msg.error 
-                      ? 'rgba(239,68,68,0.1)' 
-                      : 'rgba(15, 20, 32, 0.75)',
-                  backdropFilter: 'blur(12px)',
-                  WebkitBackdropFilter: 'blur(12px)',
-                  border: msg.r === 'ai' ? `1px solid ${msg.error ? 'rgba(239,68,68,0.35)' : 'rgba(255,255,255,0.09)'}` : 'none',
-                  borderLeft: msg.r === 'ai' ? `3px solid ${msg.error ? '#ef4444' : 'rgba(0, 210, 255, 0.7)'}` : 'none',
-                  fontSize: 14, lineHeight: 1.7, color: '#fff',
-                  boxShadow: msg.r === 'user' ? `0 6px 24px ${T.glow}` : '0 4px 20px rgba(0,0,0,0.35)',
-                  width: '100%'
-                }}>
+                <div
+                  className={msg.r === 'ai' ? 'chat-msg-ai' : 'chat-msg-user'}
+                  style={{
+                    padding: msg.r === 'user' ? '12px 16px' : '14px 18px',
+                    borderRadius: msg.r === 'user' ? '18px 4px 18px 18px' : '6px 18px 18px 18px',
+                    background: msg.r === 'user' 
+                      ? `linear-gradient(135deg,${T.primary},${T.secondary})` 
+                      : msg.error 
+                        ? 'rgba(239,68,68,0.1)' 
+                        : 'var(--wp-surface, rgba(15, 20, 32, 0.75))',
+                    backdropFilter: 'blur(12px)',
+                    WebkitBackdropFilter: 'blur(12px)',
+                    border: msg.r === 'ai' ? `1px solid ${msg.error ? 'rgba(239,68,68,0.35)' : 'var(--wp-border, rgba(255,255,255,0.09))'}` : 'none',
+                    borderLeft: msg.r === 'ai' ? `3px solid ${msg.error ? '#ef4444' : T.primary}` : 'none',
+                    fontSize: 14, lineHeight: 1.7, color: msg.r === 'user' ? '#fff' : 'var(--wp-text, #fff)',
+                    boxShadow: msg.r === 'user' ? `0 6px 24px ${T.glow}` : '0 4px 20px rgba(0,0,0,0.35)',
+                    width: '100%'
+                  }}>
                   {(!msg.text && msg.streaming && !msg.done) ? (
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '2px 0' }}>
                       <div style={{
@@ -3479,6 +3481,32 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
           .status-pill:nth-child(3) { display: none; }
           .status-pill { font-size: 9px; }
           .sinput { width: 34px!important; padding: 6px 10px!important; }
+        }
+
+        /* ── AICockpit Specific Light Theme Overrides ── */
+        body.wp-light .cockpit-root {
+          background: #f8fafc !important;
+          color: #0f172a !important;
+        }
+        body.wp-light .chat-msg-ai {
+          background: #ffffff !important;
+          border: 1px solid rgba(0, 0, 0, 0.08) !important;
+          border-left: 3px solid #2563eb !important;
+          color: #0f172a !important;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04) !important;
+        }
+        body.wp-light .chat-msg-ai * {
+          color: #0f172a;
+        }
+        body.wp-light .chat-msg-ai a {
+          color: #2563eb !important;
+        }
+        body.wp-light .new-chat-btn {
+          background: #2563eb !important;
+          color: #ffffff !important;
+        }
+        body.wp-light .new-chat-btn * {
+          color: #ffffff !important;
         }
       `}</style>
       <PersonalMemoryModal isOpen={showMemoryModal} onClose={() => setShowMemoryModal(false)} />

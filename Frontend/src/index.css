@@ -500,9 +500,9 @@ body.wp-light {
   --border: rgba(0, 0, 0, 0.08);
   --text-muted: #64748b;
   --wp-bg: #f8fafc;
-  --wp-bg-sidebar: #f1f5f9;
+  --wp-bg-sidebar: #ffffff;
   --wp-surface: #ffffff;
-  --wp-surface-hover: #f8fafc;
+  --wp-surface-hover: #f1f5f9;
   --wp-border: rgba(0, 0, 0, 0.08);
   --wp-text: #0f172a;
   --wp-text-muted: #64748b;
@@ -529,32 +529,82 @@ body.wp-light p {
   color: #334155;
 }
 
-/* Light Mode Cards & Surfaces */
+/* ── Light Mode Universal Text Contrast Overrides ── */
+body.wp-light .sidebar,
+body.wp-light header,
+body.wp-light nav,
 body.wp-light .card,
 body.wp-light .glass-card {
+  color: #0f172a !important;
+}
+
+/* Force dark text for elements with inline white/light colors in light mode */
+body.wp-light [style*="color: #fff"]:not(.btn-primary):not([style*="linear-gradient"]):not([style*="background: #2563eb"]),
+body.wp-light [style*="color:#fff"]:not(.btn-primary):not([style*="linear-gradient"]):not([style*="background: #2563eb"]),
+body.wp-light [style*="color: white"]:not(.btn-primary),
+body.wp-light [style*="color: rgb(255, 255, 255)"]:not(.btn-primary) {
+  color: #0f172a !important;
+}
+
+body.wp-light [style*="color: rgba(255, 255, 255"]:not(.btn-primary),
+body.wp-light [style*="color:rgba(255,255,255"]:not(.btn-primary) {
+  color: #475569 !important;
+}
+
+/* Keep text white inside primary gradient buttons or filled primary badges */
+body.wp-light .btn-primary,
+body.wp-light .btn-primary *,
+body.wp-light [style*="background: linear-gradient"] *,
+body.wp-light [style*="background:linear-gradient"] * {
+  color: #ffffff;
+}
+
+/* ── Light Mode Surfaces & Cards ── */
+body.wp-light .card,
+body.wp-light .glass-card,
+body.wp-light [style*="background: #101014"],
+body.wp-light [style*="background: #08080b"],
+body.wp-light [style*="background: #0c0c0f"] {
   background: #ffffff !important;
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
   color: #0f172a !important;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03) !important;
 }
 
-body.wp-light .card:hover,
-body.wp-light .glass-card:hover {
-  border-color: rgba(37, 99, 235, 0.25) !important;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08) !important;
-}
-
-/* Light Mode Navigation, Header & Sidebar */
+/* ── Light Mode Navigation & Header ── */
 body.wp-light nav,
 body.wp-light header {
-  background: rgba(255, 255, 255, 0.95) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
   color: #0f172a !important;
 }
 
+body.wp-light header button,
+body.wp-light header span,
+body.wp-light header div {
+  color: #0f172a !important;
+}
+
+body.wp-light .back-btn {
+  color: #0f172a !important;
+}
+
+body.wp-light .back-btn:hover {
+  background: #f1f5f9 !important;
+  color: #2563eb !important;
+}
+
+/* ── Light Mode Sidebar ── */
 body.wp-light .sidebar {
-  background: #f8fafc !important;
+  background: #ffffff !important;
   border-right: 1px solid rgba(0, 0, 0, 0.08) !important;
+  color: #0f172a !important;
+}
+
+body.wp-light .sidebar div,
+body.wp-light .sidebar span,
+body.wp-light .sidebar button {
+  color: #0f172a !important;
 }
 
 body.wp-light .sidebar nav button {
@@ -563,13 +613,117 @@ body.wp-light .sidebar nav button {
 
 body.wp-light .sidebar nav button:hover,
 body.wp-light .sidebar nav button.active {
-  background: #ffffff !important;
+  background: #f1f5f9 !important;
   color: #2563eb !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
 }
 
-/* Light Mode Form Elements */
-body.wp-light input,
+body.wp-light .new-chat-btn {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25) !important;
+}
+
+body.wp-light .new-chat-btn * {
+  color: #ffffff !important;
+}
+
+body.wp-light .new-chat-btn:hover {
+  background: #1d4ed8 !important;
+}
+
+body.wp-light .pin-btn {
+  color: #334155 !important;
+}
+
+body.wp-light .pin-btn:hover {
+  background: #f1f5f9 !important;
+}
+
+body.wp-light .history-row {
+  color: #475569 !important;
+}
+
+body.wp-light .history-row:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+body.wp-light .section-toggle {
+  color: #64748b !important;
+}
+
+/* ── Light Mode AI Cockpit & Chat Area ── */
+body.wp-light [style*="height: 100vh"][style*="background: #000"],
+body.wp-light [style*="height: 100vh"][style*="background:#000"] {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* AI Message Bubble in Light Mode */
+body.wp-light .msg-wrap [style*="rgba(15, 20, 32"] {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-left: 3px solid #2563eb !important;
+  color: #0f172a !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04) !important;
+}
+
+body.wp-light .msg-wrap [style*="rgba(15, 20, 32"] * {
+  color: #0f172a;
+}
+
+body.wp-light .msg-wrap [style*="rgba(15, 20, 32"] a {
+  color: #2563eb !important;
+}
+
+/* Input composer bar in Light Mode */
+body.wp-light .ibar {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06) !important;
+}
+
+body.wp-light .ibar textarea {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #0f172a !important;
+}
+
+body.wp-light .ibar textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Quick prompt chips in Light Mode */
+body.wp-light .chip-h {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+body.wp-light .chip-h:hover {
+  background: #f1f5f9 !important;
+  border-color: #2563eb !important;
+  color: #2563eb !important;
+}
+
+/* Live Integrations Panel in Light Mode */
+body.wp-light [style*="top: 62"][style*="background: #101014"] {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.1) !important;
+}
+
+body.wp-light [style*="top: 62"] button {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* ── Light Mode Form Elements ── */
+body.wp-light input:not([type="button"]):not([type="submit"]),
 body.wp-light textarea,
 body.wp-light select {
   background: #ffffff !important;
@@ -590,7 +744,14 @@ body.wp-light textarea::placeholder {
   color: #94a3b8 !important;
 }
 
-/* Light Mode Tables & Lists */
+/* Search input in Light Mode */
+body.wp-light .sinput {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+/* ── Light Mode Tables & Lists ── */
 body.wp-light table {
   color: #0f172a !important;
 }
@@ -611,7 +772,7 @@ body.wp-light .pg-row:hover {
   background: #f8fafc !important;
 }
 
-/* Light Mode Buttons */
+/* ── Light Mode Buttons ── */
 body.wp-light .btn-secondary {
   background: #ffffff !important;
   border: 1px solid #cbd5e1 !important;
@@ -629,12 +790,12 @@ body.wp-light .btn-ghost:hover {
   color: #0f172a !important;
 }
 
-/* Light Mode Sticky Page Headers */
+/* ── Light Mode Sticky Headers ── */
 body.wp-light div[style*="position: sticky"] {
   background: #f8fafc !important;
 }
 
-/* Light Mode Scrollbars */
+/* ── Light Mode Scrollbars ── */
 body.wp-light ::-webkit-scrollbar-track {
   background: #f1f5f9;
 }
@@ -648,7 +809,7 @@ body.wp-light ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.3);
 }
 
-/* Light Mode Landing Page Nav Links */
+/* ── Light Mode Landing Page Links ── */
 body.wp-light .nav-link {
   color: #475569 !important;
 }
@@ -656,4 +817,5 @@ body.wp-light .nav-link {
 body.wp-light .nav-link:hover {
   color: #0f172a !important;
 }
+
 
