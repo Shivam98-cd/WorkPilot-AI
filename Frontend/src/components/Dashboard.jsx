@@ -749,7 +749,7 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <span style={{ fontFamily: 'Sora', fontWeight: 800, fontSize: 26 }}>{s.value}</span>
-                    <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: s.delta.startsWith('+') ? `${BASE.green}20` : `${BASE.red}20`, color: s.delta.startsWith('+') ? BASE.green : BASE.red }}>{s.delta}</span>
+                    <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 6, background: String(s.delta || '').startsWith('+') ? `${BASE.green}20` : `${BASE.red}20`, color: String(s.delta || '').startsWith('+') ? BASE.green : BASE.red }}>{s.delta || '+0%'}</span>
                   </div>
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{s.label}</div>
                 </div>

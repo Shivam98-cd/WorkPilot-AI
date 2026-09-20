@@ -3276,7 +3276,7 @@ export function AnalyticsPage({ T }) {
           <Card key={k.label} accent={k.color} style={{ borderTop: `2px solid ${k.color}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
               <div style={{ fontSize: 11, color: C.muted }}>{k.label}</div>
-              <Tag label={k.delta} color={k.delta.startsWith('+') ? C.green : C.red} />
+              <Tag label={k.delta} color={String(k.delta || '').startsWith('+') ? C.green : C.red} />
             </div>
             <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 26, color: C.text }}>{k.value}</div>
             <div style={{ marginTop: 12, height: 24, display: 'flex', alignItems: 'flex-end', gap: 2 }}>

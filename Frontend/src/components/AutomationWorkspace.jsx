@@ -262,8 +262,12 @@ const AutomationWorkspace = memo(function AutomationWorkspace() {
     
     let currentLine = 0;
     const interval = setInterval(() => {
-      if (currentLine < currentWorkflow.logs.length) {
-        setLogLines(prev => [...prev, currentWorkflow.logs[currentLine]]);
+      const logs = currentWorkflow?.logs || [];
+      if (currentLine < logs.length) {
+        const nextLine = logs[currentLine];
+        if (typeof nextLine === 'string') {
+          setLogLines(prev => [...prev, nextLine]);
+        }
         currentLine++;
       } else {
         clearInterval(interval);
@@ -505,12 +509,13 @@ const AutomationWorkspace = memo(function AutomationWorkspace() {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', overflowY: 'auto', maxHeight: '280px' }}>
-                {logLines.map((line, idx) => {
+                {logLines.filter(Boolean).map((line, idx) => {
                   let color = '#ffffff';
-                  if (line.startsWith('$')) color = 'var(--blue)';
-                  else if (line.startsWith('[SYS_TRIGGER]') || line.startsWith('[DAEMON]') || line.startsWith('[WEBHOOK]')) color = 'var(--amber)';
-                  else if (line.startsWith('[DB_TRANSACTION]') || line.startsWith('[API_COMMIT]') || line.startsWith('[GIT]')) color = 'var(--purple)';
-                  else if (line.startsWith('[SUCCESS]') || line.startsWith('[REPLAY_SUCCESS]') || line.startsWith('[STATUS]')) color = 'var(--green)';
+                  const strLine = typeof line === 'string' ? line : String(line || '');
+                  if (strLine.startsWith('$')) color = 'var(--blue)';
+                  else if (strLine.startsWith('[SYS_TRIGGER]') || strLine.startsWith('[DAEMON]') || strLine.startsWith('[WEBHOOK]')) color = 'var(--amber)';
+                  else if (strLine.startsWith('[DB_TRANSACTION]') || strLine.startsWith('[API_COMMIT]') || strLine.startsWith('[GIT]')) color = 'var(--purple)';
+                  else if (strLine.startsWith('[SUCCESS]') || strLine.startsWith('[REPLAY_SUCCESS]') || strLine.startsWith('[STATUS]')) color = 'var(--green)';
 
                   return (
                     <div 
@@ -521,7 +526,7 @@ const AutomationWorkspace = memo(function AutomationWorkspace() {
                         animation: 'fadeInLine 0.25s ease forwards'
                       }}
                     >
-                      {line}
+                      {strLine}
                     </div>
                   );
                 })}
