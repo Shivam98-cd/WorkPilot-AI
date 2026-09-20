@@ -310,4 +310,14 @@ ALL_TOOLS = [
             "platforms": {"type": "array", "items": {"type": "string"}, "description": "Platforms to search: gmail, calendar, notion, github"},
         }, "required": ["query"]},
     }},
+    {"type": "function", "function": {
+        "name": "query_knowledge_base",
+        "description": "Search company documents, uploaded files, knowledge items, and vector knowledge base using Pinecone semantic vector search. Use when the user asks questions about uploaded files, guidelines, reports, documents, or company knowledge.",
+        "parameters": {"type": "object", "properties": {
+            "query":  {"type": "string", "description": "The search question or semantic topic to query within documents"},
+            "doc_id": {"type": "string", "description": "Optional specific document ID to restrict search to"},
+            "top_k":  {"type": "integer", "default": 4, "description": "Number of relevant chunks to retrieve"},
+        }, "required": ["query"]},
+    }},
 ]
+

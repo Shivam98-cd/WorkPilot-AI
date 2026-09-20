@@ -58,7 +58,9 @@ THINK_MSGS = {
     "prepare_meeting_briefing":"🎯 Assembling cross-platform briefing (Calendar + Gmail + Notion)...",
     "inbox_triage_workflow":  "📬 Running automated inbox triage & conflict resolution...",
     "workspace_cross_search": "🌐 Running 360° cross-search across connected workspace...",
+    "query_knowledge_base":   "📚 Searching Pinecone Vector Knowledge Base...",
 }
+
 
 
 def _sse(obj: dict) -> str:
@@ -738,7 +740,31 @@ When the user needs to select between options (such as picking a repository, cha
                 "status": "success"
             }
 
+        if name == "query_knowledge_base":
+            query_str = (args.get("query") or "").strip()
+            doc_id = args.get("doc_id")
+            top_k = int(args.get("top_k", 4))
+            from services.vector_knowledge_service import vector_knowledge_service
+            matches = vector_knowledge_service.semantic_search(uid, query_str, top_k=top_k, doc_id=doc_id)
+            if not matches:
+                return {
+                    "success": True,
+                    "query": query_str,
+                    "matches": [],
+                    "message": "No matching documents or excerpts found in the vector knowledge base for this query.",
+                }
+            ans = vector_knowledge_service.answer_query(uid, doc_id or matches[0]["doc_id"], query_str)
+            return {
+                "success": True,
+                "query": query_str,
+                "matches": matches,
+                "synthesized_answer": ans.get("answer"),
+                "sources": ans.get("sources", []),
+                "cloud_vector_db": matches[0].get("source", "pinecone_cloud"),
+            }
+
         return {"error": f"Unknown tool: {name}", "tool": name}
+
 
     async def _execute_tool(self, name: str, args: dict, uid: str) -> dict:
         """Execute tool and run critic validation."""
@@ -895,7 +921,9 @@ When the user needs to select between options (such as picking a repository, cha
                     "task_management": "Task Manager",
                     "diagnose_issue": "Diagnostics",
                     "set_reminder": "Smart Reminder",
+                    "query_knowledge_base": "Pinecone Vector RAG",
                 }
+
                 tool_names = [tc.function.name for tc in tool_calls]
                 friendly_names = [FRIENDLY_TOOL_NAMES.get(name, name) for name in tool_names]
                 step_title = f"Step {hop}: {' + '.join(friendly_names)}"

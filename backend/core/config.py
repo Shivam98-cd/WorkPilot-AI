@@ -128,6 +128,12 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
 
+    # Cloud Vector Database (Pinecone)
+    PINECONE_API_KEY: Optional[str] = None
+    PINECONE_INDEX_NAME: str = "workpilot-rag"
+    PINECONE_ENVIRONMENT: str = "us-east-1"
+    PINECONE_HOST: Optional[str] = None
+
     class Config:
         env_file = Path(__file__).resolve().parent.parent / ".env"
         case_sensitive = True
