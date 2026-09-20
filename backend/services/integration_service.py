@@ -519,6 +519,14 @@ class IntegrationService:
             tokens, profile = await self._exchange_github_code(code, meta)
         elif provider == "zoom":
             tokens, profile = await self._exchange_zoom_code(code, meta)
+        elif provider == "microsoft":
+            tokens, profile = await self._exchange_microsoft_code(code, platform, meta)
+        elif provider == "slack":
+            tokens, profile = await self._exchange_slack_code(code, meta)
+        elif provider == "notion":
+            tokens, profile = await self._exchange_notion_code(code, meta)
+        elif provider == "jira":
+            tokens, profile = await self._exchange_jira_code(code, meta)
         else:
             raise ValidationException(f"OAuth callback not supported for '{platform}'")
 
@@ -559,12 +567,13 @@ class IntegrationService:
     def _callback_url(self, platform: str) -> str:
         # Use OAUTH_PUBLIC_URL when running via ngrok/tunnel (all OAuth providers).
         # Fall back to BACKEND_PUBLIC_URL for pure local dev.
+        # NOTE: Do NOT replace localhost with 127.0.0.1 — Azure and most providers
+        # only accept http://localhost, not http://127.0.0.1.
+        # Zoom is the exception and uses ZOOM_REDIRECT_URI directly.
         if settings.OAUTH_PUBLIC_URL:
             base = settings.OAUTH_PUBLIC_URL.rstrip("/")
         else:
             base = settings.BACKEND_PUBLIC_URL.rstrip("/")
-            if "localhost" in base:
-                base = base.replace("localhost", "127.0.0.1")
         return f"{base}{settings.API_PREFIX}/integrations/{platform}/callback"
 
     def _google_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
@@ -764,6 +773,130 @@ class IntegrationService:
             "email": user_data.get("email"),
             "avatar": user_data.get("pic_url"),
             "metadata": {"zoomId": user_data.get("id"), "displayName": user_data.get("display_name")},
+        }
+
+    async def _exchange_microsoft_code(self, code: str, platform: str, meta: Dict[str, Any]) -> tuple:
+        if not settings.MICROSOFT_CLIENT_ID or not settings.MICROSOFT_CLIENT_SECRET:
+            raise ValidationException("Microsoft OAuth credentials are not configured")
+        tenant = settings.MICROSOFT_TENANT_ID or "common"
+        async with httpx.AsyncClient(timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS) as client:
+            token_resp = await client.post(
+                f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
+                data={
+                    "client_id": settings.MICROSOFT_CLIENT_ID,
+                    "client_secret": settings.MICROSOFT_CLIENT_SECRET,
+                    "code": code,
+                    "redirect_uri": self._callback_url(platform),
+                    "grant_type": "authorization_code",
+                },
+            )
+            token_resp.raise_for_status()
+            tokens = token_resp.json()
+
+            user_resp = await client.get(
+                "https://graph.microsoft.com/v1.0/me",
+                headers={"Authorization": f"Bearer {tokens['access_token']}"},
+            )
+            user_resp.raise_for_status()
+            user_data = user_resp.json()
+
+        return tokens, {
+            "email": user_data.get("mail") or user_data.get("userPrincipalName"),
+            "avatar": None,
+            "metadata": {"microsoftId": user_data.get("id"), "displayName": user_data.get("displayName")},
+        }
+
+    async def _exchange_slack_code(self, code: str, meta: Dict[str, Any]) -> tuple:
+        if not settings.SLACK_CLIENT_ID or not settings.SLACK_CLIENT_SECRET:
+            raise ValidationException("Slack OAuth credentials are not configured")
+        async with httpx.AsyncClient(timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS) as client:
+            token_resp = await client.post(
+                "https://slack.com/api/oauth.v2.access",
+                data={
+                    "client_id": settings.SLACK_CLIENT_ID,
+                    "client_secret": settings.SLACK_CLIENT_SECRET,
+                    "code": code,
+                    "redirect_uri": self._callback_url("slack"),
+                },
+            )
+            token_resp.raise_for_status()
+            tokens = token_resp.json()
+            if not tokens.get("ok"):
+                raise ExternalServiceException(f"Slack OAuth error: {tokens.get('error', 'unknown')}")
+
+        authed = tokens.get("authed_user", {})
+        team = tokens.get("team", {})
+        return {
+            "access_token": tokens.get("access_token") or authed.get("access_token", ""),
+            "token_type": "Bearer",
+        }, {
+            "email": authed.get("id", ""),
+            "avatar": None,
+            "metadata": {"slackTeam": team.get("name"), "slackTeamId": team.get("id")},
+        }
+
+    async def _exchange_notion_code(self, code: str, meta: Dict[str, Any]) -> tuple:
+        if not settings.NOTION_CLIENT_ID or not settings.NOTION_CLIENT_SECRET:
+            raise ValidationException("Notion OAuth credentials are not configured")
+        import base64 as _b64
+        credentials = _b64.b64encode(
+            f"{settings.NOTION_CLIENT_ID}:{settings.NOTION_CLIENT_SECRET}".encode()
+        ).decode()
+        async with httpx.AsyncClient(timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS) as client:
+            token_resp = await client.post(
+                "https://api.notion.com/v1/oauth/token",
+                headers={
+                    "Authorization": f"Basic {credentials}",
+                    "Content-Type": "application/json",
+                    "Notion-Version": "2022-06-28",
+                },
+                json={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": self._callback_url("notion"),
+                },
+            )
+            token_resp.raise_for_status()
+            tokens = token_resp.json()
+
+        owner = tokens.get("owner", {}).get("user", {})
+        return {
+            "access_token": tokens.get("access_token", ""),
+            "token_type": "Bearer",
+        }, {
+            "email": owner.get("person", {}).get("email") or tokens.get("workspace_name", "Notion"),
+            "avatar": owner.get("avatar_url"),
+            "metadata": {"notionWorkspace": tokens.get("workspace_name"), "workspaceId": tokens.get("workspace_id")},
+        }
+
+    async def _exchange_jira_code(self, code: str, meta: Dict[str, Any]) -> tuple:
+        if not settings.JIRA_CLIENT_ID or not settings.JIRA_CLIENT_SECRET:
+            raise ValidationException("Jira OAuth credentials are not configured")
+        async with httpx.AsyncClient(timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS) as client:
+            token_resp = await client.post(
+                "https://auth.atlassian.com/oauth/token",
+                json={
+                    "grant_type": "authorization_code",
+                    "client_id": settings.JIRA_CLIENT_ID,
+                    "client_secret": settings.JIRA_CLIENT_SECRET,
+                    "code": code,
+                    "redirect_uri": self._callback_url("jira"),
+                },
+            )
+            token_resp.raise_for_status()
+            tokens = token_resp.json()
+
+            user_resp = await client.get(
+                "https://api.atlassian.com/me",
+                headers={"Authorization": f"Bearer {tokens['access_token']}"},
+            )
+            user_resp.raise_for_status()
+            user_data = user_resp.json()
+
+        return tokens, {
+            "email": user_data.get("email"),
+            "avatar": user_data.get("picture"),
+            "metadata": {"atlassianId": user_data.get("account_id"), "displayName": user_data.get("name")},
         }
 
     async def _fetch_gmail_messages(self, access_token: str) -> List[Dict[str, Any]]:
@@ -1265,12 +1398,50 @@ class IntegrationService:
         }
 
     def _normalize_github_project(self, project: Dict[str, Any]) -> Dict[str, Any]:
+        updated = project.get("updated_at") or project.get("pushed_at") or ""
+        deployed_str = "Recently"
+        if updated:
+            try:
+                from dateutil.parser import parse as parse_dt
+                from datetime import datetime, timezone
+                dt = parse_dt(updated)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                delta = datetime.now(timezone.utc) - dt
+                days = delta.days
+                if days == 0:
+                    hours = int(delta.total_seconds() / 3600)
+                    deployed_str = f"{hours}h ago" if hours > 0 else "Just now"
+                elif days == 1:
+                    deployed_str = "Yesterday"
+                else:
+                    deployed_str = f"{days}d ago"
+            except Exception:
+                deployed_str = "Recently"
+
+        default_branch = project.get("default_branch") or "main"
+        is_private = bool(project.get("private", False))
+
         return {
-            "id": project.get("id"),
+            "id": str(project.get("id")),
             "name": project.get("name") or "Untitled repository",
-            "status": "success" if project.get("private") is False else "idle",
-            "updatedAt": project.get("updated_at"),
-            "description": project.get("description") or "No description",
+            "version": f"branch:{default_branch}",
+            "status": "success" if not is_private else "running",
+            "uptime": "99.9%",
+            "latency": "42ms",
+            "deployed": deployed_str,
+            "risk": "low",
+            "branch": default_branch,
+            "private": is_private,
+            "visibility": "Private" if is_private else "Public",
+            "stars": project.get("stargazers_count", 0),
+            "forks": project.get("forks_count", 0),
+            "openIssues": project.get("open_issues_count", 0),
+            "language": project.get("language") or "Code",
+            "htmlUrl": project.get("html_url") or "",
+            "updatedAt": updated,
+            "description": project.get("description") or "GitHub workspace repository",
+            "source": "github",
         }
 
     async def mark_gmail_message_read(self, uid: str, message_id: str, read: bool = True) -> None:

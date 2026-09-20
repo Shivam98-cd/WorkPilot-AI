@@ -9,7 +9,10 @@ import {
   signOut,
   updateProfile,
   sendPasswordResetEmail,
-  sendEmailVerification
+  sendEmailVerification,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential
 } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -66,7 +69,10 @@ export {
   signOut,
   updateProfile,
   sendPasswordResetEmail,
-  sendEmailVerification
+  sendEmailVerification,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential
 };
 export default app;
 

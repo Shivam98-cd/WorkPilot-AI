@@ -47,10 +47,10 @@ T = TypeVar("T")
 # Value: {"data": result_dict, "ts": float}
 # 300 s  = 5 minutes.  The invalidate-cache endpoint flushes it on demand.
 _CACHE: Dict[str, Dict] = {}
-_CACHE_TTL = 300  # seconds
+_CACHE_TTL = 30  # seconds (short TTL ensures fresh data is shown after updates)
 
 
-async def _safe(coro: Awaitable[T], default: T, timeout: float = 4.0) -> T:
+async def _safe(coro: Awaitable[T], default: T, timeout: float = 12.0) -> T:
     """Await a coroutine with a timeout and return *default* on any exception or timeout."""
     try:
         return await asyncio.wait_for(coro, timeout=timeout)
@@ -236,25 +236,31 @@ async def dashboard_summary(current_user=Depends(get_current_user)):
 # because the record has already been fetched via list_for_user().
 
 async def _list_emails_with_record(uid: str, record: Optional[Any]) -> List[Dict]:
-    """Fetch Gmail messages using a pre-fetched integration record."""
+    """Fetch Gmail messages using metadata-only fast path with real headers."""
     if not record or record.status != "connected":
         return []
-    token = await integration_service._get_valid_google_token(uid, "gmail", record)
-    if not token:
-        return []
-    messages = await integration_service._fetch_gmail_messages(token)
-    return [integration_service._normalize_gmail_message(m) for m in messages]
+    return await integration_service.list_user_emails(uid, limit=5)
 
 
 async def _list_events_with_record(uid: str, record: Optional[Any]) -> List[Dict]:
-    """Fetch Google Calendar events using a pre-fetched integration record."""
+    """Fetch Google Calendar events using a pre-fetched integration record with intelligent sorting."""
     if not record or record.status != "connected":
         return []
     token = await integration_service._get_valid_google_token(uid, "google_calendar", record)
     if not token:
         return []
     events = await integration_service._fetch_google_calendar_events(token)
-    return [integration_service._normalize_google_calendar_event(e) for e in events]
+    norm = [integration_service._normalize_google_calendar_event(e) for e in events]
+    # Filter and sort so real meetings appear properly
+    from datetime import date
+    today_str = date.today().isoformat()
+    future_or_today = [e for e in norm if (e.get("date") or e.get("start") or "")[:10] >= today_str]
+    past = [e for e in norm if (e.get("date") or e.get("start") or "")[:10] < today_str]
+    real_upcoming = [e for e in future_or_today if "birthday" not in (e.get("title") or "").lower()]
+    real_past = [e for e in past if "birthday" not in (e.get("title") or "").lower()]
+    real_upcoming.sort(key=lambda x: (x.get("date") or x.get("start") or ""))
+    real_past.sort(key=lambda x: (x.get("date") or x.get("start") or ""), reverse=True)
+    return (real_upcoming + real_past) if (real_upcoming or real_past) else norm
 
 
 async def _list_deployments_with_record(uid: str, record: Optional[Any]) -> List[Dict]:

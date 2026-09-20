@@ -371,10 +371,13 @@ export const aiScheduleEvent = (prompt) => apiFetch('/calendar/ai-schedule', { m
 export const getTeamMembers = () => apiFetch('/team/members');
 export const createTeamMember = (data) => apiFetch('/team/members', { method: 'POST', body: JSON.stringify(data) });
 export const updateTeamMember = (id, data) => apiFetch(`/team/members/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const deleteTeamMember = (id) => apiFetch(`/team/members/${id}`, { method: 'DELETE' });
 
 /* ─── Deployments ───────────────────────────────── */
 export const getDeployments = () => apiFetch('/deployments');
 export const getDeploymentLogs = (id) => apiFetch(`/deployments/${id}/logs`);
+export const createDeployment = (data) => apiFetch('/deployments', { method: 'POST', body: JSON.stringify(data) });
+export const rollbackDeployment = (id, targetVersion) => apiFetch(`/deployments/${id}/rollback`, { method: 'POST', body: JSON.stringify({ target_version: targetVersion }) });
 
 /* ─── Documents ─────────────────────────────────── */
 export const getDocuments = () => apiFetch('/documents');
@@ -387,6 +390,7 @@ export const uploadDocument = async (formData) => {
   }).then(r => r.json());
 };
 export const askDocumentAI = (doc_id, question) => apiFetch('/documents/ask', { method: 'POST', body: JSON.stringify({ doc_id, question }) });
+export const deleteDocument = (id) => apiFetch(`/documents/${id}`, { method: 'DELETE' });
 
 /* ─── Analytics ─────────────────────────────────── */
 export const getAnalytics = () => apiFetch('/analytics/summary');

@@ -26,6 +26,11 @@ async def integration_catalog(current_user=Depends(get_current_user)):
     return {"success": True, "data": integration_service.list_catalog()}
 
 
+@router.get("/catalog/public")
+async def public_integration_catalog():
+    return {"success": True, "data": integration_service.list_catalog()}
+
+
 @router.get("/oauth-url")
 async def get_oauth_url_legacy(platform: str, current_user=Depends(get_current_user)):
     """Legacy alias — prefer GET /integrations/{platform}/authorize."""

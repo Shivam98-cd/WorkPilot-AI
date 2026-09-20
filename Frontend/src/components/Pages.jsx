@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { SiGmail, SiGooglecalendar, SiGithub, SiZoom, SiNotion, SiJira, SiGoogledrive, SiGooglemeet } from 'react-icons/si';
 import { useToast } from './Toast';
 import { SkeletonCard, SkeletonTable } from './Skeleton';
-import { getEmails, getEmailCounts, getEmailBody, markEmailRead, markEmailUnread, archiveEmail, deleteEmail, starEmail, draftEmail, sendEmail, triageEmails, getCalendarEvents, createCalendarEvent, deleteCalendarEvent, aiScheduleEvent, getTeamMembers, createTeamMember, updateTeamMember, getDeployments, getDeploymentLogs, getDocuments, uploadDocument, askDocumentAI, getAnalytics, getIntegrations, authorizeIntegration, disconnectIntegration, syncIntegration, requestIntegration, updateProfile } from '../api';
+import { getEmails, getEmailCounts, getEmailBody, markEmailRead, markEmailUnread, archiveEmail, deleteEmail, starEmail, draftEmail, sendEmail, triageEmails, getCalendarEvents, createCalendarEvent, deleteCalendarEvent, aiScheduleEvent, getTeamMembers, createTeamMember, updateTeamMember, deleteTeamMember, getDeployments, getDeploymentLogs, createDeployment, rollbackDeployment, getDocuments, uploadDocument, askDocumentAI, deleteDocument, getAnalytics, getIntegrations, authorizeIntegration, disconnectIntegration, syncIntegration, requestIntegration, updateProfile } from '../api';
+import { auth, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from '../firebase';
 
 /* ─── Brand icon map ─── */
 const SlackIcon = () => <svg width="20" height="20" viewBox="0 0 24 24"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523 2.528 2.528 0 0 1-2.522-2.523 2.528 2.528 0 0 1 2.522-2.52h2.52v2.52zm1.261 0a2.528 2.528 0 0 1 2.52-2.52h5.043a2.528 2.528 0 0 1 2.522 2.52v5.04a2.528 2.528 0 0 1-2.522 2.52H8.823a2.528 2.528 0 0 1-2.52-2.52v-5.04z" fill="#36C5F0"/><path d="M8.823 5.043a2.528 2.528 0 0 1-2.52-2.52A2.528 2.528 0 0 1 8.823 0a2.528 2.528 0 0 1 2.522 2.522v2.52H8.823zm0 1.262a2.528 2.528 0 0 1 2.522 2.52v5.043a2.528 2.528 0 0 1-2.522 2.52H3.78a2.528 2.528 0 0 1-2.522-2.52V8.825a2.528 2.528 0 0 1 2.522-2.52h5.043z" fill="#2EB67D"/><path d="M18.958 8.825a2.528 2.528 0 0 1 2.52-2.52 2.528 2.528 0 0 1 2.522 2.52 2.528 2.528 0 0 1-2.522 2.52h-2.52v-2.52zm-1.261 0a2.528 2.528 0 0 1-2.52 2.52h-5.043a2.528 2.528 0 0 1-2.522-2.52v-5.04a2.528 2.528 0 0 1 2.522-2.52h5.043a2.528 2.528 0 0 1 2.52 2.52v5.04z" fill="#ECB22E"/><path d="M15.177 18.957a2.528 2.528 0 0 1 2.52 2.522 2.528 2.528 0 0 1-2.52 2.52 2.528 2.528 0 0 1-2.522-2.52v-2.522h2.522zm0-1.261a2.528 2.528 0 0 1-2.522-2.52v-5.043a2.528 2.528 0 0 1 2.522-2.52h5.043a2.528 2.528 0 0 1 2.522 2.52v5.043a2.528 2.528 0 0 1-2.522 2.52h-5.043z" fill="#E01E5A"/></svg>;
@@ -100,15 +101,6 @@ export function Avatar({ name, size = 34 }) {
 /* ════════════════════════════════════════
    EMAIL PAGE
 ════════════════════════════════════════ */
-const EMAILS = [
-  { id: 1, from: 'Robert Chen', role: 'CFO', subject: 'Q3 Budget Approval — Action Required', preview: 'Please review the attached Q3 budget report and approve...', time: '8m ago', priority: 'urgent', read: false },
-  { id: 2, from: 'Acme Corp', role: 'Client', subject: 'Re: Service complaint — ticket #4821', preview: 'We are still experiencing the issue with the onboarding flow...', time: '32m ago', priority: 'urgent', read: false },
-  { id: 3, from: 'HR Team', role: 'Internal', subject: 'Team offsite planning for August', preview: 'Hi everyone, we are planning the August offsite...', time: '1h ago', priority: 'normal', read: true },
-  { id: 4, from: 'Stripe', role: 'Billing', subject: 'Your invoice is ready — $2,490', preview: 'Your monthly invoice for WorkPilot is ready to download...', time: '3h ago', priority: 'normal', read: true },
-  { id: 5, from: 'GitHub', role: 'Dev', subject: 'PR #142 needs your review', preview: '[workpilot-backend] Feature/auth-tokens — 3 files changed...', time: '5h ago', priority: 'normal', read: true },
-  { id: 6, from: 'Priya Sharma', role: 'Team', subject: 'Weekly report — missing from Mike', preview: "Hey, I noticed Mike hasn't submitted his weekly report...", time: 'Yesterday', priority: 'low', read: true },
-];
-
 export function EmailPage({ T }) {
   const [folder, setFolder]           = useState('inbox');
   const [data, setData]               = useState([]);
@@ -515,12 +507,6 @@ export function EmailPage({ T }) {
 /* ════════════════════════════════════════
    CALENDAR PAGE
 ════════════════════════════════════════ */
-const EVENTS = [
-  { id: 1, time: '09:00', end: '09:15', title: 'Daily Standup', people: 5, color: C.green, tag: 'Meeting' },
-  { id: 2, time: '10:00', end: '11:00', title: 'Q3 Planning Session', people: 8, color: C.blue, tag: 'Important' },
-  { id: 3, time: '14:00', end: '15:00', title: 'Client Call — Acme Corp', people: 3, color: C.indigo, tag: 'Client' },
-  { id: 4, time: '16:00', end: '18:00', title: 'Deep Work Block 🔒', people: 1, color: C.violet, tag: 'Protected' },
-];
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const HOURS = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -2384,13 +2370,6 @@ export function CalendarPage({ T }) {
 /* ════════════════════════════════════════
    TEAM PAGE
 ════════════════════════════════════════ */
-const MEMBERS = [
-  { id: 1, name: 'Sarah Chen', role: 'UI/UX Designer', task: 'Dashboard mockups', progress: 100, status: 'done', online: true },
-  { id: 2, name: 'John Smith', role: 'Backend Engineer', task: 'API integration v2', progress: 65, status: 'on-track', online: true },
-  { id: 3, name: 'Mike Chen', role: 'QA Engineer', task: 'Backend testing', progress: 30, status: 'delayed', online: false },
-  { id: 4, name: 'Priya Sharma', role: 'Product Manager', task: 'Review sprint deliverables', progress: 0, status: 'missing', online: false },
-  { id: 5, name: 'Alex Kim', role: 'DevOps', task: 'Staging deployment', progress: 80, status: 'on-track', online: true },
-];
 const statusColor = { done: C.green, 'on-track': '#3b82f6', delayed: C.amber, missing: C.red };
 const statusLabel = { done: '✓ Done', 'on-track': '● On track', delayed: '⚠ Delayed', missing: '✕ Missing' };
 
@@ -2400,6 +2379,8 @@ export function TeamPage({ T }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [standupSummary, setStandupSummary] = useState(null);
+  const [initializingTeam, setInitializingTeam] = useState(false);
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('');
   const [newTask, setNewTask] = useState('');
@@ -2421,7 +2402,7 @@ export function TeamPage({ T }) {
     fetchMembers();
   }, []);
 
-  const membersList = (data && data.length > 0) ? data : (data === null ? MEMBERS : []);
+  const membersList = data || [];
   const filtered = filter === 'all' ? membersList : membersList.filter(m => m.status === filter);
 
   const totalCount = membersList.length;
@@ -2459,6 +2440,54 @@ export function TeamPage({ T }) {
     }
   };
 
+  const handleDeleteMember = async (id, name) => {
+    try {
+      await deleteTeamMember(id);
+      showToast(`Removed ${name} from team`, 'info');
+      fetchMembers();
+    } catch (err) {
+      showToast(err.message || 'Failed to remove member', 'error');
+    }
+  };
+
+  const handleInitializeStandardTeam = async () => {
+    setInitializingTeam(true);
+    const standard = [
+      { name: 'Sarah Chen', role: 'Staff Architect', task: 'Enterprise Security Architecture & Auth v2', progress: 85, status: 'on-track', online: true },
+      { name: 'Alex Rivera', role: 'Lead Frontend Engineer', task: 'Real-time Cockpit & Dashboard Widgets', progress: 95, status: 'done', online: true },
+      { name: 'Priya Patel', role: 'Cloud & DevOps Lead', task: 'CI/CD Cluster Deployment & Rollback Pipeline', progress: 70, status: 'on-track', online: true },
+      { name: 'Marcus Bell', role: 'AI Systems Engineer', task: 'SuperBrain Vector Knowledge & RAG Indexing', progress: 40, status: 'delayed', online: false },
+    ];
+    try {
+      for (const m of standard) {
+        await createTeamMember(m);
+      }
+      showToast('Standard team structure initialized in Firestore', 'success');
+      fetchMembers();
+    } catch (e) {
+      showToast(e.message || 'Failed to initialize team', 'error');
+    } finally {
+      setInitializingTeam(false);
+    }
+  };
+
+  const handleRunStandup = () => {
+    const total = membersList.length;
+    const done = membersList.filter(m => m.status === 'done').length;
+    const delayed = membersList.filter(m => m.status === 'delayed').length;
+    const onTrack = membersList.filter(m => m.status === 'on-track').length;
+    const summary = {
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      total, done, delayed, onTrack,
+      blockers: membersList.filter(m => m.status === 'delayed' || m.status === 'missing').map(m => `${m.name} (${m.role}): ${m.task || 'No task update'}`),
+      recommendation: delayed > 0 
+        ? `${delayed} member(s) have tasks delayed or blocked. Prioritize blocker resolution during current sprint cycle.`
+        : 'All tracked deliverables are progressing on schedule. Sprint velocity is optimal.',
+    };
+    setStandupSummary(summary);
+    showToast('AI Standup analysis complete', 'success');
+  };
+
   const handleFollowUp = async (member) => {
     showToast(`Follow-up sent to ${member.name}`, 'info');
     try {
@@ -2488,7 +2517,7 @@ export function TeamPage({ T }) {
   return (
     <PageShell title="Team" subtitle="Real-time team status and task tracking" icon="👥" accent={T.primary}
       actions={<>
-        <Btn color={T.primary} ghost onClick={() => showToast(`⚡ Running AI standup: ${totalCount} members tracked, ${delayedCount} delayed`, 'info')}>⚡ Run Standup</Btn>
+        <Btn color={T.primary} ghost onClick={handleRunStandup}>⚡ Run Standup</Btn>
         <Btn color={T.primary} onClick={() => setShowAddModal(true)}>+ Add Member</Btn>
       </>}>
 
@@ -2506,6 +2535,42 @@ export function TeamPage({ T }) {
           </Card>
         ))}
       </div>
+
+      {/* AI Standup Summary Card */}
+      {standupSummary && (
+        <Card style={{ marginBottom: 20, background: '#13131c', border: `1px solid ${T.primary}50` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>⚡</span>
+              <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 15, color: C.text }}>AI Standup Digest — {standupSummary.timestamp}</div>
+            </div>
+            <button onClick={() => setStandupSummary(null)} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 14 }}>✕</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 12 }}>
+            <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: C.muted }}>Completion Ratio</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.green }}>{standupSummary.done}/{standupSummary.total} Completed</div>
+            </div>
+            <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: C.muted }}>Active Attention</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: standupSummary.delayed > 0 ? C.amber : C.green }}>{standupSummary.delayed} Blocked / Delayed</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.6, padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
+            <strong style={{ color: C.text }}>AI Recommendation: </strong>{standupSummary.recommendation}
+            {standupSummary.blockers.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <strong style={{ color: C.amber }}>Identified Blockers:</strong>
+                <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                  {standupSummary.blockers.map((b, idx) => (
+                    <li key={idx} style={{ fontSize: 12, color: C.sub }}>{b}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Add Member Modal / Card */}
       {showAddModal && (
@@ -2557,22 +2622,32 @@ export function TeamPage({ T }) {
 
       {/* Team table */}
       <Card accent={T.primary} style={{ padding: 0 }}>
-        <div style={{ padding: '12px 20px', borderBottom: `1px solid ${C.border}`, display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr 1.2fr', gap: 12 }}>
-          {['Member', 'Task', 'Progress', 'Status', 'Actions'].map(h => (
-            <div key={h} style={{ fontSize: 10, fontWeight: 700, color: C.muted, fontFamily: "'Inter',sans-serif", letterSpacing: '0.1em', textTransform: 'uppercase' }}>{h}</div>
+        <div style={{ padding: '12px 20px', borderBottom: `1px solid ${C.border}`, display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr 1.3fr 36px', gap: 12 }}>
+          {['Member', 'Task', 'Progress', 'Status', 'Actions', ''].map((h, idx) => (
+            <div key={idx} style={{ fontSize: 10, fontWeight: 700, color: C.muted, fontFamily: "'Inter',sans-serif", letterSpacing: '0.1em', textTransform: 'uppercase' }}>{h}</div>
           ))}
         </div>
         {loading ? (
           <SkeletonTable rows={4} cols={5} />
         ) : error ? (
           <div style={{ padding: 20, color: C.red }}>{error}</div>
+        ) : membersList.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: C.muted }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>👥</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 6 }}>No Team Members Yet</div>
+            <div style={{ fontSize: 13, color: C.muted, maxWidth: 440, margin: '0 auto 20px' }}>Add collaborators manually or initialize the workspace with standard enterprise roles.</div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <Btn color={T.primary} onClick={() => setShowAddModal(true)}>+ Add First Member</Btn>
+              <Btn ghost color={C.green} onClick={handleInitializeStandardTeam}>{initializingTeam ? 'Initializing...' : '⚡ Initialize Standard Team'}</Btn>
+            </div>
+          </div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: 30, textAlign: 'center', color: C.muted, fontSize: 13 }}>
             No members match filter "{filter}".
           </div>
         ) : (
           filtered.map(m => (
-            <div key={m.id} style={{ padding: '14px 20px', borderBottom: `1px solid rgba(255,255,255,0.04)`, display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr 1.2fr', gap: 12, alignItems: 'center', transition: 'all 0.15s' }} className="pg-row">
+            <div key={m.id} style={{ padding: '14px 20px', borderBottom: `1px solid rgba(255,255,255,0.04)`, display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr 1.3fr 36px', gap: 12, alignItems: 'center', transition: 'all 0.15s' }} className="pg-row">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ position: 'relative' }}>
                   <Avatar name={m.name} size={34} />
@@ -2601,6 +2676,17 @@ export function TeamPage({ T }) {
                 {m.status === 'missing' && <Btn ghost color={C.red} style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => handleRemind(m)}>Remind</Btn>}
                 {m.status !== 'done' && <Btn ghost color={C.green} style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => handleMarkDone(m)}>✓ Done</Btn>}
               </div>
+              <div>
+                <button
+                  onClick={() => handleDeleteMember(m.id, m.name)}
+                  title={`Remove ${m.name}`}
+                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.25)', cursor: 'pointer', padding: 6, fontSize: 13, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  onMouseEnter={e => e.currentTarget.style.color = C.red}
+                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.25)'}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           ))
         )}
@@ -2612,19 +2698,6 @@ export function TeamPage({ T }) {
 /* ════════════════════════════════════════
    DEPLOYMENTS PAGE
 ════════════════════════════════════════ */
-const PIPELINES = [
-  { id: 1, name: 'Production', version: 'v2.4.1', status: 'live', uptime: '99.9%', latency: '142ms', deployed: '2h ago', risk: 'low' },
-  { id: 2, name: 'Staging', version: 'v2.4.2', status: 'running', progress: 67, uptime: '99.5%', latency: '168ms', deployed: 'Running', risk: 'medium' },
-  { id: 3, name: 'Dev', version: 'v2.5.0-beta', status: 'failed', uptime: '98.1%', latency: '210ms', deployed: '1h ago', risk: 'high' },
-];
-const DEPLOY_LOGS = [
-  { t: '14:22:01', msg: 'Build started — v2.4.2', level: 'info' },
-  { t: '14:23:10', msg: '✓ Dependency checks passed (247 packages)', level: 'success' },
-  { t: '14:24:33', msg: '✓ Unit tests passed (143/143)', level: 'success' },
-  { t: '14:25:11', msg: '⚠ Warning: Auth module dependency conflict detected', level: 'warn' },
-  { t: '14:26:04', msg: 'Deploying to staging cluster...', level: 'info' },
-  { t: '14:27:30', msg: 'Health check in progress...', level: 'info' },
-];
 const statusCfg = { live: { c: C.green, l: '● Live' }, running: { c: C.blue, l: '⟳ Running' }, failed: { c: C.red, l: '✕ Failed' } };
 const riskCfg = { low: C.green, medium: C.amber, high: C.red };
 
@@ -2637,21 +2710,26 @@ export function DeploymentsPage({ T }) {
   const [logsLoading, setLogsLoading] = useState(false);
   const [showDeployModal, setShowDeployModal] = useState(false);
   const [deployEnv, setDeployEnv] = useState('Staging');
-  const [deployTag, setDeployTag] = useState('v2.4.3-hotfix');
+  const [deployTag, setDeployTag] = useState('v2.4.3');
   const { showToast } = useToast();
 
   const fetchDeployments = () => {
     setLoading(true);
     getDeployments()
       .then(r => {
-        const list = r.data && r.data.length > 0 ? r.data : PIPELINES;
+        const list = r.data || [];
         setData(list);
-        if (!selectedPipeline) setSelectedPipeline(list[0]);
+        if (list.length > 0) {
+          setSelectedPipeline(prev => {
+            if (!prev) return list[0];
+            const found = list.find(p => p.id === prev.id);
+            return found || list[0];
+          });
+        }
       })
       .catch(e => {
         setError(e.message);
-        setData(PIPELINES);
-        if (!selectedPipeline) setSelectedPipeline(PIPELINES[0]);
+        setData([]);
       })
       .finally(() => setLoading(false));
   };
@@ -2660,8 +2738,8 @@ export function DeploymentsPage({ T }) {
     if (!pId) return;
     setLogsLoading(true);
     getDeploymentLogs(pId)
-      .then(r => setLogs(r.data && r.data.length > 0 ? r.data : DEPLOY_LOGS))
-      .catch(() => setLogs(DEPLOY_LOGS))
+      .then(r => setLogs(r.data || []))
+      .catch(() => setLogs([]))
       .finally(() => setLogsLoading(false));
   };
 
@@ -2670,11 +2748,12 @@ export function DeploymentsPage({ T }) {
   }, []);
 
   useEffect(() => {
-    const pId = selectedPipeline?.id || (data ? data[0]?.id : PIPELINES[0].id);
-    fetchLogs(pId);
-  }, [selectedPipeline, data]);
+    if (selectedPipeline?.id) {
+      fetchLogs(selectedPipeline.id);
+    }
+  }, [selectedPipeline]);
 
-  const pipelinesList = data || PIPELINES;
+  const pipelinesList = data || [];
   const currentPipeline = selectedPipeline || pipelinesList[0];
 
   const handleRefresh = () => {
@@ -2683,37 +2762,55 @@ export function DeploymentsPage({ T }) {
     showToast('Deployment status refreshed', 'info');
   };
 
-  const handleRollback = () => {
-    const prevVersion = 'v2.4.0';
-    showToast(`Rollback triggered for ${currentPipeline.name} to ${prevVersion}`, 'warn');
-    const newLog = { t: new Date().toTimeString().slice(0, 8), msg: `🔴 Rollback initiated to ${prevVersion}`, level: 'warn' };
-    setLogs(prev => [newLog, ...(prev || [])]);
+  const handleRollback = async () => {
+    if (!currentPipeline) return;
+    const target = 'v2.4.0';
+    try {
+      await rollbackDeployment(currentPipeline.id, target);
+      showToast(`Rollback to ${target} executed successfully`, 'warn');
+      fetchLogs(currentPipeline.id);
+      fetchDeployments();
+    } catch (err) {
+      showToast(err.message || 'Rollback failed', 'error');
+    }
   };
 
-  const handleRedeploy = () => {
-    showToast(`Redeploying ${currentPipeline.name} (${currentPipeline.version})...`, 'info');
-    const newLog = { t: new Date().toTimeString().slice(0, 8), msg: `▶ Redeploy started for ${currentPipeline.name} — trigger by user`, level: 'info' };
-    setLogs(prev => [newLog, ...(prev || [])]);
+  const handleRedeploy = async () => {
+    if (!currentPipeline) return;
+    try {
+      await createDeployment({
+        name: currentPipeline.name,
+        version: currentPipeline.version,
+        repository: currentPipeline.name,
+        environment: currentPipeline.environment || currentPipeline.name || 'Production',
+      });
+      showToast(`Redeploy triggered for ${currentPipeline.name}`, 'info');
+      fetchLogs(currentPipeline.id);
+      fetchDeployments();
+    } catch (err) {
+      showToast(err.message || 'Redeploy failed', 'error');
+    }
   };
 
-  const handleCreateDeploy = (e) => {
-    e.preventDefault();
-    const newPipe = {
-      id: Date.now(),
-      name: deployEnv,
-      version: deployTag,
-      status: 'running',
-      uptime: '100%',
-      latency: '110ms',
-      deployed: 'Just now',
-      risk: 'low',
-    };
-    setData(prev => [newPipe, ...(prev || [])]);
-    setSelectedPipeline(newPipe);
-    setShowDeployModal(false);
-    showToast(`Deployment initiated for ${deployEnv} (${deployTag})`, 'success');
-    const newLog = { t: new Date().toTimeString().slice(0, 8), msg: `🚀 New deploy triggered: ${deployEnv} ${deployTag}`, level: 'success' };
-    setLogs(prev => [newLog, ...(prev || [])]);
+  const handleCreateDeploy = async (e) => {
+    e?.preventDefault();
+    try {
+      const res = await createDeployment({
+        name: deployEnv,
+        version: deployTag,
+        repository: currentPipeline?.name || 'WorkPilot-AI',
+        environment: deployEnv,
+      });
+      showToast(`Deployment initiated for ${deployEnv} (${deployTag})`, 'success');
+      setShowDeployModal(false);
+      fetchDeployments();
+      if (res?.data?.id) {
+        setSelectedPipeline(res.data);
+        fetchLogs(res.data.id);
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to initiate deployment', 'error');
+    }
   };
 
   return (
@@ -2751,90 +2848,125 @@ export function DeploymentsPage({ T }) {
         </Card>
       )}
 
-      {/* HORIZONTAL TABS */}
-      <div style={{ display: 'flex', gap: 20, borderBottom: `1px solid ${C.border}`, marginBottom: 20 }}>
-        {pipelinesList.map(p => {
-          const active = currentPipeline?.id === p.id;
-          const status = statusCfg[p.status] || statusCfg.live;
-          return (
-            <div key={p.id} onClick={() => setSelectedPipeline(p)} style={{ padding: '0 4px 12px', cursor: 'pointer', borderBottom: active ? `2px solid ${T.primary}` : '2px solid transparent', color: active ? C.text : C.muted, fontWeight: active ? 700 : 400, transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 8 }}>
-              {p.name}
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: status.c }} />
-            </div>
-          );
-        })}
-      </div>
+      {loading ? (
+        <SkeletonCard height={240} />
+      ) : error ? (
+        <div style={{ padding: 20, color: C.red }}>{error}</div>
+      ) : pipelinesList.length === 0 ? (
+        <Card accent={C.green} style={{ padding: 36, textAlign: 'center' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🚀</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>No Active Deployments Found</div>
+          <div style={{ fontSize: 13, color: C.muted, maxWidth: 460, margin: '0 auto 20px' }}>
+            Connect your GitHub account in Integrations to monitor repositories automatically, or launch your first deployment manually.
+          </div>
+          <Btn color={T.primary} onClick={() => setShowDeployModal(true)}>+ Launch New Deployment</Btn>
+        </Card>
+      ) : (
+        <>
+          {/* HORIZONTAL TABS */}
+          <div style={{ display: 'flex', gap: 20, borderBottom: `1px solid ${C.border}`, marginBottom: 20, overflowX: 'auto' }}>
+            {pipelinesList.map(p => {
+              const active = currentPipeline?.id === p.id;
+              const status = statusCfg[p.status] || statusCfg.live;
+              return (
+                <div key={p.id} onClick={() => setSelectedPipeline(p)} style={{ padding: '0 4px 12px', cursor: 'pointer', borderBottom: active ? `2px solid ${T.primary}` : '2px solid transparent', color: active ? C.text : C.muted, fontWeight: active ? 700 : 400, transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+                  {p.name}
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: status.c }} />
+                </div>
+              );
+            })}
+          </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {currentPipeline && (
-          <>
-          {/* Stage indicators */}
-          <Card accent={(statusCfg[currentPipeline.status] || statusCfg.live).c}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-              <div>
-                <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 16 }}>{currentPipeline.name} — {currentPipeline.version}</div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>Last updated: {currentPipeline.deployed}</div>
-              </div>
-              <div style={{ display: 'flex', gap: 7 }}>
-                <Btn ghost color={C.red} style={{ padding: '7px 12px', fontSize: 12 }} onClick={handleRollback}>🔴 Rollback</Btn>
-                <Btn ghost color={T.primary} style={{ padding: '7px 12px', fontSize: 12 }} onClick={handleRedeploy}>▶ Redeploy</Btn>
-              </div>
-            </div>
-            
-            {/* Horizontal Arrow Pipeline */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0', overflowX: 'auto', paddingBottom: 8 }}>
-              {['Build', 'Test', 'Staging', 'Production'].map((stage, i) => {
-                const isFailed = currentPipeline.status === 'failed' && i === 1;
-                const isRunning = currentPipeline.status === 'running' && i === 1;
-                const isDone = currentPipeline.status === 'live' || (currentPipeline.status === 'running' && i < 1);
-                return (
-                  <React.Fragment key={stage}>
-                    <div style={{
-                      padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-                      background: isFailed ? `${C.red}20` : isDone ? `${C.green}20` : isRunning ? `${T.primary}20` : 'rgba(255,255,255,0.05)',
-                      color: isFailed ? C.red : isDone ? C.green : isRunning ? T.primary : C.muted,
-                      border: `1px solid ${isFailed ? C.red + '40' : isDone ? C.green + '40' : isRunning ? T.primary + '40' : 'transparent'}`,
-                    }}>
-                      {stage}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {currentPipeline && (
+              <>
+              {/* Stage indicators */}
+              <Card accent={(statusCfg[currentPipeline.status] || statusCfg.live).c}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {currentPipeline.name} — {currentPipeline.version}
+                      {currentPipeline.htmlUrl && (
+                        <a href={currentPipeline.htmlUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: T.primary, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          GitHub ↗
+                        </a>
+                      )}
                     </div>
-                    {i < 3 && <div style={{ color: C.muted, fontSize: 16 }}>→</div>}
-                  </React.Fragment>
-                );
-              })}
-            </div>
+                    <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
+                      Last updated: {currentPipeline.deployed || 'Recently'}
+                      {currentPipeline.stars !== undefined && ` · ⭐ ${currentPipeline.stars}`}
+                      {currentPipeline.language && ` · ${currentPipeline.language}`}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 7 }}>
+                    <Btn ghost color={C.red} style={{ padding: '7px 12px', fontSize: 12 }} onClick={handleRollback}>🔴 Rollback</Btn>
+                    <Btn ghost color={T.primary} style={{ padding: '7px 12px', fontSize: 12 }} onClick={handleRedeploy}>▶ Redeploy</Btn>
+                  </div>
+                </div>
+                
+                {/* Horizontal Arrow Pipeline */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0', overflowX: 'auto', paddingBottom: 8 }}>
+                  {['Build', 'Test', 'Staging', 'Production'].map((stage, i) => {
+                    const isFailed = currentPipeline.status === 'failed' && i === 1;
+                    const isRunning = currentPipeline.status === 'running' && i === 1;
+                    const isDone = currentPipeline.status === 'live' || (currentPipeline.status === 'running' && i < 1);
+                    return (
+                      <React.Fragment key={stage}>
+                        <div style={{
+                          padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+                          background: isFailed ? `${C.red}20` : isDone ? `${C.green}20` : isRunning ? `${T.primary}20` : 'rgba(255,255,255,0.05)',
+                          color: isFailed ? C.red : isDone ? C.green : isRunning ? T.primary : C.muted,
+                          border: `1px solid ${isFailed ? C.red + '40' : isDone ? C.green + '40' : isRunning ? T.primary + '40' : 'transparent'}`,
+                        }}>
+                          {stage}
+                        </div>
+                        {i < 3 && <div style={{ color: C.muted, fontSize: 16 }}>→</div>}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
-              {[
-                ['Uptime', currentPipeline.uptime || '99.9%', C.green],
-                ['Latency', currentPipeline.latency || '120ms', C.blue],
-                ['Risk', (currentPipeline.risk || 'low').toUpperCase(), riskCfg[currentPipeline.risk] || C.green],
-                ['Status', (statusCfg[currentPipeline.status] || statusCfg.live).l, (statusCfg[currentPipeline.status] || statusCfg.live).c]
-              ].map(([k, v, c]) => (
-                <div key={k} style={{ padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: `1px solid rgba(255,255,255,0.05)` }}>
-                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>{k}</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: c }}>{v || '—'}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+                  {[
+                    ['Uptime', currentPipeline.uptime || '99.9%', C.green],
+                    ['Latency', currentPipeline.latency || '120ms', C.blue],
+                    ['Risk', (currentPipeline.risk || 'low').toUpperCase(), riskCfg[currentPipeline.risk] || C.green],
+                    ['Status', (statusCfg[currentPipeline.status] || statusCfg.live).l, (statusCfg[currentPipeline.status] || statusCfg.live).c]
+                  ].map(([k, v, c]) => (
+                    <div key={k} style={{ padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: `1px solid rgba(255,255,255,0.05)` }}>
+                      <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>{k}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: c }}>{v || '—'}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </Card>
-          {/* Live logs */}
-          <Card accent={C.green} style={{ flex: 1, minHeight: 300 }}>
-            <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-              Build Logs
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, animation: 'pulse 1.5s infinite' }} />
-            </div>
-            <div style={{ background: '#050507', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)', padding: '16px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, lineHeight: 2, height: 280, overflowY: 'auto' }}>
-              {logsLoading ? <div style={{ color: C.muted }}>Loading logs...</div> : (logs || DEPLOY_LOGS).map((l, i) => (
-                <div key={i} style={{ color: l.level === 'success' ? '#22c55e' : l.level === 'warn' ? '#eab308' : l.level === 'error' ? '#ef4444' : '#9ca3af' }}>
-                  <span style={{ color: '#4b5563', marginRight: 12 }}>{l.t}</span>{l.msg}
+              </Card>
+
+              {/* Live logs */}
+              <Card accent={C.green} style={{ flex: 1, minHeight: 280 }}>
+                <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  Build & Deployment Logs
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: C.green, animation: 'pulse 1.5s infinite' }} />
                 </div>
-              ))}
-              {!logsLoading && <div style={{ color: C.blue, animation: 'blink 1s infinite' }}>▌</div>}
-            </div>
-          </Card>
-          </>
-        )}
-      </div>
+                <div style={{ background: '#050507', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)', padding: '16px', fontFamily: "'JetBrains Mono',monospace", fontSize: 12, lineHeight: 2, height: 260, overflowY: 'auto' }}>
+                  {logsLoading ? (
+                    <div style={{ color: C.muted }}>Loading logs...</div>
+                  ) : !logs || logs.length === 0 ? (
+                    <div style={{ color: C.muted }}>No deployment events logged yet.</div>
+                  ) : (
+                    logs.map((l, i) => (
+                      <div key={i} style={{ color: l.level === 'success' ? '#22c55e' : l.level === 'warn' ? '#eab308' : l.level === 'error' ? '#ef4444' : '#9ca3af' }}>
+                        <span style={{ color: '#4b5563', marginRight: 12 }}>{l.t}</span>{l.msg}
+                      </div>
+                    ))
+                  )}
+                  {!logsLoading && <div style={{ color: C.blue, animation: 'blink 1s infinite' }}>▌</div>}
+                </div>
+              </Card>
+              </>
+            )}
+          </div>
+        </>
+      )}
     </PageShell>
   );
 }
@@ -2842,13 +2974,6 @@ export function DeploymentsPage({ T }) {
 /* ════════════════════════════════════════
    DOCUMENTS PAGE
 ════════════════════════════════════════ */
-const DOCS_LIST = [
-  { id: 1, name: 'Q3_Contract_Acme.pdf', type: 'PDF', size: '2.4 MB', modified: '2h ago', status: '3 questions', warn: false },
-  { id: 2, name: 'Team_Policy_v2.docx', type: 'DOCX', size: '840 KB', modified: '1d ago', status: '2 conflicts', warn: true },
-  { id: 3, name: 'Budget_2026.xlsx', type: 'XLSX', size: '1.1 MB', modified: 'Just now', status: 'Analyzing...', warn: false },
-  { id: 4, name: 'Product_Roadmap_Q4.pdf', type: 'PDF', size: '3.8 MB', modified: '3d ago', status: 'Reviewed', warn: false },
-  { id: 5, name: 'Onboarding_SOP.docx', type: 'DOCX', size: '560 KB', modified: '1w ago', status: 'Outdated', warn: true },
-];
 const typeColor = { PDF: C.red, DOCX: C.blue, XLSX: C.green, TXT: C.cyan };
 
 export function DocumentsPage({ T }) {
@@ -2880,8 +3005,8 @@ export function DocumentsPage({ T }) {
 
   const handleFileUpload = async (file) => {
     if (!file) return;
-    if (file.size > 750000) {
-      showToast('Document is too large (750 KB max)', 'error');
+    if (file.size > 1500000) {
+      showToast('Document is too large (1.5 MB max)', 'error');
       return;
     }
     setUploading(true);
@@ -2895,6 +3020,16 @@ export function DocumentsPage({ T }) {
       showToast(err.message || 'Failed to upload document', 'error');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDeleteDoc = async (id, name) => {
+    try {
+      await deleteDocument(id);
+      showToast(`Deleted ${name}`, 'info');
+      fetchDocs();
+    } catch (err) {
+      showToast(err.message || 'Failed to delete document', 'error');
     }
   };
 
@@ -2913,7 +3048,7 @@ export function DocumentsPage({ T }) {
     }
   };
 
-  const docsList = (data && data.length > 0) ? data : (data === null ? DOCS_LIST : []);
+  const docsList = data || [];
   const filtered = docsList.filter(d => (d.name || '').toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
@@ -2984,30 +3119,39 @@ export function DocumentsPage({ T }) {
         <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 14, color: drag ? T.primary : C.sub }}>
           {uploading ? 'Uploading document to workspace...' : 'Drop files here or click to upload'}
         </div>
-        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>PDF, DOCX, XLSX, TXT supported (up to 750 KB) · AI indexes automatically</div>
+        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>PDF, DOCX, XLSX, TXT supported (up to 1.5 MB) · Auto-indexed for Vector RAG Q&A</div>
       </div>
 
       {/* Docs table */}
       <Card accent={C.amber} style={{ padding: 0 }}>
-        <div style={{ padding: '12px 20px', borderBottom: `1px solid ${C.border}`, display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr 1fr', gap: 12 }}>
-          {['Filename', 'Type', 'Size', 'Modified', 'AI Status'].map(h => (
-            <div key={h} style={{ fontSize: 10, fontWeight: 700, color: C.muted, fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.08em' }}>{h}</div>
+        <div style={{ padding: '12px 20px', borderBottom: `1px solid ${C.border}`, display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr 1.2fr 36px', gap: 12 }}>
+          {['Filename', 'Type', 'Size', 'Modified', 'AI Status', ''].map((h, idx) => (
+            <div key={idx} style={{ fontSize: 10, fontWeight: 700, color: C.muted, fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.08em' }}>{h}</div>
           ))}
         </div>
         {loading ? (
-          <SkeletonTable rows={5} cols={5} />
+          <SkeletonTable rows={4} cols={5} />
         ) : error ? (
           <div style={{ padding: 20, color: C.red }}>{error}</div>
+        ) : docsList.length === 0 ? (
+          <div style={{ padding: 36, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+            <div style={{ fontSize: 30, marginBottom: 10 }}>📄</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 6 }}>No Documents Uploaded Yet</div>
+            <div style={{ maxWidth: 420, margin: '0 auto 16px', color: C.muted }}>
+              Upload contracts, policies, spreadsheets or notes above to query them directly with AI.
+            </div>
+            <Btn color={T.primary} onClick={() => fileInputRef.current?.click()}>+ Upload First Document</Btn>
+          </div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: 30, textAlign: 'center', color: C.muted, fontSize: 13 }}>
-            {searchQuery ? `No documents match "${searchQuery}".` : 'No documents uploaded yet. Upload your first document above.'}
+            No documents match "{searchQuery}".
           </div>
         ) : (
           filtered.map(doc => {
             const ext = doc.name?.split('.').pop()?.toUpperCase() || doc.type || 'TXT';
             const sizeLabel = typeof doc.size === 'number' ? `${(doc.size / 1024).toFixed(1)} KB` : doc.size;
             return (
-              <div key={doc.id} className="pg-row" style={{ padding: '12px 20px', borderBottom: `1px solid ${C.border}`, display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr 1fr', gap: 12, alignItems: 'center', transition: 'background 0.15s' }}>
+              <div key={doc.id} className="pg-row" style={{ padding: '12px 20px', borderBottom: `1px solid ${C.border}`, display: 'grid', gridTemplateColumns: '3fr 1fr 1fr 1fr 1.2fr 36px', gap: 12, alignItems: 'center', transition: 'background 0.15s' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                   <div style={{ width: 32, height: 32, borderRadius: 8, background: `${typeColor[ext] || C.amber}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
                     {ext === 'PDF' ? '📕' : ext === 'DOCX' ? '📘' : ext === 'XLSX' ? '📗' : '📄'}
@@ -3023,6 +3167,17 @@ export function DocumentsPage({ T }) {
                     setAiModalDoc(doc);
                     setAiAnswer(null);
                   }}>Ask AI</Btn>
+                </div>
+                <div>
+                  <button
+                    onClick={() => handleDeleteDoc(doc.id, doc.name)}
+                    title={`Delete ${doc.name}`}
+                    style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.25)', cursor: 'pointer', padding: 6, fontSize: 13, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onMouseEnter={e => e.currentTarget.style.color = C.red}
+                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.25)'}
+                  >
+                    ✕
+                  </button>
                 </div>
               </div>
             );
@@ -3052,22 +3207,22 @@ export function AnalyticsPage({ T }) {
 
   const multiplier = timeRange === 'week' ? 0.25 : timeRange === 'quarter' ? 3.0 : 1.0;
 
-  const focusHours = (Number(data?.focus_hours ?? 18.5) * multiplier).toFixed(1);
-  const emailsHandled = Math.round(Number(data?.emails_handled ?? 24) * multiplier);
-  const tasksCompleted = Math.round(Number(data?.tasks_completed ?? 6) * multiplier);
-  const aiTimeSaved = (Number(data?.ai_time_saved ?? 2.5) * multiplier).toFixed(1);
+  const focusHours = (Number(data?.focus_hours ?? 0) * multiplier).toFixed(1);
+  const emailsHandled = Math.round(Number(data?.emails_handled ?? 0) * multiplier);
+  const tasksCompleted = Math.round(Number(data?.tasks_completed ?? 0) * multiplier);
+  const aiTimeSaved = (Number(data?.ai_time_saved ?? 0) * multiplier).toFixed(1);
 
   const metrics = [
-    { label: 'Focus Hours', value: `${focusHours}h`, delta: '+12%', color: T.primary },
-    { label: 'Emails Handled by AI', value: `${emailsHandled}`, delta: '+34%', color: C.green },
-    { label: 'Tasks Completed', value: `${tasksCompleted}`, delta: '+8%', color: C.amber },
-    { label: 'AI Time Saved', value: `${aiTimeSaved}h`, delta: '+21%', color: T.secondary },
+    { label: 'Focus Hours', value: `${focusHours}h`, delta: 'Live', color: T.primary },
+    { label: 'Emails Handled by AI', value: `${emailsHandled}`, delta: 'Real-time', color: C.green },
+    { label: 'Tasks Completed', value: `${tasksCompleted}`, delta: 'Live', color: C.amber },
+    { label: 'AI Time Saved', value: `${aiTimeSaved}h`, delta: 'Automated', color: T.secondary },
   ];
 
   const chartWeeks = ['W1', 'W2', 'W3', 'W4'];
   const chartData = (data?.weekly_data && Array.isArray(data.weekly_data) && data.weekly_data.length === 4)
-    ? data.weekly_data
-    : [12, 18, 15, 24];
+    ? data.weekly_data.map(val => Number((val * multiplier).toFixed(1)))
+    : [0, 0, 0, 0];
 
   const breakdown = data?.time_breakdown && typeof data.time_breakdown === 'object'
     ? Object.entries(data.time_breakdown).map(([label, pct], i) => [
@@ -3075,7 +3230,7 @@ export function AnalyticsPage({ T }) {
         pct,
         [T.primary, C.indigo, C.amber, C.muted][i % 4],
       ])
-    : [['Deep work', 45, T.primary], ['Meetings', 25, C.indigo], ['Email', 18, C.amber], ['Admin', 12, C.muted]];
+    : [['Deep work', 50, T.primary], ['Meetings', 25, C.indigo], ['Email', 15, C.amber], ['Admin', 10, C.muted]];
 
   const maxBar = Math.max(...chartData, 1);
 
@@ -3398,7 +3553,7 @@ export function SettingsPage({ T, user, onSignOut }) {
     showToast('Preference saved', 'success');
   };
 
-  const handlePasswordUpdate = (e) => {
+  const handlePasswordUpdate = async (e) => {
     e?.preventDefault();
     if (!currPass) {
       showToast('Please enter your current password', 'error');
@@ -3413,13 +3568,49 @@ export function SettingsPage({ T, user, onSignOut }) {
       return;
     }
     setUpdatingPass(true);
-    setTimeout(() => {
-      setUpdatingPass(false);
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser || !currentUser.email) {
+        showToast('Active authentication session not found. Please log in again.', 'error');
+        return;
+      }
+      try {
+        const cred = EmailAuthProvider.credential(currentUser.email, currPass);
+        await reauthenticateWithCredential(currentUser, cred);
+      } catch (authErr) {
+        if (authErr.code === 'auth/wrong-password' || authErr.code === 'auth/invalid-credential') {
+          showToast('Current password is incorrect', 'error');
+          return;
+        }
+      }
+      await updatePassword(currentUser, newPass);
       setCurrPass('');
       setNewPass('');
       setConfPass('');
-      showToast('Password updated successfully', 'success');
-    }, 800);
+      showToast('Password updated successfully in Firebase Auth', 'success');
+    } catch (err) {
+      if (err.code === 'auth/requires-recent-login') {
+        showToast('Security check: Please log in again before changing password', 'error');
+      } else {
+        showToast(err.message || 'Failed to update password', 'error');
+      }
+    } finally {
+      setUpdatingPass(false);
+    }
+  };
+
+  const handleSendResetEmail = async () => {
+    const email = user?.email || auth.currentUser?.email;
+    if (!email) {
+      showToast('No user email address found', 'error');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      showToast(`Password reset link sent to ${email}`, 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to send reset email', 'error');
+    }
   };
 
   const getClientSession = () => {
@@ -3575,7 +3766,10 @@ export function SettingsPage({ T, user, onSignOut }) {
                 <input type="password" placeholder="Current password" value={currPass} onChange={e => setCurrPass(e.target.value)} style={{ width: '100%', padding: '9px 12px', background: '#18181f', border: `1px solid rgba(255,255,255,0.1)`, borderRadius: 9, color: C.text, fontSize: 13, outline: 'none', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box', marginBottom: 10 }} />
                 <input type="password" placeholder="New password (min 6 characters)" value={newPass} onChange={e => setNewPass(e.target.value)} style={{ width: '100%', padding: '9px 12px', background: '#18181f', border: `1px solid rgba(255,255,255,0.1)`, borderRadius: 9, color: C.text, fontSize: 13, outline: 'none', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box', marginBottom: 10 }} />
                 <input type="password" placeholder="Confirm new password" value={confPass} onChange={e => setConfPass(e.target.value)} style={{ width: '100%', padding: '9px 12px', background: '#18181f', border: `1px solid rgba(255,255,255,0.1)`, borderRadius: 9, color: C.text, fontSize: 13, outline: 'none', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box', marginBottom: 10 }} />
-                <Btn color={T.primary} style={{ marginTop: 4 }} onClick={handlePasswordUpdate}>{updatingPass ? 'Updating...' : 'Update password'}</Btn>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Btn color={T.primary} style={{ marginTop: 4 }} onClick={handlePasswordUpdate}>{updatingPass ? 'Updating...' : 'Update password'}</Btn>
+                  <Btn ghost color={C.sub} style={{ marginTop: 4 }} onClick={handleSendResetEmail}>Send Reset Email</Btn>
+                </div>
               </form>
             </div>
           )}

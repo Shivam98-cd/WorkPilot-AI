@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { auth, signOut, signOutUser } from '../firebase';
-import { backendLogout, getDashboardSummary } from '../api';
+import { backendLogout, getDashboardSummary, superChat } from '../api';
 import { useWebSocket } from '../hooks/useWebSocket';
 import Logo from './Logo';
 import { EmailPage, CalendarPage, TeamPage, DeploymentsPage, DocumentsPage, AnalyticsPage, IntegrationsPage, SettingsPage } from './Pages';
@@ -207,15 +207,40 @@ function SkeletonCard({ cols = 4, rows = 3, height = 180 }) {
 
 function Ticker({ T }) {
   return (
-    <div style={{ background: 'transparent', height: 28, overflow: 'hidden', display: 'flex', alignItems: 'center', position: 'relative', width: '100%' }}>
-      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 80, background: 'linear-gradient(90deg,#0a0a0d,transparent)', zIndex: 2 }} />
-      <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 80, background: 'linear-gradient(270deg,#0a0a0d,transparent)', zIndex: 2 }} />
-      <div className="ticker-inner" style={{ display: 'flex', gap: '60px', whiteSpace: 'nowrap', animation: 'tickerMove 28s linear infinite' }}>
-        {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
-          <span key={i} style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: "'Inter',sans-serif" }}>
-            <span style={{ color: T.primary, marginRight: 4 }}>▸</span>{item}
-          </span>
-        ))}
+    <div style={{
+      background: 'rgba(255,255,255,0.015)',
+      borderBottom: '1px solid rgba(255,255,255,0.06)',
+      height: 32,
+      overflow: 'hidden',
+      display: 'flex',
+      alignItems: 'center',
+      position: 'relative',
+      width: '100%',
+      paddingLeft: 20,
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        paddingRight: 14,
+        background: '#0a0a0d',
+        zIndex: 3,
+        flexShrink: 0,
+        boxShadow: '10px 0 16px #0a0a0d',
+      }}>
+        <div style={{ width: 6, height: 6, borderRadius: '50%', background: BASE.green, boxShadow: `0 0 6px ${BASE.green}` }} />
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.08em', fontFamily: "'JetBrains Mono', monospace" }}>SYSTEM</span>
+      </div>
+      <div style={{ position: 'relative', flex: 1, overflow: 'hidden', height: '100%', display: 'flex', alignItems: 'center' }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 40, background: 'linear-gradient(90deg,#0a0a0d,transparent)', zIndex: 2 }} />
+        <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 80, background: 'linear-gradient(270deg,#0a0a0d,transparent)', zIndex: 2 }} />
+        <div className="ticker-inner" style={{ display: 'flex', gap: '60px', whiteSpace: 'nowrap', animation: 'tickerMove 35s linear infinite' }}>
+          {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
+            <span key={i} style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: "'Inter',sans-serif", display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: T.primary }}>▸</span>{item}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -234,6 +259,14 @@ function ThemeSwitcher({ theme, setTheme, onThemeChange }) {
 export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange, initialNav, onNavConsumed }) {
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'Alex';
   const firstName = displayName.split(' ')[0];
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'Good morning';
+    if (hour >= 12 && hour < 17) return 'Good afternoon';
+    if (hour >= 17 && hour < 22) return 'Good evening';
+    return 'Good night';
+  };
 
   const [theme, setTheme] = useState(() => themeKey || localStorage.getItem('wp_theme') || 'blue');
   const T = THEMES[theme];
@@ -486,19 +519,35 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
   }, []);
 
   const sendChat = useCallback(() => {
-    if (!chatVal.trim()) return;
-    setMsgs(p => [...p, { id: Date.now(), r: 'user', text: chatVal }]);
+    const q = chatVal.trim();
+    if (!q) return;
+    const userMsg = { id: Date.now(), r: 'user', text: q };
+    const aiMsgId = Date.now() + 1;
+    setMsgs(p => [...p, userMsg, { id: aiMsgId, r: 'ai', text: '' }]);
     setChatVal('');
     setTyping(true);
-    setTimeout(() => {
-      setTyping(false);
-      setMsgs(p => [...p, { id: Date.now() + 1, r: 'ai', text: `On it! Processing: "${chatVal.slice(0, 45)}..." — I'll update you shortly.` }]);
-    }, 1500);
+
+    let accumulated = '';
+    superChat(q, '', {
+      onToken: (tok) => {
+        setTyping(false);
+        accumulated += tok;
+        setMsgs(p => p.map(m => m.id === aiMsgId ? { ...m, text: accumulated } : m));
+      },
+      onDone: () => {
+        setTyping(false);
+      },
+      onError: (err) => {
+        setTyping(false);
+        setMsgs(p => p.map(m => m.id === aiMsgId ? { ...m, text: `⚠️ ${err || 'Unable to connect to AI SuperBrain'}` } : m));
+      }
+    });
   }, [chatVal]);
 
-  const sendCmd = useCallback(() => {
-    if (!cmdVal.trim()) return;
-    onOpenCockpit && onOpenCockpit();
+  const sendCmd = useCallback((customText) => {
+    const q = (typeof customText === 'string' ? customText : cmdVal).trim();
+    if (!q) return;
+    onOpenCockpit && onOpenCockpit(q);
     setCmdVal('');
   }, [cmdVal, onOpenCockpit]);
 
@@ -558,8 +607,9 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 12 }}>
             {emails.length === 0 ? (
-              <div style={{ padding: '20px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
-                No new messages. Live inbox is clear.
+              <div style={{ padding: '24px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 20 }}>📭</span>
+                <span>No new messages. Live inbox is clear.</span>
               </div>
             ) : (
               emails.map(em => (
@@ -585,7 +635,9 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
               ))
             )}
           </div>
-          <PBtn T={T} style={{ width: '100%', justifyContent: 'center' }} onClick={() => { onOpenCockpit && onOpenCockpit("triage my emails and draft replies for urgent items"); }}>Handle all with AI {I.bolt}</PBtn>
+          {emails.length > 0 && (
+            <PBtn T={T} style={{ width: '100%', justifyContent: 'center' }} onClick={() => { onOpenCockpit && onOpenCockpit("triage my emails and draft replies for urgent items"); }}>Handle all with AI {I.bolt}</PBtn>
+          )}
         </Bento>
       );
     },
@@ -607,30 +659,56 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
         const m = minutes % 60;
         return m ? `${h}h ${m}m` : `${h}h`;
       };
-      const mapped = events.map(ev => ({
+      const todayIso = new Date().toISOString().split('T')[0];
+      const todayEvents = events.filter(e => {
+        const evDate = (e.date || e.start || '').split('T')[0];
+        return evDate === todayIso;
+      });
+      // Filter out annual recurring birthday events from dominating preview
+      const cleanEvents = events.filter(e => !e.title?.toLowerCase().includes('birthday'));
+      const displayEvents = todayEvents.length > 0 ? todayEvents : cleanEvents.slice(0, 3);
+      const isToday = todayEvents.length > 0;
+
+      const mapped = displayEvents.map(ev => ({
         id: ev.id,
         time: fmtTime(ev.time || ev.start),
         title: ev.title || 'Meeting',
         dur: fmtDur(ev.duration || (ev.end && ev.start ? Math.round((new Date(ev.end) - new Date(ev.start)) / 60000) : ev.tag || '30m')),
         color: ev.color || T.primary,
+        dateBadge: !isToday && ev.date ? ev.date : null,
         status: 'ready',
       }));
+
       return (
         <Bento draggable onDragStart={e => handleDragStart(e, 'schedule')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'schedule')} style={{ gridColumn: `span ${SPANS.schedule.col}`, gridRow: `span ${SPANS.schedule.row}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <span style={{ fontSize: 14, fontWeight: 700 }}>Today's Schedule</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>{isToday ? "Today's Schedule" : 'Upcoming Schedule'}</span>
+              {!isToday && mapped.length > 0 && <Pill label="Upcoming" color={T.primary} />}
+            </div>
             <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{dateStr}</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-            {mapped.map(m => (
-              <div key={m.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                <div style={{ width: 45, fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: "'JetBrains Mono',monospace", paddingTop: 4 }}>{m.time}</div>
-                <div style={{ flex: 1, minHeight: 44, background: `${m.color}15`, borderLeft: `3px solid ${m.color}`, borderRadius: '0 8px 8px 0', padding: '8px 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{m.title}</span>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{m.dur}</span>
-                </div>
+            {mapped.length === 0 ? (
+              <div style={{ padding: '28px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, margin: 'auto' }}>
+                <span style={{ fontSize: 20 }}>📅</span>
+                <span style={{ fontWeight: 500, color: 'rgba(255,255,255,0.7)' }}>No meetings scheduled for today</span>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Your calendar is clear for deep focus work.</span>
               </div>
-            ))}
+            ) : (
+              mapped.map(m => (
+                <div key={m.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <div style={{ width: 45, fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: "'JetBrains Mono',monospace", paddingTop: 4 }}>{m.time}</div>
+                  <div style={{ flex: 1, minHeight: 44, background: `${m.color}15`, borderLeft: `3px solid ${m.color}`, borderRadius: '0 8px 8px 0', padding: '8px 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{m.title}</span>
+                      {m.dateBadge && <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: "'JetBrains Mono',monospace" }}>{m.dateBadge}</span>}
+                    </div>
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>{m.dur}</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
           <GBtn color={T.primary} style={{ width: '100%', justifyContent: 'center', marginTop: 16 }} onClick={() => onOpenCockpit && onOpenCockpit("Schedule a meeting for tomorrow")}>+ Schedule with AI</GBtn>
         </Bento>
@@ -671,10 +749,15 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
       const members = dashboardData?.team || DEFAULT_DASHBOARD_DATA.team;
       return (
         <Bento draggable onDragStart={e => handleDragStart(e, 'team')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'team')} style={{ gridColumn: `span ${SPANS.team.col}`, gridRow: `span ${SPANS.team.row}` }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Team Status</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <span style={{ fontSize: 14, fontWeight: 700 }}>Team Status</span>
+            <GBtn color={T.primary} onClick={() => setActiveNav('team')}>Manage Team</GBtn>
+          </div>
           {members.length === 0 ? (
-            <div style={{ padding: '24px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
-              No team members configured. Connect Slack or workspace directory.
+            <div style={{ padding: '24px 10px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 18 }}>👥</span>
+              <span>No team members configured yet.</span>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>Add members in the Team tab or connect Slack.</span>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -758,12 +841,15 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
 
     briefing: () => {
       const alerts = dashboardData?.alerts || DEFAULT_DASHBOARD_DATA.alerts;
+      const hour = new Date().getHours();
+      const briefingTitle = hour < 12 ? 'Morning Briefing' : hour < 17 ? 'Afternoon Briefing' : 'Evening Briefing';
+      const briefingIcon = hour < 12 ? '🌅' : hour < 17 ? '☀️' : '🌙';
       return (
         <Bento draggable onDragStart={e => handleDragStart(e, 'briefing')} onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, 'briefing')} style={{ gridColumn: `span ${SPANS.briefing.col}`, gridRow: `span ${SPANS.briefing.row}`, background: `linear-gradient(145deg, #101014, ${T.primary}10)` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 18 }}>🌅</span>
-              <span style={{ fontSize: 14, fontWeight: 700 }}>Morning Briefing</span>
+              <span style={{ fontSize: 18 }}>{briefingIcon}</span>
+              <span style={{ fontSize: 14, fontWeight: 700 }}>{briefingTitle}</span>
             </div>
             <button style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>{I.x}</button>
           </div>
@@ -829,8 +915,8 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
             })
           )}
         </div>
-        <div style={{ marginTop: 12, border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 10, padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>
-          📤 Drop files here
+        <div onClick={() => setActiveNav('documents')} style={{ marginTop: 12, border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 10, padding: '12px', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer', transition: 'all 0.15s' }} className="chip-h">
+          📤 Upload & Query with AI in Documents →
         </div>
       </Bento>
       );
@@ -901,7 +987,19 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
            <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
              <div style={{ position: 'relative', width: 240 }}>
                 <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)', display: 'flex' }}>{I.search}</div>
-                <input id="cmd-input" placeholder="Search... (⌘K)" style={{ width: '100%', padding: '6px 16px 6px 36px', borderRadius: 99, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: '#fff', outline: 'none', fontSize: 13, fontFamily: "'Inter',sans-serif" }} />
+                <input
+                  id="cmd-input"
+                  value={cmdVal}
+                  onChange={e => setCmdVal(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      sendCmd();
+                    }
+                  }}
+                  placeholder="Search or ask AI... (⌘K)"
+                  style={{ width: '100%', padding: '6px 16px 6px 36px', borderRadius: 99, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: '#fff', outline: 'none', fontSize: 13, fontFamily: "'Inter',sans-serif" }}
+                />
              </div>
            </div>
 
@@ -1011,7 +1109,7 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
                 {/* GREETING BAND */}
                 <div style={{ height: 68, background: `linear-gradient(90deg, ${T.primary}15, transparent)`, borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', padding: '0 24px', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-                      <span style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 20 }}>Good morning, {firstName}</span>
+                      <span style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 20 }}>{getGreeting()}, {firstName}</span>
                       <span style={{ fontFamily: "'Inter',sans-serif", fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{dateStr}</span>
                    </div>
                    <div className="alerts-container" style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
@@ -1036,7 +1134,7 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
                       </div>
                       <div style={{ display: 'flex', gap: 8, marginTop: 12, overflowX: 'auto' }}>
                          {['Check emails', 'Schedule meeting', 'Team status', 'Deploy status'].map(chip => (
-                            <button key={chip} onClick={() => { setCmdVal(chip); setTimeout(sendCmd, 100); }} style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 99, color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }} className="chip-h">{chip}</button>
+                            <button key={chip} onClick={() => sendCmd(chip)} style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 99, color: 'rgba(255,255,255,0.7)', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }} className="chip-h">{chip}</button>
                          ))}
                       </div>
                    </div>

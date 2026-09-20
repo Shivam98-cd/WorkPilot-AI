@@ -107,3 +107,10 @@ async def semantic_search(body: dict, current_user=Depends(get_current_user)):
     results = vector_knowledge_service.semantic_search(uid=uid, query=query, top_k=top_k, doc_id=doc_id)
     return {'success': True, 'data': results}
 
+
+@router.delete('/{doc_id}')
+async def delete_document(doc_id: str, current_user=Depends(get_current_user)):
+    await workspace_service.delete_record(workspace_service.DOCUMENTS, current_user['uid'], doc_id)
+    return {'success': True}
+
+
