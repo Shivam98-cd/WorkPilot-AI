@@ -96,7 +96,6 @@ const TICKER_ITEMS = [
   '🛡️ Schedule Guardian Monitoring Calendar',
   '📧 Live Email Triage & Draft Engine Online',
   '🚀 Multi-Hop Tool Execution Ready',
-  '🔒 Executive Safeguards & Role Enforcement Enabled',
   '✨ Real-Time Workspace Knowledge Indexed',
 ];
 const CHAT_INIT = [
@@ -290,7 +289,7 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
 
   const [collapsed, setCollapsed] = useState(true);
   const [activeNav, setActiveNav] = useState('dashboard');
-  const [role, setRole] = useState(() => localStorage.getItem('wp_role') || 'Manager');
+
 
   // Navigate to section requested by ConnectionSheet
   useEffect(() => {
@@ -505,7 +504,7 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
   const chatEndRef = useRef(null);
 
   useEffect(() => { localStorage.setItem('wp_theme', theme); onThemeChange && onThemeChange(theme); }, [theme]);
-  useEffect(() => { localStorage.setItem('wp_role', role); }, [role]);
+
   useEffect(() => { localStorage.setItem('wp_order', JSON.stringify(widgetOrder)); }, [widgetOrder]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs, typing]);
   useEffect(() => {
@@ -1098,15 +1097,6 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
                     <div style={{ padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: 4 }}>
                       <div style={{ fontWeight: 600, fontSize: 14 }}>{displayName}</div>
                       <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{user?.email}</div>
-                    </div>
-                    <div style={{ padding: '4px 12px' }}>
-                       <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginBottom: 6, letterSpacing: '0.05em' }}>ROLE</div>
-                       {['Employee', 'Manager', 'Executive'].map(r => (
-                          <div key={r} onClick={() => setRole(r)} style={{ padding: '6px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 13, background: role === r ? 'rgba(255,255,255,0.05)' : 'transparent', color: role === r ? T.primary : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                             <div style={{ width: 8, height: 8, borderRadius: '50%', background: role === r ? T.primary : 'transparent', border: role === r ? 'none' : '1px solid rgba(255,255,255,0.2)' }} />
-                             {r}
-                          </div>
-                       ))}
                     </div>
                     <div style={{ padding: '8px 12px 4px' }}>
                       <GBtn 
