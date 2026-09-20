@@ -16,9 +16,23 @@ const SiSlack = ({ size, color }) => <svg width={size} height={size} viewBox="0 
 const SiMicrosoft = ({ size }) => <svg width={size} height={size} viewBox="0 0 24 24"><rect x="1" y="1" width="10" height="10" fill="#F25022"/><rect x="13" y="1" width="10" height="10" fill="#7FBA00"/><rect x="1" y="13" width="10" height="10" fill="#00A4EF"/><rect x="13" y="13" width="10" height="10" fill="#FFB900"/></svg>;
 
 const THEMES = {
-  blue:   { primary: '#3b82f6', secondary: '#6366f1', accent: '#06b6d4', glow: 'rgba(59,130,246,0.35)' },
-  purple: { primary: '#8b5cf6', secondary: '#ec4899', accent: '#a78bfa', glow: 'rgba(139,92,246,0.35)' },
-  green:  { primary: '#10b981', secondary: '#06b6d4', accent: '#34d399', glow: 'rgba(16,185,129,0.35)' },
+  // 🌑 Dark
+  midnight: { primary: '#3b82f6', secondary: '#6366f1', accent: '#06b6d4', glow: 'rgba(59,130,246,0.25)' },
+  obsidian: { primary: '#7c3aed', secondary: '#a78bfa', accent: '#c084fc', glow: 'rgba(124,58,237,0.25)' },
+  charcoal: { primary: '#10b981', secondary: '#06b6d4', accent: '#34d399', glow: 'rgba(16,185,129,0.25)' },
+  navy:     { primary: '#06b6d4', secondary: '#3b82f6', accent: '#38bdf8', glow: 'rgba(6,182,212,0.25)' },
+  slate:    { primary: '#60a5fa', secondary: '#818cf8', accent: '#38bdf8', glow: 'rgba(96,165,250,0.22)' },
+  stone:    { primary: '#f59e0b', secondary: '#f97316', accent: '#fbbf24', glow: 'rgba(245,158,11,0.25)' },
+  // ☀️ Light
+  cloud:    { primary: '#2563eb', secondary: '#6366f1', accent: '#06b6d4', glow: 'rgba(37,99,235,0.15)' },
+  pearl:    { primary: '#8b5cf6', secondary: '#ec4899', accent: '#a78bfa', glow: 'rgba(139,92,246,0.15)' },
+  // ✨ Premium
+  aurora:   { primary: '#ec4899', secondary: '#8b5cf6', accent: '#f472b6', glow: 'rgba(236,72,153,0.3)' },
+  frosted:  { primary: '#14b8a6', secondary: '#0ea5e9', accent: '#2dd4bf', glow: 'rgba(20,184,166,0.3)' },
+  // Legacy aliases
+  blue:     { primary: '#3b82f6', secondary: '#6366f1', accent: '#06b6d4', glow: 'rgba(59,130,246,0.35)' },
+  purple:   { primary: '#8b5cf6', secondary: '#ec4899', accent: '#a78bfa', glow: 'rgba(139,92,246,0.35)' },
+  green:    { primary: '#10b981', secondary: '#06b6d4', accent: '#34d399', glow: 'rgba(16,185,129,0.35)' },
 };
 
 const BASE = {
@@ -270,8 +284,8 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
     return 'Good night';
   };
 
-  const [theme, setTheme] = useState(() => themeKey || localStorage.getItem('wp_theme') || 'blue');
-  const T = THEMES[theme];
+  const [theme, setTheme] = useState(() => themeKey || localStorage.getItem('wp_theme') || 'midnight');
+  const T = THEMES[theme] || THEMES.midnight || THEMES.blue || { primary: '#3b82f6', secondary: '#6366f1', accent: '#06b6d4', glow: 'rgba(59,130,246,0.35)' };
   useEffect(() => { if (themeKey && themeKey !== theme) setTheme(themeKey); }, [themeKey]);
 
   const [collapsed, setCollapsed] = useState(true);

@@ -36,6 +36,28 @@ export default class ErrorBoundary extends React.Component {
           <p style={{ color: 'rgba(255,255,255,0.6)', maxWidth: '480px', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
             We encountered an unexpected interface issue. You can reload the workspace safely.
           </p>
+          {this.state.error && (
+            <details style={{ maxWidth: '640px', width: '90%', marginBottom: '1.5rem', textAlign: 'left', cursor: 'pointer' }}>
+              <summary style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.82rem', outline: 'none', marginBottom: '0.4rem' }}>View Technical Details</summary>
+              <div style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.85rem', margin: '0.5rem 0' }}>
+                {this.state.error?.toString()}
+              </div>
+              {this.state.error?.stack && (
+                <pre style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '6px',
+                  padding: '10px',
+                  fontSize: '0.75rem',
+                  color: 'rgba(255,255,255,0.7)',
+                  overflowX: 'auto',
+                  maxHeight: '160px'
+                }}>
+                  {this.state.error.stack}
+                </pre>
+              )}
+            </details>
+          )}
           <div style={{ display: 'flex', gap: '1rem' }}>
             <button
               onClick={() => window.location.reload()}
