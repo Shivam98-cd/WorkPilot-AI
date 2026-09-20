@@ -8,21 +8,22 @@
  * Pure CSS animations — no external deps, no state lifted up.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import BrandIcon from './BrandIcons';
 
 const PLATFORM_META = {
-  gmail:           { label: 'Gmail',           emoji: '📧', syncs: ['Inbox emails', 'Draft replies', 'AI triage'], action: 'View Emails',    nav: 'email' },
-  google_calendar: { label: 'Google Calendar', emoji: '📅', syncs: ['Upcoming events', 'Meeting links', 'Availability'], action: 'Open Calendar', nav: 'calendar' },
-  google_drive:    { label: 'Google Drive',    emoji: '📁', syncs: ['Recent files', 'Shared documents', 'Storage usage'], action: 'View Files',    nav: 'documents' },
-  google_meet:     { label: 'Google Meet',     emoji: '🎥', syncs: ['Meeting rooms', 'Recordings', 'Participants'], action: 'Schedule Meet',  nav: 'calendar' },
-  github:          { label: 'GitHub',          emoji: '🐙', syncs: ['Repositories', 'Pull requests', 'Issues & deployments'], action: 'View Deployments', nav: 'deployments' },
-  slack:           { label: 'Slack',           emoji: '💬', syncs: ['Channels', 'Direct messages', 'Notifications'], action: 'View Team',     nav: 'team' },
-  zoom:            { label: 'Zoom',            emoji: '📹', syncs: ['Scheduled meetings', 'Recordings', 'Participants'], action: 'Open Calendar', nav: 'calendar' },
-  jira:            { label: 'Jira',            emoji: '🗂️', syncs: ['Sprint issues', 'Project boards', 'Task status'], action: 'View Team',     nav: 'team' },
-  notion:          { label: 'Notion',          emoji: '📓', syncs: ['Pages & databases', 'Tasks', 'Wikis'], action: 'View Docs',     nav: 'documents' },
-  microsoft_teams: { label: 'Microsoft Teams', emoji: '👥', syncs: ['Team channels', 'Calendar events', 'Notifications'], action: 'View Team',     nav: 'team' },
-  outlook:         { label: 'Outlook',         emoji: '📨', syncs: ['Inbox emails', 'Calendar events', 'Contacts'], action: 'View Emails',    nav: 'email' },
-  microsoft_365:   { label: 'Microsoft 365',   emoji: '🏢', syncs: ['Emails', 'Calendar', 'OneDrive files'], action: 'View Docs',     nav: 'documents' },
-  trello:          { label: 'Trello',          emoji: '📋', syncs: ['Boards', 'Lists & cards', 'Due dates'], action: 'View Team',     nav: 'team' },
+  gmail:           { label: 'Gmail',           platform: 'gmail',           brandColor: '#EA4335', syncs: ['Inbox emails', 'Draft replies', 'AI triage'], action: 'View Emails',    nav: 'email' },
+  google_calendar: { label: 'Google Calendar', platform: 'google_calendar', brandColor: '#4285F4', syncs: ['Upcoming events', 'Meeting links', 'Availability'], action: 'Open Calendar', nav: 'calendar' },
+  google_drive:    { label: 'Google Drive',    platform: 'google_drive',    brandColor: '#4285F4', syncs: ['Recent files', 'Shared documents', 'Storage usage'], action: 'View Docs',     nav: 'documents' },
+  google_meet:     { label: 'Google Meet',     platform: 'google_meet',     brandColor: '#00AC47', syncs: ['Meeting rooms', 'Recordings', 'Participants'], action: 'Schedule Meet',  nav: 'calendar' },
+  github:          { label: 'GitHub',          platform: 'github',          brandColor: '#FFFFFF', syncs: ['Repositories', 'Pull requests', 'Issues & deployments'], action: 'View Deployments', nav: 'deployments' },
+  slack:           { label: 'Slack',           platform: 'slack',           brandColor: '#E01E5A', syncs: ['Channels', 'Direct messages', 'Notifications'], action: 'View Team',     nav: 'team' },
+  zoom:            { label: 'Zoom',            platform: 'zoom',            brandColor: '#2D8CFF', syncs: ['Scheduled meetings', 'Recordings', 'Participants'], action: 'Open Calendar', nav: 'calendar' },
+  jira:            { label: 'Jira',            platform: 'jira',            brandColor: '#0052CC', syncs: ['Sprint issues', 'Project boards', 'Task status'], action: 'View Team',     nav: 'team' },
+  notion:          { label: 'Notion',          platform: 'notion',          brandColor: '#FFFFFF', syncs: ['Pages & databases', 'Tasks', 'Wikis'], action: 'View Docs',     nav: 'documents' },
+  microsoft_teams: { label: 'Microsoft Teams', platform: 'microsoft_teams', brandColor: '#7B83EB', syncs: ['Team channels', 'Calendar events', 'Notifications'], action: 'View Team',     nav: 'team' },
+  outlook:         { label: 'Outlook',         platform: 'outlook',         brandColor: '#0078D4', syncs: ['Inbox emails', 'Calendar events', 'Contacts'], action: 'View Emails',    nav: 'email' },
+  microsoft_365:   { label: 'Microsoft 365',   platform: 'microsoft_365',   brandColor: '#00A4EF', syncs: ['Emails', 'Calendar', 'OneDrive files'], action: 'View Docs',     nav: 'documents' },
+  trello:          { label: 'Trello',          platform: 'trello',          brandColor: '#0079BF', syncs: ['Boards', 'Lists & cards', 'Due dates'], action: 'View Team',     nav: 'team' },
 };
 
 const CSS = `
@@ -150,16 +151,16 @@ export default function ConnectionSheet({ result, onClose, onNavigate }) {
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-          {/* Animated icon */}
+          {/* Animated icon with real brand logo */}
           <div style={{
             width: 56, height: 56, borderRadius: 16, flexShrink: 0,
-            background: accentBg,
-            border: `1.5px solid ${accentBorder}`,
+            background: isSuccess && meta.brandColor ? `${meta.brandColor}18` : accentBg,
+            border: `1.5px solid ${isSuccess && meta.brandColor ? `${meta.brandColor}40` : accentBorder}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 26,
+            boxShadow: isSuccess && meta.brandColor ? `0 0 24px ${meta.brandColor}25` : 'none',
             animation: isSuccess ? 'cs-pop-in 0.45s cubic-bezier(0.16,1,0.3,1) 0.1s both, cs-glow-pulse 2s ease 0.6s 2' : 'cs-pop-in 0.4s ease 0.1s both',
           }}>
-            {meta.emoji}
+            <BrandIcon name={result?.platform || meta.platform} size={30} />
           </div>
 
           <div style={{ flex: 1 }}>

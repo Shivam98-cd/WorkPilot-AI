@@ -5,20 +5,23 @@ import { SkeletonCard, SkeletonTable } from './Skeleton';
 import { getEmails, getEmailCounts, getEmailBody, markEmailRead, markEmailUnread, archiveEmail, deleteEmail, starEmail, draftEmail, sendEmail, triageEmails, getCalendarEvents, createCalendarEvent, deleteCalendarEvent, aiScheduleEvent, getTeamMembers, createTeamMember, updateTeamMember, deleteTeamMember, getDeployments, getDeploymentLogs, createDeployment, rollbackDeployment, getDocuments, uploadDocument, askDocumentAI, deleteDocument, getAnalytics, getIntegrations, authorizeIntegration, disconnectIntegration, syncIntegration, requestIntegration, updateProfile } from '../api';
 import { auth, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from '../firebase';
 
-/* ─── Brand icon map ─── */
-const SlackIcon = () => <svg width="20" height="20" viewBox="0 0 24 24"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523 2.528 2.528 0 0 1-2.522-2.523 2.528 2.528 0 0 1 2.522-2.52h2.52v2.52zm1.261 0a2.528 2.528 0 0 1 2.52-2.52h5.043a2.528 2.528 0 0 1 2.522 2.52v5.04a2.528 2.528 0 0 1-2.522 2.52H8.823a2.528 2.528 0 0 1-2.52-2.52v-5.04z" fill="#36C5F0"/><path d="M8.823 5.043a2.528 2.528 0 0 1-2.52-2.52A2.528 2.528 0 0 1 8.823 0a2.528 2.528 0 0 1 2.522 2.522v2.52H8.823zm0 1.262a2.528 2.528 0 0 1 2.522 2.52v5.043a2.528 2.528 0 0 1-2.522 2.52H3.78a2.528 2.528 0 0 1-2.522-2.52V8.825a2.528 2.528 0 0 1 2.522-2.52h5.043z" fill="#2EB67D"/><path d="M18.958 8.825a2.528 2.528 0 0 1 2.52-2.52 2.528 2.528 0 0 1 2.522 2.52 2.528 2.528 0 0 1-2.522 2.52h-2.52v-2.52zm-1.261 0a2.528 2.528 0 0 1-2.52 2.52h-5.043a2.528 2.528 0 0 1-2.522-2.52v-5.04a2.528 2.528 0 0 1 2.522-2.52h5.043a2.528 2.528 0 0 1 2.52 2.52v5.04z" fill="#ECB22E"/><path d="M15.177 18.957a2.528 2.528 0 0 1 2.52 2.522 2.528 2.528 0 0 1-2.52 2.52 2.528 2.528 0 0 1-2.522-2.52v-2.522h2.522zm0-1.261a2.528 2.528 0 0 1-2.522-2.52v-5.043a2.528 2.528 0 0 1 2.522-2.52h5.043a2.528 2.528 0 0 1 2.522 2.52v5.043a2.528 2.528 0 0 1-2.522 2.52h-5.043z" fill="#E01E5A"/></svg>;
-const MsTeamsIcon = () => <svg width="20" height="20" viewBox="0 0 24 24"><rect x="1" y="1" width="10" height="10" fill="#F25022"/><rect x="13" y="1" width="10" height="10" fill="#7FBA00"/><rect x="1" y="13" width="10" height="10" fill="#00A4EF"/><rect x="13" y="13" width="10" height="10" fill="#FFB900"/></svg>;
+import BrandIcon from './BrandIcons';
 
+/* ─── Brand icon map ─── */
 const BRAND_ICONS = {
-  'Gmail':           <SiGmail size={22} color="#EA4335" />,
-  'Google Calendar': <SiGooglecalendar size={22} color="#4285F4" />,
-  'Google Drive':    <SiGoogledrive size={22} color="#4285F4" />,
-  'GitHub':          <SiGithub size={22} color="#ffffff" />,
-  'Slack':           <SlackIcon />,
-  'Zoom':            <SiZoom size={22} color="#2D8CFF" />,
-  'Microsoft Teams': <MsTeamsIcon />,
-  'Notion':          <SiNotion size={22} color="#ffffff" />,
-  'Jira':            <SiJira size={22} color="#0052CC" />,
+  'Gmail':           <BrandIcon name="gmail" size={22} />,
+  'Google Calendar': <BrandIcon name="google_calendar" size={22} />,
+  'Google Drive':    <BrandIcon name="google_drive" size={22} />,
+  'Google Meet':     <BrandIcon name="google_meet" size={22} />,
+  'GitHub':          <BrandIcon name="github" size={22} />,
+  'Slack':           <BrandIcon name="slack" size={22} />,
+  'Zoom':            <BrandIcon name="zoom" size={22} />,
+  'Microsoft Teams': <BrandIcon name="microsoft_teams" size={22} />,
+  'Outlook':         <BrandIcon name="outlook" size={22} />,
+  'Microsoft 365':   <BrandIcon name="microsoft_365" size={22} />,
+  'Notion':          <BrandIcon name="notion" size={22} />,
+  'Jira':            <BrandIcon name="jira" size={22} />,
+  'Trello':          <BrandIcon name="trello" size={22} />,
 };
 
 /* ─── Shared mini helpers ─── */
@@ -3454,7 +3457,7 @@ export function IntegrationsPage({ T }) {
           {integrations.map(ig => (
             <Card key={ig.platform} accent={ig.connected ? C.green : undefined} style={{ display: 'flex', alignItems: 'center', gap: 14, transition: 'all 0.2s', opacity: ig.available ? 1 : 0.72 }}>
               <div style={{ width: 40, height: 40, borderRadius: 12, background: ig.connected ? `${C.green}12` : 'rgba(255,255,255,0.05)', border: `1px solid ${ig.connected ? C.green + '28' : C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
-                {BRAND_ICONS[ig.displayName] || <span style={{ fontSize: 18 }}>🔌</span>}
+                {BRAND_ICONS[ig.displayName] || <BrandIcon name={ig.platform} size={22} /> || <span style={{ fontSize: 18 }}>🔌</span>}
                 {ig.connected && <div style={{ position: 'absolute', bottom: -2, right: -2, width: 10, height: 10, borderRadius: '50%', background: C.green, border: '2px solid #101014' }} />}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
