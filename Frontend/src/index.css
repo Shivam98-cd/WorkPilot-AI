@@ -14,7 +14,28 @@
   --font-headlines: 'Sora', sans-serif;
   --font-body: 'Inter', sans-serif;
   --font-code: 'JetBrains Mono', monospace;
+
+  /* WorkPilot Theme Custom Properties */
+  --wp-bg: #000000;
+  --wp-bg-sidebar: #0d0d12;
+  --wp-surface: #0c0c0f;
+  --wp-surface-hover: #16161e;
+  --wp-border: rgba(255, 255, 255, 0.07);
+  --wp-text: #ffffff;
+  --wp-text-muted: rgba(255, 255, 255, 0.45);
+  --wp-input: #18181f;
+  --wp-input-border: rgba(255, 255, 255, 0.1);
+  --wp-primary: #3b82f6;
+  --wp-secondary: #6366f1;
+  --wp-accent: #06b6d4;
+  --wp-glow: rgba(59, 130, 246, 0.25);
 }
+
+/* Global Theme Transition */
+body, .sidebar, header, .card, .glass-card, input, select, textarea {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+}
+
 
 * {
   box-sizing: border-box;
@@ -466,3 +487,173 @@ h1, h2, h3, h4 {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   EXECUTIVE LIGHT THEME (WorkPilot AI)
+   High-contrast, crisp, modern light mode system
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+html[data-theme='light'],
+body.wp-light {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --border: rgba(0, 0, 0, 0.08);
+  --text-muted: #64748b;
+  --wp-bg: #f8fafc;
+  --wp-bg-sidebar: #f1f5f9;
+  --wp-surface: #ffffff;
+  --wp-surface-hover: #f8fafc;
+  --wp-border: rgba(0, 0, 0, 0.08);
+  --wp-text: #0f172a;
+  --wp-text-muted: #64748b;
+  --wp-input: #ffffff;
+  --wp-input-border: #cbd5e1;
+  --wp-primary: #2563eb;
+  --wp-secondary: #4f46e5;
+  --wp-accent: #0891b2;
+  --wp-glow: rgba(37, 99, 235, 0.15);
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+body.wp-light h1,
+body.wp-light h2,
+body.wp-light h3,
+body.wp-light h4,
+body.wp-light h5,
+body.wp-light h6 {
+  color: #0f172a !important;
+}
+
+body.wp-light p {
+  color: #334155;
+}
+
+/* Light Mode Cards & Surfaces */
+body.wp-light .card,
+body.wp-light .glass-card {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03) !important;
+}
+
+body.wp-light .card:hover,
+body.wp-light .glass-card:hover {
+  border-color: rgba(37, 99, 235, 0.25) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Light Mode Navigation, Header & Sidebar */
+body.wp-light nav,
+body.wp-light header {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+  color: #0f172a !important;
+}
+
+body.wp-light .sidebar {
+  background: #f8fafc !important;
+  border-right: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+body.wp-light .sidebar nav button {
+  color: #475569 !important;
+}
+
+body.wp-light .sidebar nav button:hover,
+body.wp-light .sidebar nav button.active {
+  background: #ffffff !important;
+  color: #2563eb !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Light Mode Form Elements */
+body.wp-light input,
+body.wp-light textarea,
+body.wp-light select {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
+}
+
+body.wp-light input:focus,
+body.wp-light textarea:focus,
+body.wp-light select:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+}
+
+body.wp-light input::placeholder,
+body.wp-light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Light Mode Tables & Lists */
+body.wp-light table {
+  color: #0f172a !important;
+}
+
+body.wp-light th {
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+body.wp-light td {
+  border-bottom: 1px solid #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+body.wp-light tr:hover,
+body.wp-light .pg-row:hover {
+  background: #f8fafc !important;
+}
+
+/* Light Mode Buttons */
+body.wp-light .btn-secondary {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+body.wp-light .btn-secondary:hover {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+}
+
+body.wp-light .btn-ghost:hover {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: #0f172a !important;
+}
+
+/* Light Mode Sticky Page Headers */
+body.wp-light div[style*="position: sticky"] {
+  background: #f8fafc !important;
+}
+
+/* Light Mode Scrollbars */
+body.wp-light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+body.wp-light ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
+}
+
+body.wp-light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Light Mode Landing Page Nav Links */
+body.wp-light .nav-link {
+  color: #475569 !important;
+}
+
+body.wp-light .nav-link:hover {
+  color: #0f172a !important;
+}
+

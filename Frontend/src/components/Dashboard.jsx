@@ -22,9 +22,9 @@ const THEMES = {
 };
 
 const BASE = {
-  bg: '#000', surface: '#0c0c0f', border: 'rgba(255,255,255,0.07)',
+  bg: 'var(--wp-bg, #000)', surface: 'var(--wp-surface, #0c0c0f)', border: 'var(--wp-border, rgba(255,255,255,0.07))',
   red: '#ef4444', amber: '#f59e0b', green: '#10b981',
-  textPrimary: '#fff', textSub: 'rgba(255,255,255,0.55)', textMuted: 'rgba(255,255,255,0.28)',
+  textPrimary: 'var(--wp-text, #fff)', textSub: 'var(--wp-text-muted, rgba(255,255,255,0.55))', textMuted: 'var(--wp-text-muted, rgba(255,255,255,0.28))',
 };
 
 const I = {
@@ -52,8 +52,10 @@ const I = {
   palette: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>,
   drag:    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="6" r="1" fill="currentColor"/><circle cx="15" cy="6" r="1" fill="currentColor"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><circle cx="9" cy="18" r="1" fill="currentColor"/><circle cx="15" cy="18" r="1" fill="currentColor"/></svg>,
   menu:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
-  sun:     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="4.22" x2="19.78" y2="5.64"/></svg>
+  sun:     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="4.22" x2="19.78" y2="5.64"/></svg>,
+  moon:    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>,
 };
+
 
 const NAV_SECTIONS = [
   { id: 'main', label: 'MAIN', items: [
@@ -925,11 +927,11 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
 
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#0a0a0d', color: '#fff', overflow: 'hidden', fontFamily: "'Inter',sans-serif" }}>
+    <div style={{ display: 'flex', height: '100vh', background: 'var(--wp-bg, #0a0a0d)', color: 'var(--wp-text, #fff)', overflow: 'hidden', fontFamily: "'Inter',sans-serif" }}>
       
       {/* ══ SIDEBAR ══ */}
-      <aside className="sidebar" style={{ width: collapsed ? 64 : 220, background: '#0a0a0d', borderRight: '1px solid rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)', flexShrink: 0, zIndex: 60, position: 'relative' }}>
-        <div style={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', flexShrink: 0 }}>
+      <aside className="sidebar" style={{ width: collapsed ? 64 : 220, background: 'var(--wp-bg-sidebar, #0a0a0d)', borderRight: '1px solid var(--wp-border, rgba(255,255,255,0.07))', display: 'flex', flexDirection: 'column', transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)', flexShrink: 0, zIndex: 60, position: 'relative' }}>
+        <div style={{ height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 12px', borderBottom: '1px solid var(--wp-border, rgba(255,255,255,0.07))', flexShrink: 0 }}>
            {collapsed ? (
              <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg, ${T.primary}, ${T.secondary})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{I.bolt}</div>
            ) : (
@@ -948,38 +950,27 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
                 display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start',
                 padding: collapsed ? '12px 0' : '10px 12px', borderRadius: 10, border: 'none', cursor: 'pointer',
                 background: 'transparent', color: active ? '#fff' : 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: active ? 600 : 400,
-                transition: 'all 0.15s', gap: 12
+                transition: 'all 0.15s', gap: 10, width: '100%', position: 'relative',
               }}>
-                <span style={{ color: active ? T.primary : 'inherit' }}>{I[item.icon]}</span>
-                {!collapsed && <span>{item.label}</span>}
+                <span style={{ color: active ? T.primary : 'inherit', display: 'flex' }}>{I[item.icon]}</span>
+                {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>}
+                {!collapsed && item.shortcut && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)', fontFamily: "'JetBrains Mono',monospace", border: '1px solid rgba(255,255,255,0.08)', padding: '1px 4px', borderRadius: 3 }}>{item.shortcut}</span>}
+                {active && <div style={{ position: 'absolute', left: 0, top: '20%', bottom: '20%', width: 3, background: T.primary, borderRadius: '0 3px 3px 0' }} />}
               </button>
             );
           })}
         </nav>
-        
-        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-          {!collapsed && <ThemeSwitcher theme={theme} setTheme={setTheme} onThemeChange={onThemeChange} />}
-          {collapsed && <div style={{ width: 8, height: 8, borderRadius: '50%', background: T.primary }} />}
-          {!collapsed && (
-             <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
-               <Av name={displayName} size={32} />
-               <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                  <div className="truncate-text" style={{ fontSize: 13, fontWeight: 600 }}>{displayName}</div>
-               </div>
-             </div>
-          )}
-        </div>
 
-        <button onClick={() => setCollapsed(!collapsed)} style={{ position: 'absolute', bottom: 16, right: -12, width: 24, height: 24, background: '#101014', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '50%', color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 70 }} className="sidebar-toggle">
-          {collapsed ? I.chevR : I.chevL}
-        </button>
+        <div style={{ padding: 12, borderTop: '1px solid var(--wp-border, rgba(255,255,255,0.07))', display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end' }}>
+          <button className="sidebar-toggle" onClick={() => setCollapsed(!collapsed)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', display: 'flex', padding: 4 }}>{collapsed ? I.chevR : I.chevL}</button>
+        </div>
       </aside>
 
       {/* ══ MAIN CONTENT ══ */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--wp-bg, #0a0a0d)' }}>
         
         {/* TOPBAR */}
-        <header style={{ height: 52, background: '#0a0a0d', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', flexShrink: 0 }}>
+        <header style={{ height: 52, background: 'var(--wp-surface, #0a0a0d)', borderBottom: '1px solid var(--wp-border, rgba(255,255,255,0.07))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', flexShrink: 0 }}>
            <div className="mobile-menu-btn" style={{ display: 'none' }}>
              <button onClick={() => setCollapsed(!collapsed)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>{I.menu || I.grid}</button>
            </div>
@@ -998,12 +989,40 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
                     }
                   }}
                   placeholder="Search or ask AI... (⌘K)"
-                  style={{ width: '100%', padding: '6px 16px 6px 36px', borderRadius: 99, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: '#fff', outline: 'none', fontSize: 13, fontFamily: "'Inter',sans-serif" }}
+                  style={{ width: '100%', padding: '6px 16px 6px 36px', borderRadius: 99, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: 'inherit', outline: 'none', fontSize: 13, fontFamily: "'Inter',sans-serif" }}
                 />
              </div>
            </div>
 
-           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+             {/* Quick Theme Toggle (Light / Dark) */}
+             <button
+               id="btn-theme-toggle"
+               onClick={() => {
+                 const isLight = document.body.classList.contains('wp-light') || themeKey === 'cloud' || themeKey === 'pearl';
+                 const nextTheme = isLight ? 'midnight' : 'cloud';
+                 onThemeChange?.(nextTheme);
+                 window.dispatchEvent(new CustomEvent('wp-set-theme', { detail: nextTheme }));
+               }}
+               style={{
+                 width: 32,
+                 height: 32,
+                 borderRadius: '50%',
+                 background: 'rgba(255,255,255,0.06)',
+                 border: '1px solid var(--wp-border, rgba(255,255,255,0.1))',
+                 color: 'var(--wp-text, #fff)',
+                 cursor: 'pointer',
+                 display: 'flex',
+                 alignItems: 'center',
+                 justifyContent: 'center',
+                 padding: 0,
+                 transition: 'all 0.2s',
+               }}
+               title={document.body.classList.contains('wp-light') || themeKey === 'cloud' ? "Switch to Dark Mode" : "Switch to Light Mode"}
+             >
+               {(document.body.classList.contains('wp-light') || themeKey === 'cloud' || themeKey === 'pearl') ? I.moon : I.sun}
+             </button>
+
              <div ref={notifRef} style={{ position: 'relative' }}>
                 <button
                   onClick={() => setShowNotif(!showNotif)}

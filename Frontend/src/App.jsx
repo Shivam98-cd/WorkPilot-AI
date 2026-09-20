@@ -190,10 +190,35 @@ function AppContent() {
     root.style.setProperty('--wp-secondary',    T.secondary);
     root.style.setProperty('--wp-accent',       T.accent);
     root.style.setProperty('--wp-glow',         T.glow);
-    // Light/dark body class for descendant CSS selectors
-    document.body.classList.toggle('wp-light', T.category === 'light');
+    // Light/dark body class & data-theme for descendant CSS selectors
+    const isLight = T.category === 'light';
+    document.body.classList.toggle('wp-light', isLight);
+    root.setAttribute('data-theme', isLight ? 'light' : 'dark');
     localStorage.setItem('wp_theme', themeKey);
   }, [themeKey, activeTheme]);
+
+  // Global theme toggle listeners for Navbar and components
+  useEffect(() => {
+    const handleToggle = () => {
+      setThemeKey(prev => {
+        const next = THEMES[prev]?.category === 'light' ? 'midnight' : 'cloud';
+        localStorage.setItem('wp_theme', next);
+        return next;
+      });
+    };
+    const handleSet = (e) => {
+      if (e?.detail && THEMES[e.detail]) {
+        setThemeKey(e.detail);
+        localStorage.setItem('wp_theme', e.detail);
+      }
+    };
+    window.addEventListener('wp-toggle-theme', handleToggle);
+    window.addEventListener('wp-set-theme', handleSet);
+    return () => {
+      window.removeEventListener('wp-toggle-theme', handleToggle);
+      window.removeEventListener('wp-set-theme', handleSet);
+    };
+  }, []);
 
 
 

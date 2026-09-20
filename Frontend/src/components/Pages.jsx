@@ -28,9 +28,9 @@ const BRAND_ICONS = {
 const C = {
   blue: '#3b82f6', violet: '#7c3aed', cyan: '#06b6d4',
   green: '#10b981', amber: '#f59e0b', red: '#ef4444',
-  indigo: '#6366f1', surface: '#0c0c0f',
-  text: '#fff', sub: 'rgba(255,255,255,0.55)', muted: 'rgba(255,255,255,0.28)',
-  border: 'rgba(255,255,255,0.07)',
+  indigo: '#6366f1', surface: 'var(--wp-surface, #0c0c0f)',
+  text: 'var(--wp-text, #fff)', sub: 'var(--wp-text-muted, rgba(255,255,255,0.55))', muted: 'var(--wp-text-muted, rgba(255,255,255,0.28))',
+  border: 'var(--wp-border, rgba(255,255,255,0.07))',
 };
 
 export function PageShell({ title, subtitle, icon, accent = C.blue, children, actions }) {
@@ -50,7 +50,7 @@ export function PageShell({ title, subtitle, icon, accent = C.blue, children, ac
         @keyframes barGrow { from { width: 0; } }
         @keyframes barGrowVertical { from { height: 0; } }
       `}</style>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28, flexWrap: 'wrap', gap: 12, position: 'sticky', top: 0, zIndex: 10, background: '#000', padding: '28px 0 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28, flexWrap: 'wrap', gap: 12, position: 'sticky', top: 0, zIndex: 10, background: 'var(--wp-bg, #000)', padding: '28px 0 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={{ width: 48, height: 48, borderRadius: 14, background: `linear-gradient(135deg,${accent}25,${accent}12)`, border: `1px solid ${accent}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>{icon}</div>
           <div>
@@ -3527,7 +3527,7 @@ export function SettingsPage({ T, user, onSignOut }) {
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
 
-  const SETTINGS_TABS = ['profile', 'notifications', 'ai', 'security', 'billing'];
+  const SETTINGS_TABS = ['profile', 'appearance', 'notifications', 'ai', 'security', 'billing'];
 
   const handleSaveProfile = async (e) => {
     e?.preventDefault();
@@ -3663,7 +3663,7 @@ export function SettingsPage({ T, user, onSignOut }) {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {SETTINGS_TABS.map(t => (
                 <button key={t} onClick={() => setTab(t)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', background: 'none', border: 'none', borderLeft: tab === t ? `3px solid ${T.primary}` : '3px solid transparent', color: tab === t ? T.primary : C.muted, fontSize: 13, fontWeight: tab === t ? 600 : 400, cursor: 'pointer', textTransform: 'capitalize', textAlign: 'left', fontFamily: "'Inter',sans-serif", transition: 'all 0.15s' }}>
-                  {{ profile: '👤', notifications: '🔔', ai: '⚡', security: '🔒', billing: '💳' }[t]} {t}
+                  {{ profile: '👤', appearance: '🎨', notifications: '🔔', ai: '⚡', security: '🔒', billing: '💳' }[t]} {t}
                 </button>
               ))}
             </div>
@@ -3686,25 +3686,112 @@ export function SettingsPage({ T, user, onSignOut }) {
               <form onSubmit={handleSaveProfile}>
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: 12, color: C.muted, marginBottom: 6, fontWeight: 600 }}>Display Name</label>
-                  <input value={displayName} onChange={e => setDisplayName(e.target.value)} style={{ width: '100%', padding: '10px 14px', background: '#18181f', border: `1px solid rgba(255,255,255,0.1)`, borderRadius: 9, color: C.text, fontSize: 13, outline: 'none', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box' }} />
+                  <input value={displayName} onChange={e => setDisplayName(e.target.value)} style={{ width: '100%', padding: '10px 14px', background: 'var(--wp-input, #18181f)', border: `1px solid var(--wp-input-border, rgba(255,255,255,0.1))`, borderRadius: 9, color: C.text, fontSize: 13, outline: 'none', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box' }} />
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: 12, color: C.muted, marginBottom: 6, fontWeight: 600 }}>Email Address</label>
-                  <input value={user?.email || ''} disabled style={{ width: '100%', padding: '10px 14px', background: '#121217', border: `1px solid rgba(255,255,255,0.06)`, borderRadius: 9, color: C.muted, fontSize: 13, outline: 'none', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box' }} />
+                  <input value={user?.email || ''} disabled style={{ width: '100%', padding: '10px 14px', background: 'var(--wp-surface, #121217)', border: `1px solid var(--wp-border, rgba(255,255,255,0.06))`, borderRadius: 9, color: C.muted, fontSize: 13, outline: 'none', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box' }} />
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: 12, color: C.muted, marginBottom: 6, fontWeight: 600 }}>Job Title</label>
-                  <input value={jobTitle} onChange={e => setJobTitle(e.target.value)} style={{ width: '100%', padding: '10px 14px', background: '#18181f', border: `1px solid rgba(255,255,255,0.1)`, borderRadius: 9, color: C.text, fontSize: 13, outline: 'none', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box' }} />
+                  <input value={jobTitle} onChange={e => setJobTitle(e.target.value)} style={{ width: '100%', padding: '10px 14px', background: 'var(--wp-input, #18181f)', border: `1px solid var(--wp-input-border, rgba(255,255,255,0.1))`, borderRadius: 9, color: C.text, fontSize: 13, outline: 'none', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box' }} />
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: 12, color: C.muted, marginBottom: 6, fontWeight: 600 }}>Department</label>
-                  <input value={department} onChange={e => setDepartment(e.target.value)} style={{ width: '100%', padding: '10px 14px', background: '#18181f', border: `1px solid rgba(255,255,255,0.1)`, borderRadius: 9, color: C.text, fontSize: 13, outline: 'none', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box' }} />
+                  <input value={department} onChange={e => setDepartment(e.target.value)} style={{ width: '100%', padding: '10px 14px', background: 'var(--wp-input, #18181f)', border: `1px solid var(--wp-input-border, rgba(255,255,255,0.1))`, borderRadius: 9, color: C.text, fontSize: 13, outline: 'none', fontFamily: "'Inter',sans-serif", boxSizing: 'border-box' }} />
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 24 }}>
                   <Btn color={T.primary} onClick={handleSaveProfile}>{saving ? 'Saving...' : 'Save changes'}</Btn>
                   <Btn ghost color={C.red} onClick={onSignOut}>Sign out</Btn>
                 </div>
               </form>
+            </div>
+          )}
+
+          {tab === 'appearance' && (
+            <div>
+              <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 15, marginBottom: 6 }}>Appearance & Theme</div>
+              <p style={{ fontSize: 12, color: C.muted, marginBottom: 20 }}>Customize the interface theme, contrast, and visual style for your workspace.</p>
+
+              {/* Quick Mode Toggle */}
+              <div style={{ padding: '16px', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`, marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Light Mode / Dark Mode</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Toggle between crisp, high-contrast light mode and sleek dark mode</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const isLight = document.body.classList.contains('wp-light');
+                    const next = isLight ? 'midnight' : 'cloud';
+                    window.dispatchEvent(new CustomEvent('wp-set-theme', { detail: next }));
+                    showToast(`Switched to ${isLight ? 'Dark' : 'Light'} Mode`, 'success');
+                  }}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 99,
+                    background: 'var(--wp-primary, #3b82f6)',
+                    color: '#fff',
+                    border: 'none',
+                    fontWeight: 600,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 2px 10px rgba(59,130,246,0.3)',
+                  }}
+                >
+                  {document.body.classList.contains('wp-light') ? '🌙 Switch to Dark Mode' : '☀️ Switch to Light Mode'}
+                </button>
+              </div>
+
+              {/* Theme Palette Cards */}
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, fontWeight: 600, letterSpacing: '0.05em' }}>SELECT THEME PRESET</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
+                {[
+                  { id: 'cloud', name: 'Cloud Light', desc: 'Crisp light & Royal Blue', mode: '☀️ Light', bg: '#f8fafc', p: '#2563eb', s: '#6366f1' },
+                  { id: 'pearl', name: 'Pearl Light', desc: 'Minimalist white & violet', mode: '☀️ Light', bg: '#ffffff', p: '#8b5cf6', s: '#ec4899' },
+                  { id: 'midnight', name: 'Midnight', desc: 'Deep space dark mode', mode: '🌑 Dark', bg: '#08080b', p: '#3b82f6', s: '#6366f1' },
+                  { id: 'obsidian', name: 'Obsidian', desc: 'Rich violet dark mode', mode: '🌑 Dark', bg: '#0d0d0d', p: '#7c3aed', s: '#a78bfa' },
+                  { id: 'charcoal', name: 'Charcoal', desc: 'Emerald slate dark mode', mode: '🌑 Dark', bg: '#1a1a1a', p: '#10b981', s: '#06b6d4' },
+                  { id: 'navy', name: 'Navy', desc: 'Ocean cyber dark mode', mode: '🌑 Dark', bg: '#0a0f1e', p: '#06b6d4', s: '#3b82f6' },
+                  { id: 'aurora', name: 'Aurora', desc: 'Neon gradient neon dark', mode: '✨ Premium', bg: '#0d0d1a', p: '#ec4899', s: '#8b5cf6' },
+                  { id: 'frosted', name: 'Frosted Glass', desc: 'Icy teal glass dark mode', mode: '✨ Premium', bg: '#10141a', p: '#14b8a6', s: '#0ea5e9' },
+                ].map(item => {
+                  const active = (localStorage.getItem('wp_theme') || 'midnight') === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent('wp-set-theme', { detail: item.id }));
+                        showToast(`Theme changed to ${item.name}`, 'success');
+                      }}
+                      style={{
+                        padding: 14,
+                        borderRadius: 12,
+                        background: 'rgba(255,255,255,0.02)',
+                        border: `1.5px solid ${active ? item.p : C.border}`,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        boxShadow: active ? `0 0 16px ${item.p}30` : 'none',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: item.p, background: `${item.p}15`, padding: '2px 6px', borderRadius: 4 }}>{item.mode}</span>
+                        {active && <span style={{ fontSize: 11, color: item.p, fontWeight: 700 }}>✓ Active</span>}
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>{item.name}</div>
+                      <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>{item.desc}</div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <div style={{ width: 22, height: 16, borderRadius: 4, background: item.bg, border: '1px solid rgba(128,128,128,0.3)' }} title="Background" />
+                        <div style={{ width: 22, height: 16, borderRadius: 4, background: item.p }} title="Primary" />
+                        <div style={{ width: 22, height: 16, borderRadius: 4, background: item.s }} title="Secondary" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
