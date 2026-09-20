@@ -170,7 +170,15 @@ function AppContent() {
     },
   };
 
-  const [themeKey, setThemeKey] = useState(localStorage.getItem('wp_theme') || 'midnight');
+  const safeGetItem = (key, fallback) => {
+    try {
+      return localStorage.getItem(key) || fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const [themeKey, setThemeKey] = useState(safeGetItem('wp_theme', 'midnight'));
   const activeTheme = THEMES[themeKey] || THEMES.midnight;
 
   // ── Apply theme as CSS variables on <body> — instant, zero re-render cost ──
@@ -194,7 +202,7 @@ function AppContent() {
     const isLight = T.category === 'light';
     document.body.classList.toggle('wp-light', isLight);
     root.setAttribute('data-theme', isLight ? 'light' : 'dark');
-    localStorage.setItem('wp_theme', themeKey);
+    try { localStorage.setItem('wp_theme', themeKey); } catch {}
   }, [themeKey, activeTheme]);
 
   // Global theme toggle listeners for Navbar and components
@@ -202,14 +210,14 @@ function AppContent() {
     const handleToggle = () => {
       setThemeKey(prev => {
         const next = THEMES[prev]?.category === 'light' ? 'midnight' : 'cloud';
-        localStorage.setItem('wp_theme', next);
+        try { localStorage.setItem('wp_theme', next); } catch {}
         return next;
       });
     };
     const handleSet = (e) => {
       if (e?.detail && THEMES[e.detail]) {
         setThemeKey(e.detail);
-        localStorage.setItem('wp_theme', e.detail);
+        try { localStorage.setItem('wp_theme', e.detail); } catch {}
       }
     };
     window.addEventListener('wp-toggle-theme', handleToggle);
@@ -243,7 +251,13 @@ function AppContent() {
 
   // ── Firebase Auth ──────────────────────────────────────────────────────────────
   useEffect(() => {
+    // Safety fallback: prevent infinite black screen if Firebase Auth hangs or is blocked on some devices/browsers
+    const fallbackTimer = setTimeout(() => {
+      setAuthLoading(false);
+    }, 2500);
+
     const unsub = auth.onAuthStateChanged(async (currentUser) => {
+      clearTimeout(fallbackTimer);
       clearAuthCache();
       setUser(currentUser);
       setAuthLoading(false); // Firebase has resolved — stop showing loader
@@ -251,17 +265,26 @@ function AppContent() {
         // Prime the auth token immediately so the first API call after login
         // has zero Firebase overhead (token is already resolved in background).
         primeAuthToken();
-        if (!localStorage.getItem('wp_tokens')) {
+        if (!safeGetItem('wp_tokens', null)) {
           try {
             const idToken = await currentUser.getIdToken();
             const { backendFirebaseAuth } = await import('./api');
             const res = await backendFirebaseAuth(idToken);
-            if (res.data?.tokens) localStorage.setItem('wp_tokens', JSON.stringify(res.data.tokens));
+            if (res.data?.tokens) {
+              try { localStorage.setItem('wp_tokens', JSON.stringify(res.data.tokens)); } catch {}
+            }
           } catch {}
         }
       }
+    }, (err) => {
+      console.warn('Firebase onAuthStateChanged error:', err);
+      clearTimeout(fallbackTimer);
+      setAuthLoading(false);
     });
-    return () => unsub();
+    return () => {
+      clearTimeout(fallbackTimer);
+      unsub();
+    };
   }, []);
 
   // ── Immediate sign-out event listener ──────────────────────────────────────────

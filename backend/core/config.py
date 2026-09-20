@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings
 from pathlib import Path
 from typing import List, Optional
 import os
+import re
 
 
 
@@ -119,9 +120,24 @@ class Settings(BaseSettings):
     
     @property
     def allowed_hosts_list(self) -> List[str]:
-        """Convert ALLOWED_HOSTS string to list"""
+        """Convert ALLOWED_HOSTS string to list with auto-cleaning and wildcard protection"""
         if isinstance(self.ALLOWED_HOSTS, str):
-            return [host.strip() for host in self.ALLOWED_HOSTS.split(",")]
+            raw_hosts = [host.strip() for host in self.ALLOWED_HOSTS.split(",") if host.strip()]
+            if not raw_hosts or "*" in raw_hosts:
+                return ["*"]
+            
+            cleaned = []
+            for h in raw_hosts:
+                # Strip protocol if accidentally included (e.g. https://)
+                clean_h = re.sub(r"^https?://", "", h).split("/")[0].split(":")[0]
+                if clean_h and clean_h not in cleaned:
+                    cleaned.append(clean_h)
+            
+            # Always ensure Render subdomains and localhost are supported
+            for essential in ["*.onrender.com", "localhost", "127.0.0.1"]:
+                if essential not in cleaned:
+                    cleaned.append(essential)
+            return cleaned
         return self.ALLOWED_HOSTS
     
     # AI LLM Provider keys
