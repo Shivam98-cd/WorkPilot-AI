@@ -38,11 +38,11 @@ function isJwtExpired(token) {
 export async function getFirebaseToken(force = false) {
   try {
     if (typeof auth.authStateReady === 'function') {
-      await withTimeout(auth.authStateReady(), 1500, 'authStateReady').catch(() => null);
+      await withTimeout(auth.authStateReady(), 3000, 'authStateReady').catch(() => null);
     }
     const user = auth.currentUser;
     if (user) {
-      return await withTimeout(user.getIdToken(force), 2000, 'getIdToken').catch(() => null);
+      return await withTimeout(user.getIdToken(force), 6000, 'getIdToken').catch(() => null);
     }
   } catch (err) {
     console.warn('⚠️ getFirebaseToken failed:', err?.message || err);

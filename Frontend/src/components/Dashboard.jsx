@@ -323,9 +323,7 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
   const [showKbHelp, setShowKbHelp] = useState(false);
   const DEFAULT_DASHBOARD_DATA = {
     counts: { emails: 0, urgentEmails: 0, events: 0, teamMembers: 0, deployments: 0, documents: 0, connectedIntegrations: 0, notifications: 0 },
-    alerts: [
-      { id: 1, kind: 'info', message: '⚠️ Unable to load dashboard data. Please refresh or check your connection.' }
-    ],
+    alerts: [],
     email: [],
     calendar: [],
     team: [],
@@ -343,8 +341,8 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
       time_breakdown: { deep_work: 0, meetings: 0, email_triage: 0, admin: 0 }
     },
     briefing: {
-      title: 'Unable to load briefing',
-      bullets: ['Please check your internet connection and refresh the page']
+      title: 'WorkPilot Daily Briefing',
+      bullets: ['Syncing workspace intelligence...']
     },
     aiActions: [],
     integrations: []
@@ -489,8 +487,13 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
           console.error('Dashboard API error:', err);
           setDashboardError(err.message || 'Failed to load dashboard');
           setDashboardLoading(false);
-          // Only use DEFAULT_DASHBOARD_DATA as last resort on API failure
-          setDashboardData(DEFAULT_DASHBOARD_DATA);
+          // Only use error alerts as last resort on API failure
+          setDashboardData({
+            ...DEFAULT_DASHBOARD_DATA,
+            alerts: [
+              { id: 'err_load', kind: 'info', message: '⚠️ Unable to load dashboard data. Please refresh or check your connection.' }
+            ]
+          });
         }
       });
     return () => { cancelled = true; };

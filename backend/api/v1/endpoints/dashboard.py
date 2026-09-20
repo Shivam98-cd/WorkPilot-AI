@@ -29,6 +29,7 @@ import time
 from typing import Any, Awaitable, Dict, List, Optional, TypeVar
 
 from fastapi import APIRouter, Depends
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from middleware.auth import get_current_user
@@ -139,9 +140,11 @@ async def dashboard_summary(current_user=Depends(get_current_user)):
     fetch_ms = _ms(t_fetch)
 
     # ── Phase 3: Build integrations panel list from already-fetched records ────
-    integrations = await _safe(
-        integration_service.build_integrations_list_from_records(all_integration_records), []
-    )
+    try:
+        integrations = integration_service.build_integrations_list_from_records(all_integration_records)
+    except Exception as exc:
+        logger.warning("Failed to build integrations list: %s", exc)
+        integrations = []
 
     # ── Phase 4: Compute analytics in memory — NO extra Firestore queries ──────
     t_proc = time.monotonic()
@@ -221,8 +224,9 @@ async def dashboard_summary(current_user=Depends(get_current_user)):
         uid[:8], intg_ms, fetch_ms, proc_ms, total_ms,
     )
 
-    _CACHE[uid] = {"data": result, "ts": time.monotonic()}
-    response = JSONResponse(content=result)
+    encoded_result = jsonable_encoder(result)
+    _CACHE[uid] = {"data": encoded_result, "ts": time.monotonic()}
+    response = JSONResponse(content=encoded_result)
     response.headers["X-Cache"] = "MISS"
     response.headers["X-Perf-Intg"] = f"{intg_ms}ms"
     response.headers["X-Perf-Fetch"] = f"{fetch_ms}ms"
