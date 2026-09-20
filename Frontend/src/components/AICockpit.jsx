@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SiGmail, SiGooglecalendar, SiGoogledrive, SiGithub, SiZoom, SiNotion, SiJira, SiTrello, SiGooglemeet, SiDuckduckgo } from 'react-icons/si';
-import { SlackIcon } from './BrandIcons';
+import BrandIcon, { SlackIcon } from './BrandIcons';
 import ComposeEmailCard from './ComposeEmailCard';
 import InteractiveMeetingCard from './InteractiveMeetingCard';
 import VisualSlotPickerCard from './VisualSlotPickerCard';
@@ -347,7 +347,6 @@ function IntegrationsStatusCard({ data, T, onDismiss }) {
   const platforms = data?.platforms || [];
   const connected = data?.connected ?? 0;
   const total = data?.total ?? platforms.length;
-  const ICONS = { gmail: '📧', google_calendar: '📅', github: '🐙', slack: '💬', zoom: '📹', notion: '📝', jira: '🎯', microsoft_teams: '🟦' };
   return (
     <div style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 14, overflow: 'hidden', marginTop: 8 }}>
       <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -358,7 +357,9 @@ function IntegrationsStatusCard({ data, T, onDismiss }) {
       <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {platforms.slice(0, 8).map((p, i) => (
           <div key={p.name || i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, background: p.connected ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.03)', border: `1px solid ${p.connected ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.06)'}` }}>
-            <span style={{ fontSize: 14 }}>{ICONS[p.name?.toLowerCase().replace(' ', '_')] || '🔌'}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20 }}>
+              <BrandIcon name={p.name} size={16} />
+            </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
               <div style={{ fontSize: 10, color: p.connected ? '#10b981' : 'rgba(255,255,255,0.3)' }}>{p.connected ? '● Connected' : '○ Not connected'}</div>
@@ -975,6 +976,21 @@ function ToolStatusBadge({ label }) {
           </span>
         </span>
       );
+    }
+    if (lower.includes('teams') || lower.includes('microsoft_teams') || lower.includes('msteams')) {
+      return <BrandIcon name="microsoft_teams" size={14} />;
+    }
+    if (lower.includes('outlook')) {
+      return <BrandIcon name="outlook" size={14} />;
+    }
+    if (lower.includes('drive')) {
+      return <BrandIcon name="google_drive" size={14} />;
+    }
+    if (lower.includes('trello')) {
+      return <BrandIcon name="trello" size={14} />;
+    }
+    if (lower.includes('microsoft') || lower.includes('m365') || lower.includes('office')) {
+      return <BrandIcon name="microsoft_365" size={14} />;
     }
     if (lower.includes('team')) return '👥';
     if (lower.includes('deploy')) return '🚀';

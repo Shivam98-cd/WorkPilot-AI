@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import BrandIcon from './BrandIcons';
 
 /**
  * NetworkGraph - Enhanced network visualization of integrations
@@ -485,18 +486,8 @@ const NetworkGraph = ({ integrations = [], onNodeClick, onSync, syncing = false 
               filter: node.connected ? 'none' : 'grayscale(70%)'
             }}
           >
-            <div style={{ fontSize: 28 }}>
-              {node.displayName === 'Gmail' ? '📧' :
-               node.displayName === 'Google Calendar' ? '📅' :
-               node.displayName === 'GitHub' ? '⭐' :
-               node.displayName === 'Slack' ? '💬' :
-               node.displayName === 'Notion' ? '📝' :
-               node.displayName === 'Jira' ? '📋' :
-               node.displayName === 'Zoom' ? '🎥' :
-               node.displayName === 'Trello' ? '📌' :
-               node.displayName === 'Microsoft Teams' ? '☁️' :
-               node.displayName === 'Google Drive' ? '📁' :
-               node.displayName === 'Outlook' ? '📨' : '🔌'}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <BrandIcon name={node.displayName || node.platform} size={28} />
             </div>
             
             {/* Status indicator dot */}
@@ -567,10 +558,8 @@ const NetworkGraph = ({ integrations = [], onNodeClick, onSync, syncing = false 
             alignItems: 'center',
             gap: 8
           }}>
-            <span style={{ fontSize: 20 }}>
-              {tooltip.data.displayName === 'Gmail' ? '📧' :
-               tooltip.data.displayName === 'Google Calendar' ? '📅' :
-               tooltip.data.displayName === 'GitHub' ? '⭐' : '🔌'}
+            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+              <BrandIcon name={tooltip.data.displayName || tooltip.data.platform} size={20} />
             </span>
             {tooltip.data.displayName}
           </div>

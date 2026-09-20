@@ -3457,7 +3457,7 @@ export function IntegrationsPage({ T }) {
           {integrations.map(ig => (
             <Card key={ig.platform} accent={ig.connected ? C.green : undefined} style={{ display: 'flex', alignItems: 'center', gap: 14, transition: 'all 0.2s', opacity: ig.available ? 1 : 0.72 }}>
               <div style={{ width: 40, height: 40, borderRadius: 12, background: ig.connected ? `${C.green}12` : 'rgba(255,255,255,0.05)', border: `1px solid ${ig.connected ? C.green + '28' : C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
-                {BRAND_ICONS[ig.displayName] || <BrandIcon name={ig.platform} size={22} /> || <span style={{ fontSize: 18 }}>🔌</span>}
+                <BrandIcon name={ig.platform || ig.displayName} size={24} />
                 {ig.connected && <div style={{ position: 'absolute', bottom: -2, right: -2, width: 10, height: 10, borderRadius: '50%', background: C.green, border: '2px solid #101014' }} />}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>

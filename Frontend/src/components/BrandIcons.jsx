@@ -48,21 +48,52 @@ export const OutlookIcon = ({ size = 20, style = {} }) => (
   </svg>
 );
 
+export const GoogleDriveIcon = ({ size = 20, style = {} }) => (
+  <svg width={size} height={size} viewBox="0 0 87.3 78" fill="none" style={style}>
+    <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+    <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44c-.8 1.4-1.2 2.95-1.2 4.5h27.5z" fill="#00ac47"/>
+    <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+    <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+    <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+    <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+  </svg>
+);
+
+export const GoogleMeetIcon = ({ size = 20, style = {} }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={style}>
+    <rect x="2" y="5" width="13" height="14" rx="2.5" fill="#00AC47"/>
+    <path d="M15 9.5l6-3.5v12l-6-3.5V9.5z" fill="#00832D"/>
+    <path d="M2 7.5A2.5 2.5 0 0 1 4.5 5H15v4H2V7.5z" fill="#2684FC"/>
+    <path d="M2 16.5A2.5 2.5 0 0 0 4.5 19H15v-4H2v1.5z" fill="#0066DA"/>
+    <path d="M15 15l6 3.5v-3L15 12v3z" fill="#EA4335"/>
+    <path d="M15 9l6-3.5v3L15 12V9z" fill="#FFBA00"/>
+  </svg>
+);
+
+export const GenericIntegrationIcon = ({ size = 20, style = {} }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+    <line x1="6" y1="6" x2="6.01" y2="6"/>
+    <line x1="6" y1="18" x2="6.01" y2="18"/>
+  </svg>
+);
+
 export default function BrandIcon({ name, size = 20, style = {}, title }) {
   const norm = String(name || '').toLowerCase().replace(/[\s_-]+/g, '');
 
   let iconContent = null;
-  if (norm === 'gmail') {
+  if (norm === 'gmail' || norm === 'mail' || norm === 'email') {
     iconContent = <SiGmail size={size} color="#EA4335" style={style} />;
-  } else if (norm === 'googlecalendar' || norm === 'calendar') {
+  } else if (norm === 'googlecalendar' || norm === 'calendar' || norm === 'gcal') {
     iconContent = <SiGooglecalendar size={size} color="#4285F4" style={style} />;
-  } else if (norm === 'googledrive' || norm === 'drive') {
-    iconContent = <SiGoogledrive size={size} color="#4285F4" style={style} />;
-  } else if (norm === 'googlemeet' || norm === 'meet') {
-    iconContent = <SiGooglemeet size={size} color="#00AC47" style={style} />;
-  } else if (norm === 'google') {
+  } else if (norm === 'googledrive' || norm === 'drive' || norm === 'gdrive') {
+    iconContent = <GoogleDriveIcon size={size} style={style} />;
+  } else if (norm === 'googlemeet' || norm === 'meet' || norm === 'gmeet') {
+    iconContent = <GoogleMeetIcon size={size} style={style} />;
+  } else if (norm === 'google' || norm === 'googleworkspace' || norm === 'gsuite') {
     iconContent = <SiGoogle size={size} color="#4285F4" style={style} />;
-  } else if (norm === 'github') {
+  } else if (norm === 'github' || norm === 'git') {
     iconContent = <SiGithub size={size} color="#FFFFFF" style={style} />;
   } else if (norm === 'slack') {
     iconContent = <SlackIcon size={size} style={style} />;
@@ -70,19 +101,22 @@ export default function BrandIcon({ name, size = 20, style = {}, title }) {
     iconContent = <SiZoom size={size} color="#2D8CFF" style={style} />;
   } else if (norm === 'notion') {
     iconContent = <SiNotion size={size} color="#FFFFFF" style={style} />;
-  } else if (norm === 'jira') {
+  } else if (norm === 'jira' || norm === 'atlassian') {
     iconContent = <SiJira size={size} color="#0052CC" style={style} />;
   } else if (norm === 'microsoftteams' || norm === 'teams' || norm === 'msteams') {
     iconContent = <TeamsIcon size={size} style={style} />;
-  } else if (norm === 'outlook') {
+  } else if (norm === 'outlook' || norm === 'msoutlook') {
     iconContent = <OutlookIcon size={size} style={style} />;
-  } else if (norm === 'microsoft365' || norm === 'microsoft' || norm === 'ms365') {
+  } else if (norm === 'microsoft365' || norm === 'microsoft' || norm === 'ms365' || norm === 'office365' || norm === 'onedrive') {
     iconContent = <MicrosoftIcon size={size} style={style} />;
   } else if (norm === 'trello') {
     iconContent = <SiTrello size={size} color="#0079BF" style={style} />;
   }
 
-  if (!iconContent) return null;
+  if (!iconContent) {
+    iconContent = <GenericIntegrationIcon size={size} style={style} />;
+  }
+
   return (
     <span title={title || name} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
       {iconContent}
