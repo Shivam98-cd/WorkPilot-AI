@@ -9,6 +9,7 @@ passlib[argon2]==1.7.4
 python-multipart==0.0.9
 email-validator==2.1.0
 httpx==0.26.0
+h2>=4.1.0
 slowapi==0.1.9
 redis==5.0.1
 python-dateutil==2.8.2

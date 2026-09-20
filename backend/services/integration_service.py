@@ -27,18 +27,29 @@ _oauth_states: Dict[str, Dict[str, Any]] = {}
 _STATE_TTL_SECONDS = 600
 _shared_client: Optional[httpx.AsyncClient] = None
 
+def _create_async_client(max_connections: int = 100, max_keepalive: int = 20) -> httpx.AsyncClient:
+    """Build an AsyncClient with HTTP/2 if available, gracefully falling back to HTTP/1.1."""
+    try:
+        return httpx.AsyncClient(
+            timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS,
+            http2=True,
+            limits=httpx.Limits(max_connections=max_connections, max_keepalive_connections=max_keepalive),
+        )
+    except (ImportError, Exception):
+        return httpx.AsyncClient(
+            timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS,
+            http2=False,
+            limits=httpx.Limits(max_connections=max_connections, max_keepalive_connections=max_keepalive),
+        )
+
 @asynccontextmanager
 async def _http_client():
     global _shared_client
     if _shared_client is not None and not _shared_client.is_closed:
         yield _shared_client
     else:
-        # Fallback: per-request client with HTTP/2 + keep-alive
-        async with httpx.AsyncClient(
-            timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS,
-            http2=True,
-            limits=httpx.Limits(max_connections=50, max_keepalive_connections=10),
-        ) as client:
+        # Fallback: per-request client
+        async with _create_async_client(max_connections=50, max_keepalive=10) as client:
             yield client
 
 
@@ -1579,11 +1590,7 @@ async def startup_http_client() -> None:
     """
     global _shared_client
     if _shared_client is None or _shared_client.is_closed:
-        _shared_client = httpx.AsyncClient(
-            timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS,
-            http2=True,
-            limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
-        )
+        _shared_client = _create_async_client(max_connections=100, max_keepalive=20)
 
 
 async def shutdown_http_client() -> None:
