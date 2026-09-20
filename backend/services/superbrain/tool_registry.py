@@ -321,3 +321,89 @@ ALL_TOOLS = [
     }},
 ]
 
+TOOL_MAP = {t["function"]["name"]: t for t in ALL_TOOLS}
+
+CORE_TOOL_NAMES = [
+    "search_workspace",
+    "workspace_cross_search",
+    "query_knowledge_base",
+    "diagnose_issue",
+]
+
+CATEGORY_TOOL_NAMES = {
+    "email": ["get_emails", "compose_email", "inbox_triage_workflow", "search_workspace", "workspace_cross_search"],
+    "calendar": ["get_calendar_events", "create_calendar_event", "create_meet_and_email", "find_meeting_time", "prepare_meeting_briefing", "zoom_tool"],
+    "team": ["get_team_members", "task_management", "generate_report"],
+    "deployment": ["get_deployments", "get_system_health", "diagnose_issue"],
+    "analytics": ["get_analytics", "generate_report", "analyze_data"],
+    "notion": ["notion_tool", "summarize_document", "search_workspace"],
+    "github": ["github_tool", "diagnose_issue", "search_workspace"],
+    "jira": ["jira_tool", "task_management"],
+    "slack": ["slack_tool"],
+    "zoom": ["zoom_tool", "create_calendar_event", "prepare_meeting_briefing"],
+    "task": ["task_management", "jira_tool", "notion_tool"],
+    "report": ["generate_report", "get_analytics", "get_deployments", "get_team_members"],
+    "diagnose": ["diagnose_issue", "get_system_health", "get_integrations_status"],
+    "reminder": ["set_reminder"],
+    "code": ["explain_code", "github_tool"],
+    "weather": ["get_weather"],
+    "news": ["get_news_briefing"],
+    "data": ["analyze_data", "get_analytics"],
+}
+
+DEFAULT_TOOL_NAMES = [
+    "get_emails", "compose_email", "get_calendar_events", "create_calendar_event",
+    "search_workspace", "workspace_cross_search", "task_management", "github_tool",
+    "notion_tool", "query_knowledge_base", "diagnose_issue", "get_system_health"
+]
+
+def get_tools_for_request(message: str, category: str = "general", forced_tool: str | None = None) -> list[dict]:
+    """
+    Return a focused subset of tools matching the query category and keywords.
+    Keeps prompt size < 1,200 tokens to stay well under Groq's 7,000 token limit and prevent 60s timeouts.
+    """
+    selected_names = set(CORE_TOOL_NAMES)
+    
+    # 1. Add tools matching detected intent category
+    cat_tools = CATEGORY_TOOL_NAMES.get((category or "").lower())
+    if cat_tools:
+        selected_names.update(cat_tools)
+    else:
+        selected_names.update(DEFAULT_TOOL_NAMES)
+        
+    # 2. Add keywords matching specific integrations mentioned in message
+    msg_lower = (message or "").lower()
+    if any(w in msg_lower for w in ["email", "mail", "gmail", "inbox", "unread"]):
+        selected_names.update(["get_emails", "compose_email", "inbox_triage_workflow"])
+    if any(w in msg_lower for w in ["calendar", "meeting", "meet", "schedule", "appointment"]):
+        selected_names.update(["get_calendar_events", "create_calendar_event", "create_meet_and_email", "find_meeting_time"])
+    if any(w in msg_lower for w in ["github", "repo", "pr", "issue", "branch", "commit"]):
+        selected_names.add("github_tool")
+    if any(w in msg_lower for w in ["notion", "page", "database"]):
+        selected_names.add("notion_tool")
+    if any(w in msg_lower for w in ["jira", "ticket", "sprint"]):
+        selected_names.add("jira_tool")
+    if any(w in msg_lower for w in ["slack", "channel"]):
+        selected_names.add("slack_tool")
+    if any(w in msg_lower for w in ["zoom"]):
+        selected_names.add("zoom_tool")
+    if any(w in msg_lower for w in ["task", "todo"]):
+        selected_names.add("task_management")
+    if any(w in msg_lower for w in ["weather", "temperature", "forecast"]):
+        selected_names.add("get_weather")
+    if any(w in msg_lower for w in ["news", "headline"]):
+        selected_names.add("get_news_briefing")
+    if any(w in msg_lower for w in ["remind", "reminder"]):
+        selected_names.add("set_reminder")
+    if any(w in msg_lower for w in ["code", "python", "javascript", "function", "debug"]):
+        selected_names.add("explain_code")
+    if any(w in msg_lower for w in ["analytics", "productivity", "report"]):
+        selected_names.update(["get_analytics", "generate_report"])
+
+    # 3. If a specific tool is forced, ensure it's in the list
+    if forced_tool and forced_tool in TOOL_MAP:
+        selected_names.add(forced_tool)
+
+    return [TOOL_MAP[name] for name in selected_names if name in TOOL_MAP]
+
+

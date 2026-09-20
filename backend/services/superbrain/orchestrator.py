@@ -19,7 +19,7 @@ except ImportError:
 from core.config import settings
 from services.superbrain.memory import MemoryManager
 from services.superbrain.intent_classifier import classify_intent, get_forced_tool, get_smart_suggestions
-from services.superbrain.tool_registry import ALL_TOOLS
+from services.superbrain.tool_registry import ALL_TOOLS, get_tools_for_request
 from services.superbrain.critic import CriticAgent
 
 logger = logging.getLogger("superbrain.orchestrator")
@@ -84,7 +84,7 @@ class SuperBrainOrchestrator:
         self.critic  = CriticAgent()
         # Per-user conversation history:  uid:conv_id → deque of {role, content}
         self._convs: dict = defaultdict(lambda: deque(maxlen=20))
-        self._model  = "qwen/qwen3.8-27b"   # fast, reliable, high token limits on this Groq account
+        self._model  = "qwen/qwen3.8-27b"   # fast, reliable, 0.5s response with optimized prompt tokens
         self._tool_models = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
         self._synth_models = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
 
@@ -98,13 +98,13 @@ class SuperBrainOrchestrator:
     ) -> AsyncGenerator[str, None]:
         """
         Stream tokens from Groq chat completion with automatic model fallback on rate limits or API errors.
-        Each model call is bounded by a 20-second timeout to prevent silent hangs on rate limits.
+        Each model call is bounded by a 10-second timeout to prevent silent hangs on rate limits.
         """
         last_exc = None
         for model in models:
             streamed_any = False
             try:
-                # 20s timeout per model to avoid silent Groq rate-limit hangs
+                # 10s timeout per model to avoid silent Groq rate-limit hangs
                 final_resp = await asyncio.wait_for(
                     asyncio.to_thread(
                         lambda m=model: groq_client.chat.completions.create(
@@ -115,7 +115,7 @@ class SuperBrainOrchestrator:
                             stream=True,
                         )
                     ),
-                    timeout=20.0,
+                    timeout=10.0,
                 )
                 for chunk in final_resp:
                     delta = chunk.choices[0].delta
@@ -151,7 +151,7 @@ class SuperBrainOrchestrator:
     ):
         """
         Execute Groq chat completion with automatic model fallback on rate limits or API errors.
-        Each model call is bounded by a 20-second timeout to prevent silent hangs on rate limits.
+        Each model call is bounded by a 10-second timeout to prevent silent hangs on rate limits.
         """
         last_exc = None
         for model in models:
@@ -162,7 +162,7 @@ class SuperBrainOrchestrator:
                 kw["tool_choice"] = tool_choice
 
             try:
-                # 20s timeout per model to avoid silent Groq rate-limit hangs
+                # 10s timeout per model to avoid silent Groq rate-limit hangs
                 resp = await asyncio.wait_for(
                     asyncio.to_thread(
                         lambda m=model, kw_args=kw: groq_client.chat.completions.create(
@@ -171,11 +171,11 @@ class SuperBrainOrchestrator:
                             **kw_args,
                         )
                     ),
-                    timeout=20.0,
+                    timeout=10.0,
                 )
                 return resp, model
             except asyncio.TimeoutError:
-                last_exc = asyncio.TimeoutError(f"Model '{model}' LLM call timed out after 20s")
+                last_exc = asyncio.TimeoutError(f"Model '{model}' LLM call timed out after 10s")
                 logger.warning(f"SuperBrain LLM timeout on model '{model}'. Trying next fallback...")
                 # If tool_choice was forced, retry same model with auto (quick, no new timeout slot wasted)
                 if tools is not None and tool_choice is not None and tool_choice != "auto":
@@ -198,7 +198,7 @@ class SuperBrainOrchestrator:
                                     **kw_args,
                                 )
                             ),
-                            timeout=20.0,
+                            timeout=10.0,
                         )
                         return resp, model
                     except Exception as exc2:
@@ -866,7 +866,24 @@ When the user needs to select between options (such as picking a repository, cha
         try:
             # ── 7. Multi-Hop Autonomous ReAct Loop (Up to 4 sequential hops) ──
             all_tool_results = []
-            loop_messages = list(messages)
+            
+            # Select focused tools matching intent/query to prevent token bloat & 60s timeouts
+            active_category = intent.get("category", "general")
+            active_tools = get_tools_for_request(message, category=active_category, forced_tool=forced_tool)
+
+            # Lightweight planner prompt for tool selection (avoids sending 8,000 char prompt during tool hops)
+            tool_planner_prompt = f"""You are WorkPilot AI Chief of Staff tool coordinator.
+Current date/time: {now}
+USER CONTEXT:
+{memory_ctx or "No prior context"}
+
+Select the most appropriate tool(s) to execute. Always use real workspace tools to fetch or act on data before answering."""
+
+            loop_messages = [{"role": "system", "content": tool_planner_prompt}]
+            for h in list(conv_history)[-6:]:
+                loop_messages.append({"role": h["role"], "content": h["content"]})
+            loop_messages.append({"role": "user", "content": message})
+
             MAX_HOPS = 4
 
             for hop in range(1, MAX_HOPS + 1):
@@ -881,10 +898,10 @@ When the user needs to select between options (such as picking a repository, cha
                     groq_client=groq_client,
                     messages=loop_messages,
                     models=self._tool_models,
-                    tools=ALL_TOOLS,
+                    tools=active_tools,
                     tool_choice=call_kwargs.get("tool_choice", "auto"),
-                    max_tokens=1500,
-                    temperature=0.25,
+                    max_tokens=1200,
+                    temperature=0.2,
                 )
 
                 step_msg = step_resp.choices[0].message
