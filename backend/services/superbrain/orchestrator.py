@@ -93,12 +93,13 @@ class SuperBrainOrchestrator:
         groq_client: Groq,
         messages: list,
         models: list[str],
-        max_tokens: int = 2048,
+        max_tokens: int = 900,
         temperature: float = 0.4,
     ) -> AsyncGenerator[str, None]:
         """
         Stream tokens from Groq chat completion with automatic model fallback on rate limits or API errors.
         Each model call is bounded by a 10-second timeout to prevent silent hangs on rate limits.
+        max_tokens is capped at 900 to stay safely under Groq's 1,000 OTPM ceiling.
         """
         last_exc = None
         for model in models:
@@ -124,7 +125,7 @@ class SuperBrainOrchestrator:
                         yield delta.content
                 return
             except asyncio.TimeoutError:
-                last_exc = asyncio.TimeoutError(f"Model '{model}' synthesis timed out after 20s")
+                last_exc = asyncio.TimeoutError(f"Model '{model}' synthesis timed out after 10s")
                 logger.warning(f"SuperBrain synthesis timeout on model '{model}'. Trying next fallback...")
                 if streamed_any:
                     return
@@ -145,7 +146,7 @@ class SuperBrainOrchestrator:
         models: list[str],
         tools: list | None = None,
         tool_choice: Any = None,
-        max_tokens: int = 1500,
+        max_tokens: int = 600,
         temperature: float = 0.25,
         stream: bool = False,
     ):
@@ -900,7 +901,7 @@ Select the most appropriate tool(s) to execute. Always use real workspace tools 
                     models=self._tool_models,
                     tools=active_tools,
                     tool_choice=call_kwargs.get("tool_choice", "auto"),
-                    max_tokens=1200,
+                    max_tokens=600,
                     temperature=0.2,
                 )
 
@@ -1073,7 +1074,7 @@ Provide a clear, structured, and executive-grade response based on this cross-pl
                 groq_client=groq_client,
                 messages=synth_msg_list,
                 models=self._synth_models,
-                max_tokens=2048,
+                max_tokens=900,
                 temperature=0.4,
             ):
                 full_response += token
