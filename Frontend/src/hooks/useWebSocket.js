@@ -21,8 +21,17 @@ export function useWebSocket(uid, onEvent) {
 
     // Compute WebSocket protocol and base URL
     const isHttps = window.location.protocol === 'https:';
-    const wsProto = isHttps ? 'wss:' : 'ws:';
-    const host = window.location.hostname === 'localhost' ? 'localhost:8000' : window.location.host;
+    let wsProto = isHttps ? 'wss:' : 'ws:';
+    let host = window.location.hostname === 'localhost' ? 'localhost:8000' : window.location.host;
+
+    const apiBase = import.meta.env.VITE_API_BASE_URL;
+    if (apiBase) {
+      try {
+        const u = new URL(apiBase);
+        host = u.host;
+        wsProto = u.protocol === 'https:' ? 'wss:' : 'ws:';
+      } catch {}
+    }
     const wsUrl = `${wsProto}//${host}/api/v1/ws/${encodeURIComponent(uid)}`;
 
     setStatus('connecting');
