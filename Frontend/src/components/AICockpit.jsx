@@ -1803,9 +1803,21 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
     setMode(newMode);
     localStorage.setItem('wp_ai_mode', newMode);
   };
-  const [msgs, setMsgs] = useState([
-    { id: 1, r: 'ai', text: `Welcome back, ${firstName}! I'm your AI Chief of Staff. How can I assist you across your workspace today?`, card: null, streaming: false, done: true },
-  ]);
+  const [conversationId, setConversationId] = useState(() => {
+    return localStorage.getItem('wp_active_conversation') || crypto.randomUUID();
+  });
+  const [msgs, setMsgs] = useState(() => {
+    const savedId = localStorage.getItem('wp_active_conversation');
+    if (savedId) {
+      try {
+        const cached = JSON.parse(localStorage.getItem(`wp_chat_${savedId}`) || 'null');
+        if (Array.isArray(cached) && cached.length > 0) return cached;
+      } catch {}
+    }
+    return [
+      { id: 1, r: 'ai', text: `Welcome back, ${firstName}! I'm your AI Chief of Staff. How can I assist you across your workspace today?`, card: null, streaming: false, done: true },
+    ];
+  });
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [thinkMsg, setThinkMsg] = useState('');
@@ -1822,10 +1834,6 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [conversationTitle, setConversationTitle] = useState('New workspace chat');
   const [conversationHistory, setConversationHistory] = useState([]);
-  const [conversationId, setConversationId] = useState(() => {
-    const saved = localStorage.getItem('wp_active_conversation');
-    return saved || crypto.randomUUID();
-  });
   const [showHistory, setShowHistory] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -1950,13 +1958,18 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
     if (!latestUserMessage) return;
     const title = latestUserMessage.text.slice(0, 42) || 'New workspace chat';
     setConversationTitle(title);
-    const record = { id: latestUserMessage.id, title, updatedAt: Date.now() };
+    const record = { id: conversationId, title, updatedAt: Date.now() };
     setConversationHistory(prev => {
-      const next = [record, ...prev.filter(item => item.title !== title)].slice(0, 12);
-      localStorage.setItem('wp_cockpit_history', JSON.stringify(next));
+      const next = [record, ...prev.filter(item => item.id !== conversationId)].slice(0, 20);
+      try { localStorage.setItem('wp_cockpit_history', JSON.stringify(next)); } catch {}
       return next;
     });
-  }, [msgs]);
+    if (msgs.length > 0) {
+      try {
+        localStorage.setItem(`wp_chat_${conversationId}`, JSON.stringify(msgs));
+      } catch {}
+    }
+  }, [msgs, conversationId]);
 
   const sendMsg = useCallback(async (promptOverride) => {
     const userText = (promptOverride ?? input).trim();
@@ -2273,12 +2286,14 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
   const removeCard = (id) => setMsgs(p => p.map(m => m.id === id ? { ...m, card: null } : m));
 
   const startNewChat = () => {
-    setMsgs([{ id: Date.now(), r: 'ai', text: `Welcome back, ${firstName}. What would you like to get done?`, card: null, streaming: false, done: true }]);
-    setInput('');
+    const newId = crypto.randomUUID();
+    setConversationId(newId);
     setConversationTitle('New workspace chat');
-    setConversationId(crypto.randomUUID());
+    const initial = [{ id: Date.now(), r: 'ai', text: `Welcome back, ${firstName}! What would you like to get done?`, card: null, streaming: false, done: true }];
+    setMsgs(initial);
+    setInput('');
     setSearchQ('');
-    setShowHistory(false);
+    try { localStorage.setItem('wp_active_conversation', newId); } catch {}
     inputRef.current?.focus();
   };
 
@@ -2482,19 +2497,51 @@ export default function AICockpit({ user, theme, initialPrompt, onBack, onOpenIn
               {conversationHistory.map(chat => (
                 <div key={chat.id} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                   <button onClick={() => {
-                    getChatConversation(chat.id).then(result => {
+                    const targetId = chat.id;
+                    setConversationId(targetId);
+                    setConversationTitle(chat.title || 'Workspace chat');
+                    try { localStorage.setItem('wp_active_conversation', targetId); } catch {}
+
+                    // 1. Instant load from local cache if present (zero-latency UI switch)
+                    try {
+                      const cached = JSON.parse(localStorage.getItem(`wp_chat_${targetId}`) || 'null');
+                      if (Array.isArray(cached) && cached.length > 0) {
+                        setMsgs(cached);
+                      }
+                    } catch {}
+
+                    // 2. Refresh full message history from cloud database (Firestore)
+                    getChatConversation(targetId).then(result => {
                       const conversation = result?.conversation || result?.data?.conversation;
-                      if (conversation) {
-                        setMsgs(conversation.messages.map((message, index) => ({ id: `${chat.id}-${index}`, r: message.role === 'assistant' ? 'ai' : 'user', text: message.content, card: null, done: true })));
-                        setConversationId(chat.id);
+                      if (conversation && Array.isArray(conversation.messages) && conversation.messages.length > 0) {
+                        const mapped = conversation.messages.map((message, index) => ({
+                          id: `${targetId}-${index}`,
+                          r: message.role === 'assistant' ? 'ai' : 'user',
+                          text: message.content,
+                          card: null,
+                          done: true,
+                        }));
+                        setMsgs(mapped);
                         setConversationTitle(conversation.title || chat.title);
+                        try { localStorage.setItem(`wp_chat_${targetId}`, JSON.stringify(mapped)); } catch {}
                       }
                     }).catch(() => {});
                     setInput(''); inputRef.current?.focus();
                   }} className="history-row" style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.65)', padding: '7px 8px', borderRadius: 7, cursor: 'pointer', fontSize: 11 }}>
                     {chat.title}
                   </button>
-                  <button onClick={() => { deleteChatConversation(chat.id).catch(() => {}); setConversationHistory(prev => prev.filter(item => item.id !== chat.id)); }} aria-label="Delete conversation" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: 3 }}>{Ic.x}</button>
+                  <button onClick={() => {
+                    deleteChatConversation(chat.id).catch(() => {});
+                    try { localStorage.removeItem(`wp_chat_${chat.id}`); } catch {}
+                    setConversationHistory(prev => {
+                      const next = prev.filter(item => item.id !== chat.id);
+                      try { localStorage.setItem('wp_cockpit_history', JSON.stringify(next)); } catch {}
+                      return next;
+                    });
+                    if (conversationId === chat.id) {
+                      startNewChat();
+                    }
+                  }} aria-label="Delete conversation" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: 3 }}>{Ic.x}</button>
                 </div>
               ))}
             </div>

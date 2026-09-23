@@ -1090,9 +1090,27 @@ Provide a clear, structured, and executive-grade response based on this cross-pl
             except Exception:
                 pass
 
-            # Update conversation history
+            # Update in-memory session history
             conv_history.append({"role": "user", "content": message})
             conv_history.append({"role": "assistant", "content": full_response})
+
+            # ── 11b. Persist to Firestore chat_repository for cross-device ChatGPT history ──
+            if conv_id and uid != "anonymous":
+                try:
+                    from repositories.chat_repository import chat_repository
+                    chat_title = message.strip()[:60] or "New workspace chat"
+                    await chat_repository.append_message(
+                        uid, conv_id,
+                        {"role": "user", "content": message, "timestamp": datetime.now(timezone.utc).isoformat()},
+                        chat_title,
+                    )
+                    await chat_repository.append_message(
+                        uid, conv_id,
+                        {"role": "assistant", "content": full_response, "timestamp": datetime.now(timezone.utc).isoformat()},
+                        chat_title,
+                    )
+                except Exception as ex:
+                    logger.warning(f"Could not persist conversation {conv_id} to Firestore: {ex}")
 
             # ── 12. Smart suggestions ──────────────────────────────────────────
             try:
