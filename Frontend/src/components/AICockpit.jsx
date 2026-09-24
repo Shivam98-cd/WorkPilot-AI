@@ -452,39 +452,70 @@ function AnalyticsCard({ data, T, onDismiss }) {
 
 /** Enhanced markdown renderer: tables, headers, lists, code blocks, links, quotes, and Generative UI cards */
 function normalizeArtifactTags(str) {
-  if (!str || typeof str !== 'string' || !str.includes('<artifact:')) return str;
-  const pattern = /<artifact:([a-zA-Z0-9_:-]+)\s*([\s\S]*?)(?:\/>|<\/artifact:\1>)/g;
-  return str.replace(pattern, (match, tag, attrs) => {
+  if (!str || typeof str !== 'string') return str;
+  let result = str;
+
+  // 1. Convert XML-style <artifact:...> to ```artifact:...
+  if (result.includes('<artifact:')) {
+    const pattern = /<artifact:([a-zA-Z0-9_:-]+)\s*([\s\S]*?)(?:\/>|<\/artifact:\1>)/g;
+    result = result.replace(pattern, (match, tag, attrs) => {
+      try {
+        const titleMatch = attrs.match(/title=["']([^"']+)["']/);
+        const descMatch = attrs.match(/description=["']([^"']+)["']/);
+        const submitMatch = attrs.match(/submit_label=["']([^"']+)["']/);
+        const optMatch = attrs.match(/options=\{?(\[[\s\S]*?\])\}?/);
+        const slotsMatch = attrs.match(/slots=\{?(\[[\s\S]*?\])\}?/);
+        
+        const payload = {
+          title: titleMatch ? titleMatch[1] : undefined,
+          description: descMatch ? descMatch[1] : undefined,
+          submit_label: submitMatch ? submitMatch[1] : undefined,
+        };
+
+        if (optMatch) {
+          try { payload.options = JSON.parse(optMatch[1]); } catch {}
+        }
+        if (slotsMatch) {
+          try { payload.slots = JSON.parse(slotsMatch[1]); } catch {}
+        }
+
+        let resolvedTag = tag;
+        if (tag === 'slot_picker' && payload.options && (!payload.slots || payload.slots.length === 0)) {
+          resolvedTag = 'options';
+        }
+
+        return `\n\`\`\`artifact:${resolvedTag}\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
+      } catch (e) {
+        return match;
+      }
+    });
+  }
+
+  // 2. Auto-wrap bare JSON confirmation cards so users get interactive buttons instead of raw code
+  const bareJsonPattern = /(?:^|\n)(\{\s*"title":\s*"[^"]*",[\s\S]*?"(?:confirmLabel|cancelLabel|details|risk_level)":[\s\S]*?\})(\n|$)/g;
+  result = result.replace(bareJsonPattern, (match, jsonBlock, trailing) => {
+    // If it's already inside a fenced code block, leave it alone
+    if (match.includes('```')) return match;
     try {
-      const titleMatch = attrs.match(/title=["']([^"']+)["']/);
-      const descMatch = attrs.match(/description=["']([^"']+)["']/);
-      const submitMatch = attrs.match(/submit_label=["']([^"']+)["']/);
-      const optMatch = attrs.match(/options=\{?(\[[\s\S]*?\])\}?/);
-      const slotsMatch = attrs.match(/slots=\{?(\[[\s\S]*?\])\}?/);
-      
-      const payload = {
-        title: titleMatch ? titleMatch[1] : undefined,
-        description: descMatch ? descMatch[1] : undefined,
-        submit_label: submitMatch ? submitMatch[1] : undefined,
+      const parsed = JSON.parse(jsonBlock);
+      const safeguardPayload = {
+        title: parsed.title || 'Action Confirmation',
+        description: parsed.description || '',
+        action: parsed.action || parsed.tool || 'schedule_automation',
+        tool: parsed.tool || parsed.action || 'schedule_automation',
+        risk_level: parsed.risk_level || 'medium',
+        args: parsed.args || parsed.config || {},
+        confirmLabel: parsed.confirmLabel || parsed.submit_label || '✅ Activate Sequence',
+        cancelLabel: parsed.cancelLabel || '❌ Cancel',
+        details: parsed.details || [],
       };
-
-      if (optMatch) {
-        try { payload.options = JSON.parse(optMatch[1]); } catch {}
-      }
-      if (slotsMatch) {
-        try { payload.slots = JSON.parse(slotsMatch[1]); } catch {}
-      }
-
-      let resolvedTag = tag;
-      if (tag === 'slot_picker' && payload.options && (!payload.slots || payload.slots.length === 0)) {
-        resolvedTag = 'options';
-      }
-
-      return `\n\`\`\`artifact:${resolvedTag}\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n`;
-    } catch (e) {
+      return `\n\`\`\`artifact:safeguard\n${JSON.stringify(safeguardPayload, null, 2)}\n\`\`\`${trailing}`;
+    } catch {
       return match;
     }
   });
+
+  return result;
 }
 
 function MdText({ text, onSelectOption }) {
