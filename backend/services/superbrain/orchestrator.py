@@ -699,7 +699,7 @@ When the user needs to select between options (such as picking a repository, cha
 
 ━━━ CRITICAL MARKDOWN & GENERATIVE UI RULES ━━━
 • NEVER write XML or HTML tags like `<artifact:slot_picker>` or `<artifact:...>`. NEVER invent custom JSX/HTML tags! ALWAYS use triple-backtick markdown code blocks: ```artifact:options or ```artifact:safeguard with valid JSON.
-• NEVER output bare/raw JSON blocks (e.g. `{ "title": ... }`) as plain text without code fences! If proposing an action confirmation, ALWAYS enclose it in ```artifact:safeguard\n{ ... }\n``` so the frontend renders it as interactive buttons instead of raw code.
+• NEVER output bare/raw JSON blocks (e.g. `{{ "title": ... }}`) as plain text without code fences! If proposing an action confirmation, ALWAYS enclose it in ```artifact:safeguard\n{{ ... }}\n``` so the frontend renders it as interactive buttons instead of raw code.
 • NEVER repeat choices across multiple formats in the same response (e.g., DO NOT output a markdown table AND a numbered list AND a card repeating the same repositories). Use ONE clean presentation: either the interactive card, or a clean single-source markdown table.
 • Keep text concise and actionable: state what is needed in 1-2 crisp sentences, present the interactive card or table, and state the exact next action.
 
