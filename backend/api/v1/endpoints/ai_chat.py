@@ -184,6 +184,61 @@ def _get_groq():
     if not key: raise HTTPException(status_code=503, detail="GROQ_API_KEY not configured")
     return Groq(api_key=key)
 
+def _generate_text_with_fallback(prompt: str, system_prompt: str = "", max_tokens: int = 500, temperature: float = 0.3) -> str:
+    """Generate text with Groq primary and Google Gemini cross-provider fallback."""
+    # 1. Try Groq
+    if settings.GROQ_API_KEY and Groq:
+        for model in ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]:
+            try:
+                g = _get_groq()
+                msgs = []
+                if system_prompt:
+                    msgs.append({"role": "system", "content": system_prompt})
+                msgs.append({"role": "user", "content": prompt})
+                resp = g.chat.completions.create(
+                    model=model,
+                    messages=msgs,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+                if resp.choices and resp.choices[0].message.content:
+                    return resp.choices[0].message.content.strip()
+            except Exception as g_err:
+                err_s = str(g_err).lower()
+                logger.warning(f"Groq '{model}' text generation failed ({g_err}). Checking fallback...")
+                if "429" in err_s or "rate limit" in err_s or "tpm" in err_s:
+                    break  # Stop trying other Groq models if rate limited
+
+    # 2. Try Gemini
+    gemini_key = getattr(settings, "GEMINI_API_KEY", None)
+    if gemini_key:
+        try:
+            from google import genai
+            from google.genai import types as genai_types
+            client = genai.Client(api_key=gemini_key)
+            config = genai_types.GenerateContentConfig(
+                system_instruction=system_prompt or None,
+                max_output_tokens=max_tokens,
+                temperature=temperature,
+            )
+            for g_model in ["gemini-3.6-flash", "gemini-3.5-flash-lite"]:
+                try:
+                    resp = client.models.generate_content(
+                        model=g_model,
+                        contents=prompt,
+                        config=config,
+                    )
+                    if resp.text:
+                        return resp.text.strip()
+                except Exception as gm_err:
+                    logger.warning(f"Gemini model '{g_model}' generation failed: {gm_err}")
+                    continue
+        except Exception as gemini_err:
+            logger.error(f"Gemini text fallback failed: {gemini_err}")
+
+    raise RuntimeError("All LLM providers (Groq and Gemini) failed.")
+
+
 async def _execute_tool(name: str, args: dict, uid: str) -> dict:
     try:
         if name == "get_emails":
@@ -276,17 +331,9 @@ async def _execute_tool(name: str, args: dict, uid: str) -> dict:
             # Auto-generate body if missing
             if not body:
                 try:
-                    g_client = _get_groq()
-                    r = g_client.chat.completions.create(
-                        model="openai/gpt-oss-120b",
-                        messages=[
-                            {"role": "system", "content": f"You are WorkPilot AI. Generate a concise, clear {tone} email body based on the subject and details provided. Output ONLY the body text."},
-                            {"role": "user", "content": f"Subject: {subject or 'Follow up'}\nRecipient: {to or 'Recipient'}\nContext: {orig_prompt or subject or 'Follow up message'}"}
-                        ],
-                        max_tokens=400,
-                        temperature=0.3
-                    )
-                    body = r.choices[0].message.content.strip()
+                    sys_p = f"You are WorkPilot AI. Generate a concise, clear {tone} email body based on the subject and details provided. Output ONLY the body text."
+                    user_p = f"Subject: {subject or 'Follow up'}\nRecipient: {to or 'Recipient'}\nContext: {orig_prompt or subject or 'Follow up message'}"
+                    body = _generate_text_with_fallback(prompt=user_p, system_prompt=sys_p, max_tokens=400, temperature=0.3)
                 except Exception:
                     body = f"Hi {to.split('@')[0] if '@' in to else 'there'},\n\nFollowing up regarding '{subject or 'our recent discussion'}'. Please let me know your thoughts or when you're available to connect.\n\nBest regards,\nWorkPilot Team"
 
@@ -388,15 +435,13 @@ async def _execute_tool(name: str, args: dict, uid: str) -> dict:
                 "expand": f"Expand with more detail. Return ONLY the expanded text:\n\n{text}",
             }
             try:
-                r = _get_groq().chat.completions.create(
-                    model="openai/gpt-oss-120b",
-                    messages=[{"role":"user","content":prompts.get(mode,prompts["improve"])}],
+                result = _generate_text_with_fallback(
+                    prompt=prompts.get(mode, prompts["improve"]),
                     max_tokens=512,
-                    temperature=0.3
+                    temperature=0.3,
                 )
-                result = r.choices[0].message.content.strip()
             except Exception: result = f"[{mode}] {text}"
-            return {"result": result, "mode": mode, "original": text, "source": "groq_ai"}
+            return {"result": result, "mode": mode, "original": text, "source": "ai_assistant"}
 
         elif name == "sync_integration":
             p = args.get("platform","unknown")
@@ -625,25 +670,21 @@ async def _execute_tool(name: str, args: dict, uid: str) -> dict:
             }
             
             try:
-                groq = _get_groq()
-                response = groq.chat.completions.create(
-                    model="openai/gpt-oss-120b",
-                    messages=[{"role": "user", "content": prompts.get(style, prompts["brief"])}],
+                summary = _generate_text_with_fallback(
+                    prompt=prompts.get(style, prompts["brief"]),
                     max_tokens=512,
-                    temperature=0.3
+                    temperature=0.3,
                 )
-                summary = response.choices[0].message.content.strip()
                 
                 # Extract key points
-                key_points_resp = groq.chat.completions.create(
-                    model="openai/gpt-oss-120b",
-                    messages=[{"role": "user", "content": f"List 3-5 key points from this text as a JSON array:\n\n{content[:1500]}"}],
-                    max_tokens=256,
-                    temperature=0.2
-                )
                 try:
-                    key_points = json.loads(key_points_resp.choices[0].message.content.strip())
-                except:
+                    kp_str = _generate_text_with_fallback(
+                        prompt=f"List 3-5 key points from this text as a JSON array:\n\n{content[:1500]}",
+                        max_tokens=256,
+                        temperature=0.2,
+                    )
+                    key_points = json.loads(kp_str)
+                except Exception:
                     key_points = ["Key information extracted", "Main topics identified", "Summary generated"]
                 
                 words = content.split()

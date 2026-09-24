@@ -107,12 +107,12 @@ ALL_TOOLS = [
     }},
     {"type": "function", "function": {
         "name": "schedule_automation",
-        "description": "Create a scheduled automation task for recurring AI actions.",
+        "description": "Create a scheduled automation task for recurring AI actions (e.g. daily morning briefing, multi-day email sequence, weekly report, or reminder drip campaign).",
         "parameters": {"type": "object", "properties": {
-            "type":     {"type": "string", "enum": ["daily_briefing", "auto_reply", "weekly_report", "meeting_digest", "custom"]},
-            "name":     {"type": "string"},
-            "schedule": {"type": "string", "description": "Cron or natural language schedule"},
-            "config":   {"type": "object"},
+            "type":     {"type": "string", "enum": ["daily_briefing", "email_sequence", "auto_reply", "weekly_report", "meeting_digest", "custom"]},
+            "name":     {"type": "string", "description": "Title of the automation e.g. '5-Day Project Reminder Sequence'"},
+            "schedule": {"type": "string", "description": "Cron or natural language schedule e.g. 'daily at 09:00', 'every day at 9am'"},
+            "config":   {"type": "object", "description": "Configuration object including recipient email, total_days, subject, template body, etc."},
         }, "required": ["type", "name", "schedule"]},
     }},
     {"type": "function", "function": {

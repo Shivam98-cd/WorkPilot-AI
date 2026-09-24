@@ -8,6 +8,9 @@ from repositories.integration_repository import integration_repository
 from services.integration_service import integration_service
 from services.workspace_service import workspace_service
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/emails", tags=["emails"])
@@ -117,8 +120,28 @@ async def draft_email(body: dict, current_user=Depends(get_current_user)):
                     max_tokens=500, temperature=0.3
                 )
                 content = res.choices[0].message.content.strip()
-        except Exception:
-            content = f"Hi {recipient or 'there'},\n\nThank you for your email regarding '{subject or 'this matter'}'. I will review and respond shortly.\n\nBest regards"
+        except Exception as e:
+            logger.warning(f"Groq email draft failed ({e}), checking Gemini...")
+            try:
+                from google import genai
+                from google.genai import types as genai_types
+                if settings.GEMINI_API_KEY:
+                    g_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+                    cfg = genai_types.GenerateContentConfig(
+                        system_instruction=f"You are WorkPilot AI. Draft a concise, high-impact {tone} email response. Return ONLY the body text.",
+                        max_output_tokens=500, temperature=0.3,
+                    )
+                    res = g_client.models.generate_content(
+                        model="gemini-3.6-flash",
+                        contents=f"Subject: {subject or 'Follow up'}\nRecipient: {recipient or 'Colleague'}\nContext: {prompt or 'Draft a professional follow up'}",
+                        config=cfg,
+                    )
+                    if res.text:
+                        content = res.text.strip()
+            except Exception as ge:
+                logger.error(f"Gemini email draft also failed: {ge}")
+                content = f"Hi {recipient or 'there'},\n\nThank you for your email regarding '{subject or 'this matter'}'. I will review and respond shortly.\n\nBest regards"
+
 
     return {
         "success": True,

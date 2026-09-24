@@ -72,8 +72,6 @@ class Settings(BaseSettings):
     # Zoom rejects 'localhost' — must use http://127.0.0.1 for local dev
     ZOOM_REDIRECT_URI: str = "http://127.0.0.1:8000/api/v1/integrations/zoom/callback"
 
-    # Groq LLM
-    GROQ_API_KEY: str = ""
 
     # Notion OAuth settings
     NOTION_CLIENT_ID: str = ""

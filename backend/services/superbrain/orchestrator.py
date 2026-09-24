@@ -8,6 +8,7 @@ import json
 import uuid
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from typing import AsyncGenerator, Any
 from collections import defaultdict, deque
@@ -16,6 +17,14 @@ try:
     from groq import Groq
 except ImportError:
     Groq = None  # type: ignore
+
+try:
+    from google import genai
+    from google.genai import types as genai_types
+except ImportError:
+    genai = None  # type: ignore
+    genai_types = None  # type: ignore
+
 from core.config import settings
 from services.superbrain.memory import MemoryManager
 from services.superbrain.intent_classifier import classify_intent, get_forced_tool, get_smart_suggestions
@@ -73,10 +82,40 @@ def _escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
 
 
+# ── Gemini-compatible mock response objects ────────────────────────────────────
+class _MockFunction:
+    def __init__(self, name: str, arguments: str):
+        self.name = name
+        self.arguments = arguments
+
+class _MockToolCall:
+    def __init__(self, id: str, name: str, arguments: str):
+        self.id = id
+        self.type = "function"
+        self.function = _MockFunction(name, arguments)
+
+class _MockMessage:
+    def __init__(self, content: str | None, tool_calls: list):
+        self.content = content
+        self.tool_calls = tool_calls
+
+class _MockChoice:
+    def __init__(self, message: "_MockMessage"):
+        self.message = message
+
+class _MockResponse:
+    def __init__(self, choices: list, model: str):
+        self.choices = choices
+        self.model = model
+# ────────────────────────────────────────────────────────────────────────────────
+
+
 class SuperBrainOrchestrator:
     """
-    Main multi-agent orchestrator.
+    Main multi-agent orchestrator with multi-provider resilience.
     Pipeline: Intent → Memory → Plan → Tools (parallel) → Critic → Synthesize → Stream
+    Primary Engine : Groq (ultra-fast ≤0.5 s inference)
+    Secondary Engine: Google Gemini 3.6 Flash (auto-failover on Groq 429 / outages)
     """
 
     def __init__(self):
@@ -84,64 +123,308 @@ class SuperBrainOrchestrator:
         self.critic  = CriticAgent()
         # Per-user conversation history:  uid:conv_id → deque of {role, content}
         self._convs: dict = defaultdict(lambda: deque(maxlen=20))
-        self._model  = "qwen/qwen3.8-27b"   # fast, reliable, 0.5s response with optimized prompt tokens
-        self._tool_models = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+        self._model       = "qwen/qwen3.8-27b"   # fast primary Groq model
+        self._tool_models  = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
         self._synth_models = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+        self._gemini_models = ["gemini-3.6-flash", "gemini-3.5-flash-lite"]
+        self._groq_cooldown_until: float = 0.0   # epoch seconds; 0 = no cooldown
 
+    # ── Groq circuit-breaker helpers ───────────────────────────────────────────
+    def _groq_is_cooling(self) -> bool:
+        """Return True when Groq is in a post-429 cooldown window."""
+        return time.time() < self._groq_cooldown_until
+
+    def _groq_mark_cooldown(self, seconds: float = 45.0):
+        """Activate Groq cooldown so the next N seconds route straight to Gemini."""
+        self._groq_cooldown_until = time.time() + seconds
+        logger.warning(
+            f"Groq 429 rate-limit hit — circuit cooldown {seconds}s activated; routing to Gemini"
+        )
+
+    # ── Gemini client ──────────────────────────────────────────────────────────
+    def _get_gemini_client(self):
+        key = getattr(settings, "GEMINI_API_KEY", None)
+        if not key or not genai:
+            return None
+        try:
+            return genai.Client(api_key=key)
+        except Exception as e:
+            logger.warning(f"Gemini client init failed: {e}")
+            return None
+
+    # ── Message format conversion ──────────────────────────────────────────────
+    def _messages_to_gemini(self, messages: list) -> tuple[str, str]:
+        """Convert OpenAI-style messages → (system_instruction, contents_str) for Gemini."""
+        sys_parts, conv_parts = [], []
+        for m in messages:
+            role    = m.get("role", "user")
+            content = (m.get("content") or "").strip()
+            if not content:
+                continue
+            if role == "system":
+                sys_parts.append(content)
+            elif role == "user":
+                conv_parts.append(f"User: {content}")
+            elif role == "assistant":
+                conv_parts.append(f"Assistant: {content}")
+            elif role == "tool":
+                conv_parts.append(f"[{m.get('name', 'Tool')} Result]: {content}")
+        system_instruction = "\n\n".join(sys_parts)
+        contents = "\n\n".join(conv_parts) or "Hello"
+        return system_instruction, contents
+
+    # ── Gemini tool planner ────────────────────────────────────────────────────
+    async def _call_gemini_planner(
+        self,
+        gemini_client: Any,
+        messages: list,
+        tools: list | None = None,
+        tool_choice: Any = None,
+        max_tokens: int = 600,
+        temperature: float = 0.2,
+    ):
+        """Run one Gemini function-calling hop; return a _MockResponse compatible with Groq shape."""
+        if not genai_types:
+            raise RuntimeError("google.genai SDK not available")
+        sys_instr, contents = self._messages_to_gemini(messages)
+
+        # Build Gemini tool declarations (filter to forced tool if needed)
+        gemini_tools = None
+        if tools:
+            forced_name = (
+                tool_choice.get("function", {}).get("name")
+                if isinstance(tool_choice, dict) else None
+            )
+            decls = [
+                {
+                    "name": t["function"]["name"],
+                    "description": t["function"].get("description", ""),
+                    "parameters": t["function"].get("parameters", {"type": "object", "properties": {}}),
+                }
+                for t in tools
+                if t.get("function", {}).get("name")
+                and (not forced_name or t["function"]["name"] == forced_name)
+            ]
+            if decls:
+                gemini_tools = [{"function_declarations": decls}]
+
+        config = genai_types.GenerateContentConfig(
+            system_instruction=sys_instr or "You are WorkPilot AI tool coordinator.",
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+        )
+        if gemini_tools:
+            config.tools = gemini_tools
+
+        for g_model in self._gemini_models:
+            try:
+                logger.info(f"Gemini tool-planner using model: {g_model}")
+                resp = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        lambda m=g_model: gemini_client.models.generate_content(
+                            model=m, contents=contents, config=config
+                        )
+                    ),
+                    timeout=15.0,
+                )
+                # Wrap function_calls into Groq-compatible mock objects
+                tool_calls = []
+                if resp.function_calls:
+                    for fc in resp.function_calls:
+                        cid  = getattr(fc, "id", None) or f"call_{uuid.uuid4().hex[:8]}"
+                        args = json.dumps(dict(fc.args)) if fc.args else "{}"
+                        tool_calls.append(_MockToolCall(cid, fc.name, args))
+                text = resp.text if not tool_calls else None
+                mock = _MockResponse(
+                    [_MockChoice(_MockMessage(text, tool_calls))], f"gemini/{g_model}"
+                )
+                return mock, f"gemini/{g_model}"
+            except Exception as e:
+                logger.warning(f"Gemini planner model '{g_model}' failed: {e}")
+                continue
+        raise RuntimeError("All Gemini fallback models failed for tool planning.")
+
+    # ── Gemini synthesis streamer ──────────────────────────────────────────────
+    async def _stream_gemini(
+        self,
+        gemini_client: Any,
+        messages: list,
+        max_tokens: int = 900,
+        temperature: float = 0.4,
+    ) -> AsyncGenerator[str, None]:
+        """Stream synthesis tokens from Gemini when Groq is unavailable."""
+        if not genai_types:
+            raise RuntimeError("google.genai SDK not available")
+        sys_instr, contents = self._messages_to_gemini(messages)
+        config = genai_types.GenerateContentConfig(
+            system_instruction=sys_instr or "You are WorkPilot AI Chief of Staff.",
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+        )
+        last_exc = None
+        for g_model in self._gemini_models:
+            streamed = False
+            try:
+                logger.info(f"Gemini synthesis streaming with model: {g_model}")
+                stream = await asyncio.to_thread(
+                    lambda m=g_model: gemini_client.models.generate_content_stream(
+                        model=m, contents=contents, config=config
+                    )
+                )
+                for chunk in stream:
+                    txt = getattr(chunk, "text", "") or ""
+                    if txt:
+                        streamed = True
+                        yield txt
+                if streamed:
+                    return
+            except Exception as e:
+                last_exc = e
+                logger.warning(f"Gemini stream model '{g_model}' failed: {e}")
+                if streamed:
+                    return
+                continue
+        if last_exc:
+            raise last_exc
+
+    async def _generate_text(self, prompt: str, max_tokens: int = 800, temperature: float = 0.2) -> str:
+        """Helper to generate text using Groq with automatic Gemini fallback."""
+        if not self._groq_is_cooling() and settings.GROQ_API_KEY and Groq:
+            for model in self._tool_models:
+                try:
+                    groq_client = Groq(api_key=settings.GROQ_API_KEY)
+                    resp = await asyncio.to_thread(
+                        lambda m=model: groq_client.chat.completions.create(
+                            model=m,
+                            messages=[{"role": "user", "content": prompt}],
+                            max_tokens=max_tokens,
+                            temperature=temperature,
+                        )
+                    )
+                    if resp.choices and resp.choices[0].message.content:
+                        return resp.choices[0].message.content.strip()
+                except Exception as e:
+                    err = str(e).lower()
+                    if "429" in err or "rate limit" in err or "tpm" in err:
+                        self._groq_mark_cooldown(45.0)
+                        logger.warning(f"Groq 429 during text gen: {e}. Switching to Gemini fallback.")
+                        break
+                    logger.warning(f"Groq model '{model}' text gen failed: {e}")
+
+        gemini_client = self._get_gemini_client()
+        if gemini_client and genai_types:
+            config = genai_types.GenerateContentConfig(
+                max_output_tokens=max_tokens,
+                temperature=temperature,
+            )
+            for g_model in self._gemini_models:
+                try:
+                    resp = await asyncio.to_thread(
+                        lambda m=g_model: gemini_client.models.generate_content(
+                            model=m, contents=prompt, config=config
+                        )
+                    )
+                    if resp.text:
+                        return resp.text.strip()
+                except Exception as gm_err:
+                    logger.warning(f"Gemini model '{g_model}' text gen failed: {gm_err}")
+                    continue
+
+        raise RuntimeError("All LLM providers failed to generate text.")
+
+    # ── Multi-provider synthesis streaming ────────────────────────────────────
     async def _stream_tokens_with_fallback(
         self,
-        groq_client: Groq,
+        groq_client: Any,
+        gemini_client: Any,
         messages: list,
         models: list[str],
         max_tokens: int = 900,
         temperature: float = 0.4,
+        fallback_notice_cb: Any = None,
     ) -> AsyncGenerator[str, None]:
         """
-        Stream tokens from Groq chat completion with automatic model fallback on rate limits or API errors.
-        Each model call is bounded by a 10-second timeout to prevent silent hangs on rate limits.
-        max_tokens is capped at 900 to stay safely under Groq's 1,000 OTPM ceiling.
+        Stream tokens with Groq-primary / Gemini-secondary cross-provider failover.
+        - If Groq is in 429 cooldown, routes immediately to Gemini (no wasted wait time).
+        - If any Groq model returns 429 mid-request, activates cooldown and fails over.
         """
         last_exc = None
-        for model in models:
-            streamed_any = False
-            try:
-                # 10s timeout per model to avoid silent Groq rate-limit hangs
-                final_resp = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        lambda m=model: groq_client.chat.completions.create(
-                            model=m,
-                            messages=messages,
-                            max_tokens=max_tokens,
-                            temperature=temperature,
-                            stream=True,
-                        )
-                    ),
-                    timeout=10.0,
-                )
-                for chunk in final_resp:
-                    delta = chunk.choices[0].delta
-                    if delta and delta.content:
-                        streamed_any = True
-                        yield delta.content
+        streamed_any = False
+
+        # ── Fast-path: Groq is cooling down → go straight to Gemini ──────────
+        if self._groq_is_cooling() and gemini_client:
+            logger.info("Groq in cooldown — streaming synthesis via Gemini directly")
+            if fallback_notice_cb:
+                await fallback_notice_cb()
+            async for token in self._stream_gemini(gemini_client, messages, max_tokens, temperature):
+                streamed_any = True
+                yield token
+            if streamed_any:
                 return
-            except asyncio.TimeoutError:
-                last_exc = asyncio.TimeoutError(f"Model '{model}' synthesis timed out after 10s")
-                logger.warning(f"SuperBrain synthesis timeout on model '{model}'. Trying next fallback...")
+
+        # ── Try each Groq model ───────────────────────────────────────────────
+        elif groq_client:
+            for model in models:
+                streamed_any = False
+                try:
+                    final_resp = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            lambda m=model: groq_client.chat.completions.create(
+                                model=m, messages=messages,
+                                max_tokens=max_tokens, temperature=temperature, stream=True,
+                            )
+                        ),
+                        timeout=10.0,
+                    )
+                    for chunk in final_resp:
+                        delta = chunk.choices[0].delta
+                        if delta and delta.content:
+                            streamed_any = True
+                            yield delta.content
+                    return  # success — done
+                except asyncio.TimeoutError:
+                    last_exc = asyncio.TimeoutError(f"Model '{model}' synthesis timed out after 10s")
+                    logger.warning(f"Synthesis timeout on '{model}'. Trying next fallback...")
+                    if streamed_any:
+                        return
+                    continue
+                except Exception as exc:
+                    last_exc = exc
+                    err = str(exc).lower()
+                    if "429" in err or "rate limit" in err or "tpm" in err or "tokens per minute" in err:
+                        self._groq_mark_cooldown(45.0)
+                        logger.warning(f"Groq 429 on '{model}' during synthesis — switching to Gemini")
+                        if streamed_any:
+                            return
+                        break  # break to Gemini fallback below
+                    logger.warning(f"Synthesis error on '{model}': {exc}")
+                    if streamed_any:
+                        return
+                    continue
+
+        # ── Gemini fallback ───────────────────────────────────────────────────
+        if not streamed_any and gemini_client:
+            logger.info("Failing over synthesis to Gemini...")
+            if fallback_notice_cb:
+                await fallback_notice_cb()
+            try:
+                async for token in self._stream_gemini(gemini_client, messages, max_tokens, temperature):
+                    streamed_any = True
+                    yield token
                 if streamed_any:
                     return
-                continue
-            except Exception as exc:
-                last_exc = exc
-                logger.warning(f"SuperBrain synthesis stream error on model '{model}': {exc}. Trying fallback model...")
-                if streamed_any:
-                    return
-                continue
+            except Exception as g_exc:
+                logger.error(f"Gemini synthesis also failed: {g_exc}")
+                last_exc = g_exc
 
-        raise last_exc or RuntimeError("All models in synthesis fallback list failed.")
+        if not streamed_any:
+            raise last_exc or RuntimeError("All synthesis providers failed.")
 
+    # ── Multi-provider LLM tool caller ────────────────────────────────────────
     async def _call_llm_with_fallback(
         self,
-        groq_client: Groq,
+        groq_client: Any,
+        gemini_client: Any,
         messages: list,
         models: list[str],
         tools: list | None = None,
@@ -149,65 +432,89 @@ class SuperBrainOrchestrator:
         max_tokens: int = 600,
         temperature: float = 0.25,
         stream: bool = False,
+        fallback_notice_cb: Any = None,
     ):
         """
-        Execute Groq chat completion with automatic model fallback on rate limits or API errors.
-        Each model call is bounded by a 10-second timeout to prevent silent hangs on rate limits.
+        Execute one LLM hop with Groq primary and Google Gemini cross-provider failover.
+        Respects the Groq rate-limit circuit breaker; when active routes directly to Gemini.
+        Returns a (response, model_name) tuple whose response is Groq- or _Mock-shaped.
         """
         last_exc = None
-        for model in models:
-            kw = {"max_tokens": max_tokens, "temperature": temperature, "stream": stream}
-            if tools is not None:
-                kw["tools"] = tools
-            if tool_choice is not None:
-                kw["tool_choice"] = tool_choice
 
+        # ── Fast-path: Groq cooldown active ──────────────────────────────────
+        if self._groq_is_cooling() and gemini_client:
+            logger.info("Groq in cooldown — routing tool call directly to Gemini")
+            if fallback_notice_cb:
+                await fallback_notice_cb()
             try:
-                # 10s timeout per model to avoid silent Groq rate-limit hangs
-                resp = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        lambda m=model, kw_args=kw: groq_client.chat.completions.create(
-                            model=m,
-                            messages=messages,
-                            **kw_args,
-                        )
-                    ),
-                    timeout=10.0,
+                return await self._call_gemini_planner(
+                    gemini_client, messages, tools, tool_choice, max_tokens, temperature
                 )
-                return resp, model
-            except asyncio.TimeoutError:
-                last_exc = asyncio.TimeoutError(f"Model '{model}' LLM call timed out after 10s")
-                logger.warning(f"SuperBrain LLM timeout on model '{model}'. Trying next fallback...")
-                # If tool_choice was forced, retry same model with auto (quick, no new timeout slot wasted)
-                if tools is not None and tool_choice is not None and tool_choice != "auto":
-                    logger.info(f"Skipping auto-retry for '{model}' (timed out) - moving to next model")
-                continue
-            except Exception as exc:
-                last_exc = exc
-                logger.warning(f"SuperBrain LLM call failed on model '{model}': {exc}. Checking fallback...")
-                # If tool_choice was forced on this model, retry with auto first
-                if tools is not None and tool_choice is not None and tool_choice != "auto":
-                    try:
-                        logger.info(f"Retrying model '{model}' with tool_choice='auto'...")
-                        auto_kw = dict(kw)
-                        auto_kw["tool_choice"] = "auto"
-                        resp = await asyncio.wait_for(
-                            asyncio.to_thread(
-                                lambda m=model, kw_args=auto_kw: groq_client.chat.completions.create(
-                                    model=m,
-                                    messages=messages,
-                                    **kw_args,
-                                )
-                            ),
-                            timeout=10.0,
-                        )
-                        return resp, model
-                    except Exception as exc2:
-                        last_exc = exc2
-                        logger.warning(f"Retry with tool_choice='auto' on model '{model}' also failed: {exc2}")
-                continue
+            except Exception as g_exc:
+                logger.warning(f"Gemini direct planner failed: {g_exc}")
+                last_exc = g_exc
 
-        raise last_exc or RuntimeError("All models in fallback list failed.")
+        # ── Try each Groq model ───────────────────────────────────────────────
+        elif groq_client:
+            for model in models:
+                kw = {"max_tokens": max_tokens, "temperature": temperature, "stream": stream}
+                if tools is not None:
+                    kw["tools"] = tools
+                if tool_choice is not None:
+                    kw["tool_choice"] = tool_choice
+                try:
+                    resp = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            lambda m=model, kw_args=kw: groq_client.chat.completions.create(
+                                model=m, messages=messages, **kw_args
+                            )
+                        ),
+                        timeout=10.0,
+                    )
+                    return resp, model
+                except asyncio.TimeoutError:
+                    last_exc = asyncio.TimeoutError(f"Model '{model}' timed out after 10s")
+                    logger.warning(f"LLM timeout on '{model}'. Trying next fallback...")
+                    continue
+                except Exception as exc:
+                    last_exc = exc
+                    err = str(exc).lower()
+                    if "429" in err or "rate limit" in err or "tpm" in err or "tokens per minute" in err:
+                        self._groq_mark_cooldown(45.0)
+                        logger.warning(f"Groq 429 on '{model}' — switching to Gemini fallback")
+                        break  # single break; all Groq models share same rate-limited key
+                    logger.warning(f"LLM call failed on '{model}': {exc}. Checking tool-choice retry...")
+                    if tools is not None and tool_choice is not None and tool_choice != "auto":
+                        try:
+                            auto_kw = {**kw, "tool_choice": "auto"}
+                            resp = await asyncio.wait_for(
+                                asyncio.to_thread(
+                                    lambda m=model, kw_args=auto_kw: groq_client.chat.completions.create(
+                                        model=m, messages=messages, **kw_args
+                                    )
+                                ),
+                                timeout=10.0,
+                            )
+                            return resp, model
+                        except Exception as exc2:
+                            last_exc = exc2
+                            logger.warning(f"tool_choice='auto' retry on '{model}' also failed: {exc2}")
+                    continue
+
+        # ── Gemini fallback ───────────────────────────────────────────────────
+        if gemini_client:
+            logger.info("Failing over tool planning to Gemini...")
+            if fallback_notice_cb:
+                await fallback_notice_cb()
+            try:
+                return await self._call_gemini_planner(
+                    gemini_client, messages, tools, tool_choice, max_tokens, temperature
+                )
+            except Exception as g_exc:
+                logger.error(f"Gemini fallback also failed: {g_exc}")
+                last_exc = g_exc
+
+        raise last_exc or RuntimeError("All LLM providers (Groq and Gemini) failed.")
 
 
     # ── System Prompt ──────────────────────────────────────────────────────────
@@ -539,7 +846,6 @@ When the user needs to select between options (such as picking a repository, cha
                 return {"overall": "unknown", "error": str(e), "backend_status": "healthy"}
 
         if name == "explain_code":
-            groq_client = Groq(api_key=settings.GROQ_API_KEY)
             action = args.get("action", "explain")
             code   = args.get("code", "")
             lang   = args.get("language", "")
@@ -551,19 +857,12 @@ When the user needs to select between options (such as picking a repository, cha
             }
             prompt = prompts.get(action, prompts["explain"])
             try:
-                r = await asyncio.to_thread(
-                    lambda: groq_client.chat.completions.create(
-                        model=self._model,
-                        messages=[{"role": "user", "content": f"{prompt}\n\n```{lang}\n{code}\n```"}],
-                        max_tokens=1200, temperature=0.2,
-                    )
-                )
-                return {"action": action, "language": lang, "result": r.choices[0].message.content, "source": "groq_llama"}
+                content = await self._generate_text(f"{prompt}\n\n```{lang}\n{code}\n```", max_tokens=1200, temperature=0.2)
+                return {"action": action, "language": lang, "result": content, "source": "ai_assistant"}
             except Exception as e:
                 return {"error": str(e)}
 
         if name == "analyze_data":
-            groq_client = Groq(api_key=settings.GROQ_API_KEY)
             analysis_type = args.get("analysis_type", "summary")
             data_str      = args.get("data", "")
             prompt = (
@@ -572,16 +871,11 @@ When the user needs to select between options (such as picking a repository, cha
                 f"Use markdown formatting:\n\n{data_str}"
             )
             try:
-                r = await asyncio.to_thread(
-                    lambda: groq_client.chat.completions.create(
-                        model=self._model,
-                        messages=[{"role": "user", "content": prompt}],
-                        max_tokens=800, temperature=0.2,
-                    )
-                )
-                return {"analysis_type": analysis_type, "result": r.choices[0].message.content, "source": "groq_llama"}
+                content = await self._generate_text(prompt, max_tokens=800, temperature=0.2)
+                return {"analysis_type": analysis_type, "result": content, "source": "ai_assistant"}
             except Exception as e:
                 return {"error": str(e)}
+
 
         if name in ("github_tool", "jira_tool", "slack_tool", "zoom_tool"):
             platform_map = {"github_tool": "github", "jira_tool": "jira", "slack_tool": "slack", "zoom_tool": "zoom"}
@@ -793,7 +1087,10 @@ When the user needs to select between options (such as picking a repository, cha
         Full multi-agent pipeline: classify → remember → plan → execute → criticise → synthesise → stream.
         Maintains conversational memory across turns and integrates with persistent user memory.
         """
-        now     = datetime.now(timezone.utc).strftime("%A, %B %d, %Y %H:%M UTC")
+        local_dt = datetime.now().astimezone()
+        now_local = local_dt.strftime("%A, %B %d, %Y %I:%M %p %Z")
+        now_utc = datetime.now(timezone.utc).strftime("%I:%M %p UTC")
+        now = f"{now_local} (UTC: {now_utc})"
         conv_id = conversation_id or str(uuid.uuid4())
         conv_history = self._convs[f"{uid}:{conv_id}"]
 
@@ -822,14 +1119,18 @@ When the user needs to select between options (such as picking a repository, cha
         if intent.get("priority") == "urgent":
             yield _sse({"type": "alert", "level": "warning", "message": "🚨 Urgent request detected — prioritizing immediately"})
 
-        # ── 4. Groq client ─────────────────────────────────────────────────────
-        groq_key = settings.GROQ_API_KEY
-        if not groq_key:
-            yield _sse({"type": "token", "content": "⚠️ GROQ_API_KEY is not configured. Please add it to your .env file."})
+        # ── 4. Groq + Gemini clients ────────────────────────────────────────────
+        groq_key      = settings.GROQ_API_KEY
+        groq_client   = Groq(api_key=groq_key) if groq_key and Groq else None
+        gemini_client = self._get_gemini_client()
+
+        if not groq_client and not gemini_client:
+            yield _sse({"type": "token", "content": "⚠️ No AI provider configured. Please add GROQ_API_KEY or GEMINI_API_KEY to your .env file."})
             yield "data: [DONE]\n\n"
             return
 
-        groq_client = Groq(api_key=groq_key)
+        if not groq_client and gemini_client:
+            yield _sse({"type": "alert", "level": "info", "message": "⚠️ Groq API key not found — using Gemini fallback engine."})
 
         # ── 5. Build messages ──────────────────────────────────────────────────
         system_prompt = self._build_system_prompt(memory_ctx, now, intent, mode=mode)
@@ -874,7 +1175,8 @@ When the user needs to select between options (such as picking a repository, cha
 
             # Lightweight planner prompt for tool selection (avoids sending 8,000 char prompt during tool hops)
             tool_planner_prompt = f"""You are WorkPilot AI Chief of Staff tool coordinator.
-Current date/time: {now}
+Current User Local Date/Time: {now}
+CRITICAL TIMEZONE RULE: Always interpret times (e.g. '9:00 AM', 'morning', 'today') relative to the user's local timezone ({now_local}), NOT UTC!
 USER CONTEXT:
 {memory_ctx or "No prior context"}
 
@@ -897,6 +1199,7 @@ Select the most appropriate tool(s) to execute. Always use real workspace tools 
 
                 step_resp, active_model = await self._call_llm_with_fallback(
                     groq_client=groq_client,
+                    gemini_client=gemini_client,
                     messages=loop_messages,
                     models=self._tool_models,
                     tools=active_tools,
@@ -1072,6 +1375,7 @@ Provide a clear, structured, and executive-grade response based on this cross-pl
             synth_msg_list = synthesis_messages if all_tool_results else messages
             async for token in self._stream_tokens_with_fallback(
                 groq_client=groq_client,
+                gemini_client=gemini_client,
                 messages=synth_msg_list,
                 models=self._synth_models,
                 max_tokens=900,
@@ -1079,6 +1383,7 @@ Provide a clear, structured, and executive-grade response based on this cross-pl
             ):
                 full_response += token
                 yield _sse({"type": "token", "content": token})
+
 
             # ── 11. Save to memory ─────────────────────────────────────────────
             last_tool = all_tool_results[-1]["name"] if all_tool_results else None

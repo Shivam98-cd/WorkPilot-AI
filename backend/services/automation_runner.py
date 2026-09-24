@@ -90,8 +90,39 @@ async def run_scheduled_automation_ticks():
         for uid, user_automations in _AUTOMATIONS.items():
             for auto in user_automations:
                 if auto.get("status") == "active":
+                    cfg = auto.get("config", {}) or {}
+                    auto_type = auto.get("type", "custom")
+                    run_count = auto.get("run_count", 0)
+
+                    # Handle multi-day email sequence / drip campaigns
+                    if auto_type in ("email_sequence", "daily_email") or cfg.get("recipient") or cfg.get("to"):
+                        recipient = cfg.get("recipient") or cfg.get("to")
+                        total_days = int(cfg.get("total_days") or cfg.get("days") or 5)
+                        current_day = run_count + 1
+
+                        if recipient and current_day <= total_days:
+                            subj = cfg.get("subject", auto.get("name", "Daily Check-in"))
+                            if "{day}" in subj or "[X]" in subj or "[x]" in subj:
+                                subj = subj.replace("{day}", str(current_day)).replace("[X]", str(current_day)).replace("[x]", str(current_day))
+                            elif f"Day {current_day}" not in subj:
+                                subj = f"{subj} - Day {current_day} of {total_days}"
+
+                            body_tmpl = cfg.get("body") or cfg.get("message") or f"Hi,\n\nThis is your automated Day {current_day} of {total_days} reminder.\n\nBest regards,\nWorkPilot AI"
+                            body_text = body_tmpl.replace("{day}", str(current_day)).replace("[X]", str(current_day)).replace("[x]", str(current_day)).replace("{total_days}", str(total_days))
+
+                            try:
+                                from services.integration_service import integration_service
+                                await integration_service.send_gmail_message(uid, recipient, subj, body_text)
+                                logger.info(f"[CRON RUNNER] Sent Day {current_day}/{total_days} email to {recipient} ({subj})")
+                            except Exception as send_err:
+                                logger.warning(f"[CRON RUNNER] Could not dispatch sequence email to {recipient}: {send_err}")
+
+                            if current_day >= total_days:
+                                auto["status"] = "completed"
+                                logger.info(f"[CRON RUNNER] Automation '{auto.get('name')}' finished all {total_days} days and marked completed.")
+
                     auto["last_run"] = now_str
-                    auto["run_count"] = auto.get("run_count", 0) + 1
+                    auto["run_count"] = run_count + 1
                     executed_count += 1
 
         if executed_count > 0:
