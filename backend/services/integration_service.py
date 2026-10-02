@@ -748,7 +748,6 @@ class IntegrationService:
             "client_id": settings.ZOOM_CLIENT_ID,
             "response_type": "code",
             "redirect_uri": redirect_uri,
-            "scope": " ".join(meta.get("scopes", [])),
             "state": state,
         }
         return f"https://zoom.us/oauth/authorize?{urlencode(params)}"
