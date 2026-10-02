@@ -459,7 +459,88 @@ class IntegrationService:
         email_result = await self.send_gmail_message(uid, recipients, f"Invitation: {title}", email_body)
         return {"created": True, "eventId": event.get("id"), "meetLink": meet_link, "attendees": recipients, "email": email_result, "source": "google_calendar_and_gmail"}
 
+    # ── Google Drive ──────────────────────────────────────────────────────────
+
+    async def list_drive_files(
+        self,
+        uid: str,
+        limit: int = 25,
+        query: str = None,
+        folder_id: str = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch real files from Google Drive v3 API.
+
+        Uses the stored OAuth token (auto-refreshed when near expiry) and the
+        drive.readonly scope that is already requested during OAuth consent.
+
+        Args:
+            uid:       Firebase user ID.
+            limit:     Maximum number of files to return (capped at 100).
+            query:     Optional filename substring filter.
+            folder_id: Optional parent folder ID to restrict the listing.
+
+        Returns:
+            List of normalised file dicts ready for the frontend.
+        """
+        record = await integration_repository.get(uid, "google_drive")
+        if not record or record.status != "connected":
+            return []
+
+        token = await self._get_valid_google_token(uid, "google_drive", record)
+
+        # Build the Drive v3 `q` filter
+        q_parts = ["trashed = false"]
+        if folder_id:
+            q_parts.append(f"'{folder_id}' in parents")
+        if query:
+            safe_query = query.replace("'", "\\'")
+            q_parts.append(f"name contains '{safe_query}'")
+
+        params = {
+            "pageSize": min(limit, 100),
+            "orderBy": "modifiedTime desc",
+            "q": " and ".join(q_parts),
+            "fields": (
+                "files(id,name,mimeType,size,createdTime,modifiedTime,"
+                "webViewLink,iconLink,parents,owners,shared,starred)"
+            ),
+        }
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                "https://www.googleapis.com/drive/v3/files",
+                params=params,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            resp.raise_for_status()
+            files = resp.json().get("files", [])
+
+        return [self._normalize_drive_file(f) for f in files]
+
+    def _normalize_drive_file(self, f: Dict[str, Any]) -> Dict[str, Any]:
+        """Map a Drive v3 file resource to a frontend-ready dict."""
+        size_raw = f.get("size")
+        return {
+            "id": f.get("id"),
+            "name": f.get("name"),
+            "mimeType": f.get("mimeType"),
+            "sizeBytes": int(size_raw) if size_raw is not None else None,
+            "createdAt": f.get("createdTime"),
+            "modifiedAt": f.get("modifiedTime"),
+            "url": f.get("webViewLink"),
+            "iconUrl": f.get("iconLink"),
+            "platform": "google_drive",
+            "shared": f.get("shared", False),
+            "starred": f.get("starred", False),
+            "owner": (f.get("owners") or [{}])[0].get("displayName"),
+            "parents": f.get("parents", []),
+        }
+
+    # ── GitHub / Deployments ──────────────────────────────────────────────────
+
     async def list_user_deployments(self, uid: str) -> List[Dict[str, Any]]:
+
         record = await integration_repository.get(uid, "github")
         if not record or record.status != "connected":
             return []
@@ -510,6 +591,8 @@ class IntegrationService:
             return self._notion_authorize_url(uid, platform, meta)
         if provider == "jira":
             return self._jira_authorize_url(uid, platform, meta)
+        if provider == "trello":
+            return self._trello_authorize_url(uid, platform, meta)
         raise ValidationException(f"OAuth for '{platform}' is not configured yet")
 
     async def handle_oauth_callback(self, platform: str, code: str, state: str) -> UserIntegration:
@@ -538,6 +621,9 @@ class IntegrationService:
             tokens, profile = await self._exchange_notion_code(code, meta)
         elif provider == "jira":
             tokens, profile = await self._exchange_jira_code(code, meta)
+        elif provider == "trello":
+            # Trello callback carries ?token=... directly — `code` param holds it
+            tokens, profile = await self._exchange_trello_token(code)
         else:
             raise ValidationException(f"OAuth callback not supported for '{platform}'")
 
@@ -879,6 +965,192 @@ class IntegrationService:
             "avatar": owner.get("avatar_url"),
             "metadata": {"notionWorkspace": tokens.get("workspace_name"), "workspaceId": tokens.get("workspace_id")},
         }
+
+    # ── Trello ────────────────────────────────────────────────────────────────
+
+    def _trello_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+        """Build Trello OAuth 1.0 authorization URL.
+
+        Trello's flow:
+          1. Redirect user → https://trello.com/1/authorize?key=...&return_url=...&scope=...&name=...
+          2. Trello redirects back to return_url with ?token=<TOKEN> appended.
+          3. We store that token directly — no code-exchange step needed.
+
+        We reuse the generic /{platform}/callback endpoint by mapping state→uid in
+        _oauth_states, but the 'code' query-param that arrives is actually the Trello
+        token (Trello appends ?token=..., NOT ?code=...).
+        The integrations endpoint must forward `request.query_params.get('token')`
+        as `code` to handle_oauth_callback.
+        """
+        if not settings.TRELLO_API_KEY:
+            raise ValidationException("Trello OAuth is not configured (TRELLO_API_KEY missing)")
+        state = self._store_oauth_state(uid, platform)
+        callback_url = self._callback_url(platform)
+        # Append state to return_url so we can match it on callback
+        return_url_with_state = f"{callback_url}?state={state}"
+        params = {
+            "key": settings.TRELLO_API_KEY,
+            "return_url": return_url_with_state,
+            "callback_method": "fragment",
+            "scope": "read,write,account",
+            "expiration": "never",
+            "name": "WorkPilot AI",
+            "response_type": "token",
+        }
+        return f"https://trello.com/1/authorize?{urlencode(params)}"
+
+    async def _exchange_trello_token(self, token: str) -> tuple:
+        """Validate the Trello token and fetch the member profile."""
+        if not settings.TRELLO_API_KEY:
+            raise ValidationException("Trello API key is not configured")
+        if not token:
+            raise ValidationException("Trello token is missing")
+        async with httpx.AsyncClient(timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS) as client:
+            resp = await client.get(
+                "https://api.trello.com/1/members/me",
+                params={
+                    "key": settings.TRELLO_API_KEY,
+                    "token": token,
+                    "fields": "id,username,fullName,email,avatarUrl",
+                },
+            )
+            resp.raise_for_status()
+            member = resp.json()
+        return (
+            {"access_token": token, "token_type": "trello"},
+            {
+                "email": member.get("email") or member.get("username") or "trello_user",
+                "avatar": member.get("avatarUrl"),
+                "metadata": {
+                    "trelloId": member.get("id"),
+                    "trelloUsername": member.get("username"),
+                    "fullName": member.get("fullName"),
+                },
+            },
+        )
+
+    async def list_trello_boards(self, uid: str) -> List[Dict[str, Any]]:
+        """Fetch all open Trello boards for the connected user."""
+        record = await integration_repository.get(uid, "trello")
+        if not record or record.status != "connected":
+            raise ValidationException("Trello integration is not connected")
+        token = decrypt_value(record.access_token_enc) if record.access_token_enc else None
+        if not token:
+            raise ValidationException("Trello token is missing")
+        async with httpx.AsyncClient(timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS) as client:
+            resp = await client.get(
+                "https://api.trello.com/1/members/me/boards",
+                params={
+                    "key": settings.TRELLO_API_KEY,
+                    "token": token,
+                    "filter": "open",
+                    "fields": "id,name,desc,shortUrl,prefs,dateLastActivity",
+                },
+            )
+            resp.raise_for_status()
+            boards = resp.json()
+        return [
+            {
+                "id": b.get("id"),
+                "name": b.get("name"),
+                "desc": b.get("desc"),
+                "url": b.get("shortUrl"),
+                "lastActivity": b.get("dateLastActivity"),
+                "background": (b.get("prefs") or {}).get("backgroundImage") or (b.get("prefs") or {}).get("background"),
+            }
+            for b in boards
+        ]
+
+    async def list_trello_cards(self, uid: str, board_id: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """Fetch Trello cards — optionally scoped to a board, otherwise all member cards."""
+        record = await integration_repository.get(uid, "trello")
+        if not record or record.status != "connected":
+            raise ValidationException("Trello integration is not connected")
+        token = decrypt_value(record.access_token_enc) if record.access_token_enc else None
+        if not token:
+            raise ValidationException("Trello token is missing")
+        base_params = {"key": settings.TRELLO_API_KEY, "token": token, "fields": "id,name,desc,closed,shortUrl,labels,idList,idBoard,due,dueComplete"}
+        async with httpx.AsyncClient(timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS) as client:
+            if board_id:
+                resp = await client.get(
+                    f"https://api.trello.com/1/boards/{board_id}/cards",
+                    params={**base_params, "limit": limit},
+                )
+            else:
+                resp = await client.get(
+                    "https://api.trello.com/1/members/me/cards",
+                    params={**base_params, "limit": limit},
+                )
+            resp.raise_for_status()
+            cards = resp.json()
+        return [
+            {
+                "id": c.get("id"),
+                "name": c.get("name"),
+                "desc": c.get("desc"),
+                "status": "done" if c.get("closed") or c.get("dueComplete") else "open",
+                "url": c.get("shortUrl"),
+                "labels": [lbl.get("name", "") for lbl in (c.get("labels") or [])],
+                "boardId": c.get("idBoard"),
+                "listId": c.get("idList"),
+                "due": c.get("due"),
+                "platform": "trello",
+            }
+            for c in cards
+        ]
+
+    async def create_trello_card_api(
+        self,
+        uid: str,
+        list_id: str,
+        name: str,
+        desc: str = "",
+        due: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a Trello card via the REST API."""
+        record = await integration_repository.get(uid, "trello")
+        if not record or record.status != "connected":
+            raise ValidationException("Trello integration is not connected")
+        token = decrypt_value(record.access_token_enc) if record.access_token_enc else None
+        if not token:
+            raise ValidationException("Trello token is missing")
+        params: Dict[str, Any] = {
+            "key": settings.TRELLO_API_KEY,
+            "token": token,
+            "idList": list_id,
+            "name": name,
+            "desc": desc,
+        }
+        if due:
+            params["due"] = due
+        async with httpx.AsyncClient(timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS) as client:
+            resp = await client.post("https://api.trello.com/1/cards", params=params)
+            resp.raise_for_status()
+            card = resp.json()
+        return {
+            "id": card.get("id"),
+            "name": card.get("name"),
+            "url": card.get("shortUrl"),
+            "listId": card.get("idList"),
+            "boardId": card.get("idBoard"),
+            "platform": "trello",
+        }
+
+    async def list_trello_lists(self, uid: str, board_id: str) -> List[Dict[str, Any]]:
+        """Fetch all lists on a Trello board."""
+        record = await integration_repository.get(uid, "trello")
+        if not record or record.status != "connected":
+            raise ValidationException("Trello integration is not connected")
+        token = decrypt_value(record.access_token_enc) if record.access_token_enc else None
+        if not token:
+            raise ValidationException("Trello token is missing")
+        async with httpx.AsyncClient(timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS) as client:
+            resp = await client.get(
+                f"https://api.trello.com/1/boards/{board_id}/lists",
+                params={"key": settings.TRELLO_API_KEY, "token": token, "filter": "open", "fields": "id,name,pos"},
+            )
+            resp.raise_for_status()
+            return resp.json()
 
     async def _exchange_jira_code(self, code: str, meta: Dict[str, Any]) -> tuple:
         if not settings.JIRA_CLIENT_ID or not settings.JIRA_CLIENT_SECRET:
