@@ -4,7 +4,7 @@ Google Workspace Agent
 Handles Gmail, Google Calendar, Google Drive, and Google Meet integrations.
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from agents.base_agent import AgentHealth, BaseIntegrationAgent, SyncResult, retry_with_backoff
@@ -393,28 +393,37 @@ class GoogleWorkspaceAgent(BaseIntegrationAgent):
         uid: str,
         limit: int = 20
     ) -> List[UnifiedFile]:
-        """Get files from Google Drive"""
-        integration = await integration_repository.get(uid, "google_drive")
-        if not integration or integration.status != "connected":
-            return []
-        
-        # TODO: Implement with Google Drive API
-        mock_files = [
-            UnifiedFile(
-                id=f"gdrive_{i}",
-                platform="google_drive",
-                name=f"Document{i}.pdf",
-                mime_type="application/pdf",
-                size_bytes=1024 * 100 * i,
-                created_at=datetime.utcnow() - timedelta(days=i),
-                modified_at=datetime.utcnow() - timedelta(hours=i),
-                url=f"https://drive.google.com/file/{i}"
-            )
-            for i in range(min(limit, 5))
-        ]
-        
-        logger.info(f"Fetched {len(mock_files)} files from Google Drive for user {uid}")
-        return mock_files
+        """Get files from Google Drive via the real Drive v3 API."""
+        from services.integration_service import integration_service
+
+        raw_files = await integration_service.list_drive_files(uid=uid, limit=limit)
+        result: List[UnifiedFile] = []
+        for f in raw_files:
+            try:
+                created = (
+                    datetime.fromisoformat(f["createdAt"].replace("Z", "+00:00"))
+                    if f.get("createdAt") else None
+                )
+                modified = (
+                    datetime.fromisoformat(f["modifiedAt"].replace("Z", "+00:00"))
+                    if f.get("modifiedAt") else None
+                )
+                result.append(UnifiedFile(
+                    id=f["id"],
+                    platform="google_drive",
+                    name=f["name"],
+                    mime_type=f.get("mimeType"),
+                    size_bytes=f.get("sizeBytes"),
+                    created_at=created,
+                    modified_at=modified,
+                    url=f.get("url"),
+                ))
+            except Exception:
+                continue  # skip malformed entries, don't break the whole list
+
+        logger.info(f"Fetched {len(result)} files from Google Drive for user {uid}")
+        return result
+
     
     # ========================================================================
     # Google Meet-specific methods

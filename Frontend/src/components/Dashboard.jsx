@@ -288,7 +288,13 @@ export default function Dashboard({ user, onOpenCockpit, themeKey, onThemeChange
   useEffect(() => { if (themeKey && themeKey !== theme) setTheme(themeKey); }, [themeKey]);
 
   const [collapsed, setCollapsed] = useState(true);
-  const [activeNav, setActiveNav] = useState('dashboard');
+  const [activeNav, setActiveNav] = useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('integrations')) return 'integrations';
+    } catch {}
+    return 'dashboard';
+  });
 
 
   // Navigate to section requested by ConnectionSheet

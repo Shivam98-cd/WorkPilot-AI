@@ -571,28 +571,28 @@ class IntegrationService:
             "lastSyncError": updated.last_sync_error,
         }
 
-    def build_authorize_url(self, uid: str, platform: str) -> str:
+    def build_authorize_url(self, uid: str, platform: str, redirect_origin: Optional[str] = None) -> str:
         meta = get_platform(platform)
         if not meta.get("available"):
             raise ValidationException(f"Integration '{platform}' is not available yet")
 
         provider = meta.get("oauthProvider")
         if provider == "google":
-            return self._google_authorize_url(uid, platform, meta)
+            return self._google_authorize_url(uid, platform, meta, redirect_origin=redirect_origin)
         if provider == "github":
-            return self._github_authorize_url(uid, platform, meta)
+            return self._github_authorize_url(uid, platform, meta, redirect_origin=redirect_origin)
         if provider == "microsoft":
-            return self._microsoft_authorize_url(uid, platform, meta)
+            return self._microsoft_authorize_url(uid, platform, meta, redirect_origin=redirect_origin)
         if provider == "slack":
-            return self._slack_authorize_url(uid, platform, meta)
+            return self._slack_authorize_url(uid, platform, meta, redirect_origin=redirect_origin)
         if provider == "zoom":
-            return self._zoom_authorize_url(uid, platform, meta)
+            return self._zoom_authorize_url(uid, platform, meta, redirect_origin=redirect_origin)
         if provider == "notion":
-            return self._notion_authorize_url(uid, platform, meta)
+            return self._notion_authorize_url(uid, platform, meta, redirect_origin=redirect_origin)
         if provider == "jira":
-            return self._jira_authorize_url(uid, platform, meta)
+            return self._jira_authorize_url(uid, platform, meta, redirect_origin=redirect_origin)
         if provider == "trello":
-            return self._trello_authorize_url(uid, platform, meta)
+            return self._trello_authorize_url(uid, platform, meta, redirect_origin=redirect_origin)
         raise ValidationException(f"OAuth for '{platform}' is not configured yet")
 
     async def handle_oauth_callback(self, platform: str, code: str, state: str) -> UserIntegration:
@@ -651,15 +651,19 @@ class IntegrationService:
         except Exception as exc:
             raise ExternalServiceException("Unable to save integration") from exc
 
-    def _store_oauth_state(self, uid: str, platform: str) -> str:
+    def _store_oauth_state(self, uid: str, platform: str, redirect_origin: Optional[str] = None) -> str:
         _cleanup_oauth_states()
         state = secrets.token_urlsafe(32)
         _oauth_states[state] = {
             "uid": uid,
             "platform": platform,
+            "redirectOrigin": redirect_origin,
             "createdAt": time.time(),
         }
         return state
+
+    def get_oauth_state(self, state: str) -> Optional[Dict[str, Any]]:
+        return _oauth_states.get(state)
 
     def _callback_url(self, platform: str) -> str:
         # Use OAUTH_PUBLIC_URL when running via ngrok/tunnel (all OAuth providers).
@@ -673,12 +677,12 @@ class IntegrationService:
             base = settings.BACKEND_PUBLIC_URL.rstrip("/")
         return f"{base}{settings.API_PREFIX}/integrations/{platform}/callback"
 
-    def _google_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _google_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: Optional[str] = None) -> str:
         if not settings.GOOGLE_CLIENT_ID:
             raise ValidationException("Google OAuth is not configured (GOOGLE_CLIENT_ID missing)")
         if not settings.GOOGLE_CLIENT_SECRET:
             raise ValidationException("Google OAuth is not configured (GOOGLE_CLIENT_SECRET missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin=redirect_origin)
         params = {
             "client_id": settings.GOOGLE_CLIENT_ID,
             "redirect_uri": self._callback_url(platform),
@@ -690,12 +694,12 @@ class IntegrationService:
         }
         return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
-    def _github_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _github_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: Optional[str] = None) -> str:
         if not settings.GITHUB_CLIENT_ID:
             raise ValidationException("GitHub OAuth is not configured (GITHUB_CLIENT_ID missing)")
         if not settings.GITHUB_CLIENT_SECRET:
             raise ValidationException("GitHub OAuth is not configured (GITHUB_CLIENT_SECRET missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin=redirect_origin)
         params = {
             "client_id": settings.GITHUB_CLIENT_ID,
             "redirect_uri": self._callback_url(platform),
@@ -704,12 +708,12 @@ class IntegrationService:
         }
         return f"https://github.com/login/oauth/authorize?{urlencode(params)}"
 
-    def _microsoft_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _microsoft_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: Optional[str] = None) -> str:
         if not settings.MICROSOFT_CLIENT_ID:
             raise ValidationException("Microsoft OAuth is not configured (MICROSOFT_CLIENT_ID missing)")
         if not settings.MICROSOFT_TENANT_ID:
             raise ValidationException("Microsoft OAuth is not configured (MICROSOFT_TENANT_ID missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin=redirect_origin)
         params = {
             "client_id": settings.MICROSOFT_CLIENT_ID,
             "redirect_uri": self._callback_url(platform),
@@ -720,10 +724,10 @@ class IntegrationService:
         }
         return f"https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?{urlencode(params)}"
 
-    def _slack_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _slack_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: Optional[str] = None) -> str:
         if not settings.SLACK_CLIENT_ID:
             raise ValidationException("Slack OAuth is not configured (SLACK_CLIENT_ID missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin=redirect_origin)
         params = {
             "client_id": settings.SLACK_CLIENT_ID,
             "scope": ",".join(meta.get("scopes", [])),
@@ -733,10 +737,10 @@ class IntegrationService:
         }
         return f"https://slack.com/oauth/v2/authorize?{urlencode(params)}"
 
-    def _zoom_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _zoom_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: Optional[str] = None) -> str:
         if not settings.ZOOM_CLIENT_ID:
             raise ValidationException("Zoom OAuth is not configured (ZOOM_CLIENT_ID missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin=redirect_origin)
         # Use ZOOM_REDIRECT_URI if set (ngrok / production URL registered in Zoom Marketplace).
         # Fall back to the generic _callback_url() only for local dev without ngrok.
         redirect_uri = settings.ZOOM_REDIRECT_URI if settings.ZOOM_REDIRECT_URI else self._callback_url(platform)
@@ -749,10 +753,10 @@ class IntegrationService:
         }
         return f"https://zoom.us/oauth/authorize?{urlencode(params)}"
 
-    def _notion_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _notion_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: Optional[str] = None) -> str:
         if not settings.NOTION_CLIENT_ID:
             raise ValidationException("Notion OAuth is not configured (NOTION_CLIENT_ID missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin=redirect_origin)
         params = {
             "client_id": settings.NOTION_CLIENT_ID,
             "redirect_uri": self._callback_url(platform),
@@ -762,10 +766,10 @@ class IntegrationService:
         }
         return f"https://api.notion.com/v1/oauth/authorize?{urlencode(params)}"
 
-    def _jira_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _jira_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: Optional[str] = None) -> str:
         if not settings.JIRA_CLIENT_ID:
             raise ValidationException("Jira OAuth is not configured (JIRA_CLIENT_ID missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin=redirect_origin)
         params = {
             "audience": "api.atlassian.com",
             "client_id": settings.JIRA_CLIENT_ID,
@@ -968,7 +972,7 @@ class IntegrationService:
 
     # ── Trello ────────────────────────────────────────────────────────────────
 
-    def _trello_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any]) -> str:
+    def _trello_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: Optional[str] = None) -> str:
         """Build Trello OAuth 1.0 authorization URL.
 
         Trello's flow:
@@ -984,7 +988,7 @@ class IntegrationService:
         """
         if not settings.TRELLO_API_KEY:
             raise ValidationException("Trello OAuth is not configured (TRELLO_API_KEY missing)")
-        state = self._store_oauth_state(uid, platform)
+        state = self._store_oauth_state(uid, platform, redirect_origin=redirect_origin)
         callback_url = self._callback_url(platform)
         # Append state to return_url so we can match it on callback
         return_url_with_state = f"{callback_url}?state={state}"

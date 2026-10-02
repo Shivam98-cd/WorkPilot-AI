@@ -1,9 +1,11 @@
 import hashlib
-from fastapi import APIRouter, Depends, UploadFile, File
+from typing import Optional
+from fastapi import APIRouter, Depends, Query, UploadFile, File
 from core.exceptions import ValidationException
 from middleware.auth import get_current_user
 from services.workspace_service import workspace_service
 from services.vector_knowledge_service import vector_knowledge_service, extract_text_from_bytes
+from services.integration_service import integration_service
 
 router = APIRouter(prefix='/documents', tags=['documents'])
 MAX_DOCUMENT_BYTES = 1_500_000  # Upgraded to 1.5MB for multi-page PDFs
@@ -116,4 +118,23 @@ async def delete_document(doc_id: str, current_user=Depends(get_current_user)):
     return {'success': True}
 
 
+@router.get('/drive')
+async def list_drive_files(
+    limit: int = Query(default=25, ge=1, le=100, description='Max files to return'),
+    query: Optional[str] = Query(default=None, description='Filename substring filter'),
+    folder_id: Optional[str] = Query(default=None, description='Restrict to a specific Drive folder ID'),
+    current_user=Depends(get_current_user),
+):
+    """
+    List files from the user's connected Google Drive.
 
+    Requires the `google_drive` integration to be connected.
+    Returns files ordered by most recently modified.
+    """
+    files = await integration_service.list_drive_files(
+        uid=current_user['uid'],
+        limit=limit,
+        query=query,
+        folder_id=folder_id,
+    )
+    return {'success': True, 'data': files, 'count': len(files)}

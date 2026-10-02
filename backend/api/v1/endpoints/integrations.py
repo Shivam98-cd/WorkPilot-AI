@@ -1,9 +1,10 @@
 """
 Integrations API — connect third-party workspace tools.
 """
-from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import RedirectResponse
+import json
 from typing import Optional
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from core.config import settings
 from core.exceptions import AppException, NotFoundException, ValidationException
@@ -103,10 +104,14 @@ async def create_trello_card(body: dict, current_user=Depends(get_current_user))
 # ── Generic OAuth endpoints (wildcard — must come after fixed paths) ──────────
 
 @router.get("/{platform}/authorize")
-async def authorize_integration(platform: str, current_user=Depends(get_current_user)):
+async def authorize_integration(
+    platform: str,
+    redirect_origin: Optional[str] = Query(default=None),
+    current_user=Depends(get_current_user),
+):
     uid = current_user["uid"]
     try:
-        url = integration_service.build_authorize_url(uid, platform)
+        url = integration_service.build_authorize_url(uid, platform, redirect_origin=redirect_origin)
         return {"success": True, "data": {"authorizeUrl": url, "platform": platform}}
     except KeyError:
         raise NotFoundException(f"Unknown platform: {platform}")
@@ -120,7 +125,16 @@ async def oauth_callback(
     state: str = Query(default=""),
     error: str = Query(default=""),
 ):
-    redirect_base = settings.FRONTEND_OAUTH_REDIRECT.rstrip("/")
+    # Dynamically determine frontend redirect destination:
+    # 1. Origin provided when authorize was started (e.g. https://workpilot-ai.in)
+    # 2. Configured FRONTEND_OAUTH_REDIRECT
+    pending_state = integration_service.get_oauth_state(state) if state else None
+    origin = (pending_state and pending_state.get("redirectOrigin"))
+    if origin:
+        clean_origin = origin.rstrip("/")
+        redirect_base = f"{clean_origin}/dashboard" if not clean_origin.endswith("/dashboard") else clean_origin
+    else:
+        redirect_base = settings.FRONTEND_OAUTH_REDIRECT.rstrip("/")
 
     if error:
         return RedirectResponse(
@@ -128,14 +142,93 @@ async def oauth_callback(
         )
 
     # ── Trello special case ──────────────────────────────────────────────────
-    # Trello redirects back with ?token=<TOKEN>&state=... (NOT ?code=...)
-    # We extract the token and pass it as the `code` argument to handle_oauth_callback.
+    # Trello implicit flow returns the token in the URL fragment (#token=...).
+    # Because URL fragments are only available on the client-side,
+    # if token is not in query params, we render a client-side bridge page
+    # that reads window.location.hash and redirects back here with ?token=...
     if platform == "trello":
         trello_token = request.query_params.get("token", "")
         if not trello_token:
-            return RedirectResponse(
-                url=f"{redirect_base}?integrations={platform}&status=error&message=trello_token_missing"
-            )
+            escaped_redirect = json.dumps(redirect_base)
+            escaped_state = json.dumps(state)
+            bridge_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connecting Trello | WorkPilot AI</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      background: #08080b;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }}
+    .bridge-card {{
+      background: #111118;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 40px 32px;
+      text-align: center;
+      max-width: 380px;
+      width: 90%;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    }}
+    .spinner {{
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(59, 130, 246, 0.18);
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 20px;
+    }}
+    @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+    h2 {{ font-size: 1.2rem; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.01em; }}
+    p {{ font-size: 0.88rem; color: rgba(255, 255, 255, 0.55); margin: 0; line-height: 1.5; }}
+  </style>
+</head>
+<body>
+  <div class="bridge-card">
+    <div class="spinner"></div>
+    <h2>Connecting Trello</h2>
+    <p>Completing authorization securely, please wait a moment...</p>
+  </div>
+  <script>
+    (function() {{
+      try {{
+        var hash = window.location.hash.substring(1);
+        var hashParams = new URLSearchParams(hash);
+        var token = hashParams.get('token');
+        var searchParams = new URLSearchParams(window.location.search);
+        var state = searchParams.get('state') || {escaped_state};
+        var redirectBase = {escaped_redirect};
+
+        if (token && state) {{
+          window.location.replace(window.location.pathname + '?token=' + encodeURIComponent(token) + '&state=' + encodeURIComponent(state));
+        }} else if (token) {{
+          window.location.replace(window.location.pathname + '?token=' + encodeURIComponent(token));
+        }} else {{
+          var err = hashParams.get('error') || searchParams.get('error') || 'trello_token_missing';
+          var delim = redirectBase.indexOf('?') >= 0 ? '&' : '?';
+          window.location.replace(redirectBase + delim + 'integrations=trello&status=error&message=' + encodeURIComponent(err));
+        }}
+      }} catch (e) {{
+        var redirectBase = {escaped_redirect};
+        var delim = redirectBase.indexOf('?') >= 0 ? '&' : '?';
+        window.location.replace(redirectBase + delim + 'integrations=trello&status=error&message=' + encodeURIComponent(e.message));
+      }}
+    }})();
+  </script>
+</body>
+</html>"""
+            return HTMLResponse(content=bridge_html)
+
         if not state:
             return RedirectResponse(
                 url=f"{redirect_base}?integrations={platform}&status=error&message=missing_state"
