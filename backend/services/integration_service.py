@@ -672,10 +672,10 @@ class IntegrationService:
         # only accept http://localhost, not http://127.0.0.1.
         # Zoom is the exception and uses ZOOM_REDIRECT_URI directly.
         if settings.OAUTH_PUBLIC_URL:
-            base = settings.OAUTH_PUBLIC_URL.rstrip("/")
+            base = settings.OAUTH_PUBLIC_URL.strip().rstrip("/")
         else:
-            base = settings.BACKEND_PUBLIC_URL.rstrip("/")
-        return f"{base}{settings.API_PREFIX}/integrations/{platform}/callback"
+            base = settings.BACKEND_PUBLIC_URL.strip().rstrip("/")
+        return f"{base}{settings.API_PREFIX}/integrations/{platform}/callback".strip()
 
     def _google_authorize_url(self, uid: str, platform: str, meta: Dict[str, Any], redirect_origin: Optional[str] = None) -> str:
         if not settings.GOOGLE_CLIENT_ID:
@@ -743,9 +743,10 @@ class IntegrationService:
         state = self._store_oauth_state(uid, platform, redirect_origin=redirect_origin)
         # Use ZOOM_REDIRECT_URI if set (ngrok / production URL registered in Zoom Marketplace).
         # Fall back to the generic _callback_url() only for local dev without ngrok.
-        redirect_uri = settings.ZOOM_REDIRECT_URI if settings.ZOOM_REDIRECT_URI else self._callback_url(platform)
+        raw_uri = settings.ZOOM_REDIRECT_URI.strip() if settings.ZOOM_REDIRECT_URI else self._callback_url(platform).strip()
+        redirect_uri = raw_uri.strip()
         params = {
-            "client_id": settings.ZOOM_CLIENT_ID,
+            "client_id": settings.ZOOM_CLIENT_ID.strip(),
             "response_type": "code",
             "redirect_uri": redirect_uri,
             "state": state,
@@ -841,10 +842,11 @@ class IntegrationService:
     async def _exchange_zoom_code(self, code: str, meta: Dict[str, Any]) -> tuple:
         if not settings.ZOOM_CLIENT_ID or not settings.ZOOM_CLIENT_SECRET:
             raise ValidationException("Zoom OAuth credentials are not configured")
-        redirect_uri = settings.ZOOM_REDIRECT_URI if settings.ZOOM_REDIRECT_URI else self._callback_url("zoom")
+        raw_uri = settings.ZOOM_REDIRECT_URI.strip() if settings.ZOOM_REDIRECT_URI else self._callback_url("zoom").strip()
+        redirect_uri = raw_uri.strip()
         import base64 as _b64
         credentials = _b64.b64encode(
-            f"{settings.ZOOM_CLIENT_ID}:{settings.ZOOM_CLIENT_SECRET}".encode()
+            f"{settings.ZOOM_CLIENT_ID.strip()}:{settings.ZOOM_CLIENT_SECRET.strip()}".encode()
         ).decode()
         async with httpx.AsyncClient(timeout=settings.EXTERNAL_REQUEST_TIMEOUT_SECONDS) as client:
             token_resp = await client.post(
