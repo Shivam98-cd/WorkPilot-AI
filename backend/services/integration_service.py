@@ -1165,26 +1165,57 @@ class IntegrationService:
                 "https://auth.atlassian.com/oauth/token",
                 json={
                     "grant_type": "authorization_code",
-                    "client_id": settings.JIRA_CLIENT_ID,
-                    "client_secret": settings.JIRA_CLIENT_SECRET,
+                    "client_id": settings.JIRA_CLIENT_ID.strip(),
+                    "client_secret": settings.JIRA_CLIENT_SECRET.strip(),
                     "code": code,
-                    "redirect_uri": self._callback_url("jira"),
+                    "redirect_uri": self._callback_url("jira").strip(),
                 },
             )
             token_resp.raise_for_status()
             tokens = token_resp.json()
 
-            user_resp = await client.get(
-                "https://api.atlassian.com/me",
-                headers={"Authorization": f"Bearer {tokens['access_token']}"},
-            )
-            user_resp.raise_for_status()
-            user_data = user_resp.json()
+            user_data = {}
+            try:
+                user_resp = await client.get(
+                    "https://api.atlassian.com/me",
+                    headers={"Authorization": f"Bearer {tokens['access_token']}"},
+                )
+                if user_resp.status_code == 200:
+                    user_data = user_resp.json()
+            except Exception:
+                pass
 
+            # Fetch accessible Jira sites to discover cloudId and site name
+            cloud_id = None
+            site_name = None
+            try:
+                res_resp = await client.get(
+                    "https://api.atlassian.com/oauth/token/accessible-resources",
+                    headers={"Authorization": f"Bearer {tokens['access_token']}"},
+                )
+                if res_resp.status_code == 200:
+                    resources = res_resp.json()
+                    if resources and isinstance(resources, list):
+                        cloud_id = resources[0].get("id")
+                        site_name = resources[0].get("name")
+            except Exception:
+                pass
+
+        account_label = (
+            user_data.get("email")
+            or user_data.get("name")
+            or (f"Jira ({site_name})" if site_name else None)
+            or "Jira Cloud"
+        )
         return tokens, {
-            "email": user_data.get("email"),
+            "email": account_label,
             "avatar": user_data.get("picture"),
-            "metadata": {"atlassianId": user_data.get("account_id"), "displayName": user_data.get("name")},
+            "metadata": {
+                "atlassianId": user_data.get("account_id"),
+                "displayName": user_data.get("name") or site_name,
+                "cloudId": cloud_id,
+                "siteName": site_name,
+            },
         }
 
     async def _fetch_gmail_messages(self, access_token: str) -> List[Dict[str, Any]]:
