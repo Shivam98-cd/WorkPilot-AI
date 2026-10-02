@@ -4,6 +4,7 @@ Integration business logic — OAuth, connect/disconnect, listing.
 import asyncio
 import base64
 from email.mime.text import MIMEText
+import logging
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,8 @@ from models.integration import UserIntegration
 from repositories.integration_repository import integration_repository
 
 from contextlib import asynccontextmanager
+
+logger = logging.getLogger("workpilot.integration_service")
 
 # In-memory OAuth state store (MVP). Replace with Redis in production.
 _oauth_states: Dict[str, Dict[str, Any]] = {}
@@ -186,6 +189,51 @@ class IntegrationService:
         if not token:
             raise ValidationException(f"{platform} integration is missing an access token")
         return token
+
+    async def _get_valid_jira_token(self, uid: str, record: Optional[UserIntegration] = None) -> tuple[Optional[str], Optional[str]]:
+        """Return (access_token, cloud_id) for Jira, auto-refreshing expired tokens."""
+        if not record:
+            record = await integration_repository.get(uid, "jira")
+        if not record or record.status != "connected":
+            return None, None
+
+        cloud_id = (record.metadata or {}).get("cloudId")
+        expires_at = record.token_expires_at
+        now = datetime.now(timezone.utc)
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+        needs_refresh = (
+            not expires_at or
+            (expires_at - now).total_seconds() < 300
+        )
+        if needs_refresh and record.refresh_token_enc:
+            refresh_token = decrypt_value(record.refresh_token_enc)
+            try:
+                async with httpx.AsyncClient(timeout=20) as client:
+                    resp = await client.post(
+                        "https://auth.atlassian.com/oauth/token",
+                        json={
+                            "grant_type": "refresh_token",
+                            "client_id": settings.JIRA_CLIENT_ID.strip(),
+                            "client_secret": settings.JIRA_CLIENT_SECRET.strip(),
+                            "refresh_token": refresh_token,
+                        },
+                    )
+                    if resp.status_code == 200:
+                        token_data = resp.json()
+                        new_access = token_data["access_token"]
+                        record.access_token_enc = encrypt_value(new_access)
+                        if token_data.get("refresh_token"):
+                            record.refresh_token_enc = encrypt_value(token_data["refresh_token"])
+                        record.token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(token_data.get("expires_in", 3600)))
+                        await integration_repository.upsert(record)
+                        return new_access, cloud_id
+            except Exception as e:
+                logger.warning(f"Failed to refresh Jira token: {e}")
+
+        token = decrypt_value(record.access_token_enc) if record.access_token_enc else None
+        return token, cloud_id
 
     async def list_user_emails(self, uid: str, folder: str = "inbox", search_query: str = None, limit: int = 25) -> List[Dict[str, Any]]:
         """
@@ -599,6 +647,19 @@ class IntegrationService:
         _cleanup_oauth_states()
         pending = _oauth_states.pop(state, None)
         if not pending:
+            try:
+                from jose import jwt
+                payload = jwt.decode(state, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+                if payload.get("type") == "oauth_state":
+                    pending = {
+                        "uid": payload["uid"],
+                        "platform": payload["platform"],
+                        "redirectOrigin": payload.get("redirectOrigin"),
+                    }
+            except Exception:
+                pass
+
+        if not pending:
             raise ValidationException("Invalid or expired OAuth state")
         if pending["platform"] != platform:
             raise ValidationException("OAuth state platform mismatch")
@@ -653,7 +714,20 @@ class IntegrationService:
 
     def _store_oauth_state(self, uid: str, platform: str, redirect_origin: Optional[str] = None) -> str:
         _cleanup_oauth_states()
-        state = secrets.token_urlsafe(32)
+        try:
+            from jose import jwt
+            payload = {
+                "uid": uid,
+                "platform": platform,
+                "redirectOrigin": redirect_origin,
+                "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
+                "nonce": secrets.token_hex(8),
+                "type": "oauth_state",
+            }
+            state = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+        except Exception:
+            state = secrets.token_urlsafe(32)
+
         _oauth_states[state] = {
             "uid": uid,
             "platform": platform,
@@ -663,7 +737,24 @@ class IntegrationService:
         return state
 
     def get_oauth_state(self, state: str) -> Optional[Dict[str, Any]]:
-        return _oauth_states.get(state)
+        if not state:
+            return None
+        cached = _oauth_states.get(state)
+        if cached:
+            return cached
+        try:
+            from jose import jwt
+            payload = jwt.decode(state, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+            if payload.get("type") == "oauth_state":
+                return {
+                    "uid": payload["uid"],
+                    "platform": payload["platform"],
+                    "redirectOrigin": payload.get("redirectOrigin"),
+                    "createdAt": payload.get("exp", 0),
+                }
+        except Exception:
+            pass
+        return None
 
     def _callback_url(self, platform: str) -> str:
         # Use OAUTH_PUBLIC_URL when running via ngrok/tunnel (all OAuth providers).
@@ -1185,9 +1276,10 @@ class IntegrationService:
             except Exception:
                 pass
 
-            # Fetch accessible Jira sites to discover cloudId and site name
+            # Fetch accessible Jira sites to discover cloudId, site name, and URL
             cloud_id = None
             site_name = None
+            site_url = None
             try:
                 res_resp = await client.get(
                     "https://api.atlassian.com/oauth/token/accessible-resources",
@@ -1198,6 +1290,7 @@ class IntegrationService:
                     if resources and isinstance(resources, list):
                         cloud_id = resources[0].get("id")
                         site_name = resources[0].get("name")
+                        site_url = resources[0].get("url")
             except Exception:
                 pass
 
@@ -1215,6 +1308,7 @@ class IntegrationService:
                 "displayName": user_data.get("name") or site_name,
                 "cloudId": cloud_id,
                 "siteName": site_name,
+                "siteUrl": site_url or (f"https://{site_name}.atlassian.net" if site_name else None),
             },
         }
 
@@ -1627,6 +1721,191 @@ class IntegrationService:
                         "success": False,
                         "error": f"Failed to create GitHub issue in '{repo}' (HTTP {r.status_code}): {r.text[:200]}"
                     }
+
+        elif platform == "jira":
+            record = await integration_repository.get(uid, "jira")
+            if not record or record.status != "connected":
+                return {"error": "Jira is not connected. Connect Jira in Integrations first.", "connected": False}
+            token, cloud_id = await self._get_valid_jira_token(uid, record)
+            if not token:
+                return {"error": "Jira access token is invalid or expired. Please reconnect Jira in Integrations.", "connected": False}
+            if not cloud_id:
+                async with httpx.AsyncClient(timeout=15) as client:
+                    try:
+                        res_resp = await client.get(
+                            "https://api.atlassian.com/oauth/token/accessible-resources",
+                            headers={"Authorization": f"Bearer {token}"},
+                        )
+                        if res_resp.status_code == 200:
+                            resources = res_resp.json()
+                            if resources and isinstance(resources, list):
+                                cloud_id = resources[0].get("id")
+                                site_name = resources[0].get("name")
+                                site_url = resources[0].get("url")
+                                record.metadata = record.metadata or {}
+                                record.metadata["cloudId"] = cloud_id
+                                record.metadata["siteName"] = site_name
+                                record.metadata["siteUrl"] = site_url
+                                await integration_repository.upsert(record)
+                    except Exception as e:
+                        logger.warning(f"Error fetching accessible resources: {e}")
+
+            if not cloud_id:
+                return {"error": "No accessible Jira Cloud sites found for this Atlassian account.", "connected": True}
+
+            site_name = (record.metadata or {}).get("siteName")
+            site_url = (record.metadata or {}).get("siteUrl") or (f"https://{site_name}.atlassian.net" if site_name else None)
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            }
+            jira_base = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3"
+
+            async with httpx.AsyncClient(timeout=15) as client:
+                if action in ("list", "list_tickets", "list_issues", "search"):
+                    limit = kwargs.get("limit", 20)
+                    project_key = kwargs.get("project_key") or kwargs.get("project")
+                    jql = kwargs.get("jql")
+                    if not jql:
+                        if project_key:
+                            jql = f"project = '{project_key}' ORDER BY updated DESC"
+                        else:
+                            jql = "ORDER BY updated DESC"
+                    params = {
+                        "jql": jql,
+                        "maxResults": min(limit, 50),
+                        "fields": "summary,status,priority,assignee,created,updated,issuetype,project,description",
+                    }
+                    r = await client.get(f"{jira_base}/search", headers=headers, params=params)
+                    if r.status_code == 200:
+                        data = r.json()
+                        issues = data.get("issues", [])
+                        results = []
+                        for iss in issues:
+                            f = iss.get("fields", {})
+                            key = iss.get("key", "")
+                            assignee = f.get("assignee")
+                            assignee_name = assignee.get("displayName") if isinstance(assignee, dict) else "Unassigned"
+                            results.append({
+                                "id": iss.get("id"),
+                                "key": key,
+                                "summary": f.get("summary", ""),
+                                "title": f.get("summary", ""),
+                                "status": (f.get("status") or {}).get("name", "Unknown"),
+                                "priority": (f.get("priority") or {}).get("name", "Normal"),
+                                "assignee": assignee_name,
+                                "type": (f.get("issuetype") or {}).get("name", "Task"),
+                                "project": (f.get("project") or {}).get("name", ""),
+                                "project_key": (f.get("project") or {}).get("key", ""),
+                                "created": f.get("created"),
+                                "updated": f.get("updated"),
+                                "url": f"{site_url}/browse/{key}" if site_url else f"https://atlassian.net/browse/{key}",
+                            })
+                        return results
+                    return {"error": f"Jira search failed (HTTP {r.status_code}): {r.text[:200]}"}
+
+                elif action in ("create_ticket", "create_issue"):
+                    project_key = kwargs.get("project_key") or kwargs.get("project")
+                    summary = kwargs.get("summary") or kwargs.get("title") or "New Task"
+                    description = kwargs.get("description", "")
+                    issue_type = kwargs.get("issue_type") or kwargs.get("type") or "Task"
+
+                    # If project_key is missing, fetch user's projects to auto-select
+                    if not project_key:
+                        proj_r = await client.get(f"{jira_base}/project", headers=headers)
+                        if proj_r.status_code == 200:
+                            projects = proj_r.json()
+                            if projects and isinstance(projects, list):
+                                project_key = projects[0].get("key")
+                        if not project_key:
+                            return {"success": False, "error": "No Jira project specified and no available projects found."}
+
+                    issue_payload = {
+                        "fields": {
+                            "project": {"key": project_key},
+                            "summary": summary,
+                            "description": {
+                                "type": "doc",
+                                "version": 1,
+                                "content": [
+                                    {
+                                        "type": "paragraph",
+                                        "content": [
+                                            {"type": "text", "text": description or "Created by WorkPilot AI"}
+                                        ]
+                                    }
+                                ]
+                            },
+                            "issuetype": {"name": issue_type},
+                        }
+                    }
+                    r = await client.post(f"{jira_base}/issue", headers=headers, json=issue_payload)
+                    if r.status_code == 201:
+                        data = r.json()
+                        key = data.get("key")
+                        issue_url = f"{site_url}/browse/{key}" if site_url else f"https://atlassian.net/browse/{key}"
+                        return {
+                            "success": True,
+                            "action": "create_ticket",
+                            "key": key,
+                            "url": issue_url,
+                            "message": f"Successfully created Jira ticket {key}: '{summary}'",
+                        }
+                    return {"success": False, "error": f"Failed to create Jira ticket (HTTP {r.status_code}): {r.text[:250]}"}
+
+                elif action in ("get_ticket", "get_issue"):
+                    ticket_id = kwargs.get("ticket_id") or kwargs.get("issue_id") or kwargs.get("key")
+                    if not ticket_id:
+                        return {"error": "Missing 'ticket_id' parameter"}
+                    r = await client.get(f"{jira_base}/issue/{ticket_id}", headers=headers)
+                    if r.status_code == 200:
+                        return r.json()
+                    return {"error": f"Jira ticket '{ticket_id}' not found (HTTP {r.status_code})"}
+
+                elif action in ("list_projects", "get_projects"):
+                    r = await client.get(f"{jira_base}/project", headers=headers)
+                    if r.status_code == 200:
+                        return r.json()
+                    return {"error": f"Failed to list Jira projects (HTTP {r.status_code})"}
+
+                elif action in ("get_sprint", "sprint_status"):
+                    agile_base = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/agile/1.0"
+                    try:
+                        board_r = await client.get(f"{agile_base}/board", headers=headers)
+                        if board_r.status_code == 200:
+                            boards = board_r.json().get("values", [])
+                            if boards:
+                                board_id = boards[0].get("id")
+                                sprint_r = await client.get(f"{agile_base}/board/{board_id}/sprint", headers=headers, params={"state": "active"})
+                                if sprint_r.status_code == 200:
+                                    sprints = sprint_r.json().get("values", [])
+                                    if sprints:
+                                        sprint = sprints[0]
+                                        sprint_id = sprint.get("id")
+                                        issues_r = await client.get(f"{agile_base}/sprint/{sprint_id}/issue", headers=headers, params={"maxResults": 20})
+                                        issues = issues_r.json().get("issues", []) if issues_r.status_code == 200 else []
+                                        return {
+                                            "sprint_name": sprint.get("name"),
+                                            "sprint_state": sprint.get("state"),
+                                            "start_date": sprint.get("startDate"),
+                                            "end_date": sprint.get("endDate"),
+                                            "goal": sprint.get("goal"),
+                                            "total_issues": len(issues),
+                                            "issues": [
+                                                {
+                                                    "key": iss.get("key"),
+                                                    "summary": iss.get("fields", {}).get("summary"),
+                                                    "status": (iss.get("fields", {}).get("status") or {}).get("name"),
+                                                    "assignee": ((iss.get("fields", {}).get("assignee") or {}).get("displayName")) if isinstance(iss.get("fields", {}).get("assignee"), dict) else "Unassigned",
+                                                }
+                                                for iss in issues
+                                            ],
+                                        }
+                    except Exception as e:
+                        logger.warning(f"Error querying Jira agile board: {e}")
+                    return await self.get_platform_data(uid, "jira", action="list_tickets", limit=10)
+
         return []
 
     def _normalize_google_calendar_event(self, event: Dict[str, Any]) -> Dict[str, Any]:

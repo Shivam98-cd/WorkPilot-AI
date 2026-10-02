@@ -80,7 +80,7 @@ PLATFORMS: Dict[str, Dict[str, Any]] = {
         "category": "development",
         "available": True,
         "oauthProvider": "jira",
-        "scopes": ["read:jira-work", "write:jira-work", "read:me", "offline_access"],
+        "scopes": ["read:jira-work", "write:jira-work", "offline_access"],
         "features": ["team", "issues"],
         "agentClass": "DevToolsAgent",
     },

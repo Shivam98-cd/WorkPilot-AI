@@ -220,31 +220,43 @@ class DevToolsAgent(BaseIntegrationAgent):
         limit: int = 20,
         jql: Optional[str] = None
     ) -> List[UnifiedTask]:
-        """Get Jira issues"""
+        """Get Jira issues from Jira Cloud API"""
         integration = await integration_repository.get(uid, "jira")
         if not integration or integration.status != "connected":
             return []
-        
-        # Mock data for now
-        mock_issues = [
-            UnifiedTask(
-                id=f"PROJ-{i}",
-                platform="jira",
-                title=f"[PROJ-{i}] Implement feature X",
-                description=f"Description for Jira issue {i}",
-                status="in_progress" if i % 2 == 0 else "open",
-                assignee=f"developer{i}@company.com",
-                labels=["feature", "sprint-5"],
-                priority="high" if i < 3 else "normal",
-                project="WorkPilot Project",
-                url=f"https://company.atlassian.net/browse/PROJ-{i}"
-            )
-            for i in range(1, min(limit + 1, 6))
-        ]
-        
-        logger.info(f"Fetched {len(mock_issues)} Jira issues for user {uid}")
-        return mock_issues
-    
+
+        try:
+            from services.integration_service import integration_service
+            raw_issues = await integration_service.get_platform_data(uid, "jira", action="list_tickets", limit=limit, jql=jql)
+            if isinstance(raw_issues, dict) and "error" in raw_issues:
+                logger.warning(f"Jira issues fetch returned error: {raw_issues['error']}")
+                return []
+            if not isinstance(raw_issues, list):
+                return []
+
+            tasks = []
+            for i, item in enumerate(raw_issues):
+                task_id = item.get("key") or item.get("id") or f"JIRA-{i}"
+                tasks.append(
+                    UnifiedTask(
+                        id=task_id,
+                        platform="jira",
+                        title=f"[{item.get('key', task_id)}] {item.get('summary') or item.get('title', 'Untitled')}",
+                        description=item.get("description") or "",
+                        status=(item.get("status") or "open").lower().replace(" ", "_"),
+                        assignee=item.get("assignee") or "Unassigned",
+                        labels=[item.get("priority", "normal"), item.get("type", "task")],
+                        priority=(item.get("priority") or "normal").lower(),
+                        project=item.get("project") or item.get("project_key") or "Jira",
+                        url=item.get("url") or f"https://atlassian.net/browse/{task_id}",
+                    )
+                )
+            logger.info(f"Fetched {len(tasks)} live Jira issues for user {uid}")
+            return tasks
+        except Exception as e:
+            logger.error(f"Failed to fetch live Jira issues: {e}")
+            return []
+
     async def create_jira_issue(
         self,
         uid: str,
@@ -253,11 +265,25 @@ class DevToolsAgent(BaseIntegrationAgent):
         description: str,
         issue_type: str = "Task"
     ) -> str:
-        """Create Jira issue"""
+        """Create Jira issue via Jira Cloud API"""
         logger.info(f"Creating Jira issue in {project_key}: {summary}")
-        # TODO: Implement with atlassian-python-api
-        issue_key = f"{project_key}-123"
-        return f"https://company.atlassian.net/browse/{issue_key}"
+        try:
+            from services.integration_service import integration_service
+            res = await integration_service.get_platform_data(
+                uid, "jira", action="create_ticket",
+                project_key=project_key,
+                summary=summary,
+                description=description,
+                issue_type=issue_type,
+            )
+            if isinstance(res, dict) and res.get("url"):
+                return res["url"]
+            if isinstance(res, dict) and res.get("error"):
+                raise Exception(res["error"])
+        except Exception as e:
+            logger.error(f"Failed to create Jira issue: {e}")
+            raise
+        return f"Created Jira issue in {project_key}: {summary}"
     
     async def get_issues(self, uid: str, limit: int = 20) -> List[UnifiedTask]:
         """

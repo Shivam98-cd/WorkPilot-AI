@@ -273,6 +273,19 @@ async def disconnect_integration(platform: str, current_user=Depends(get_current
         raise NotFoundException(f"Unknown platform: {platform}")
 
 
+@router.get("/{platform}/data")
+async def get_platform_data(
+    platform: str,
+    data_type: str = Query(default="list", description="Action/data type e.g. list, list_tickets, search, sprint_status"),
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user=Depends(get_current_user),
+):
+    """Retrieve platform data (Jira tickets, GitHub repos/issues, etc.)."""
+    uid = current_user["uid"]
+    data = await integration_service.get_platform_data(uid, platform, action=data_type, limit=limit)
+    return {"success": True, "data": data}
+
+
 @router.post("/{platform}/sync")
 async def sync_integration(platform: str, current_user=Depends(get_current_user)):
     uid = current_user["uid"]
